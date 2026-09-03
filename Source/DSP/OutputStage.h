@@ -1,6 +1,10 @@
 #pragma once
 
-#include <JuceHeader.h>
+#include "../Core/AudioBuffer.h"
+#include "../Core/DspPrimitives.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace phoqer
 {
@@ -14,9 +18,9 @@ public:
     }
 
     void reset() noexcept { meterRms = meterPeak = 0.0f; }
-    void setOutputDb(float decibels) noexcept { outputGain.setTargetValue(juce::Decibels::decibelsToGain(decibels)); }
+    void setOutputDb(float decibels) noexcept { outputGain.setTargetValue(decibelsToGain(decibels)); }
 
-    void process(juce::AudioBuffer<float>& buffer) noexcept
+    void process(AudioBuffer& buffer) noexcept
     {
         double sumSquares = 0.0;
         float blockPeak = 0.0f;
@@ -27,15 +31,14 @@ public:
             {
                 auto value = buffer.getSample(channel, sample) * gain;
                 if (! std::isfinite(value)) value = 0.0f;
-                value = std::tanh(value * 0.92f) / 0.92f;
                 buffer.setSample(channel, sample, value);
-                blockPeak = juce::jmax(blockPeak, std::abs(value));
+                blockPeak = std::max(blockPeak, std::abs(value));
                 sumSquares += static_cast<double>(value) * value;
             }
         }
-        const auto count = juce::jmax(1, buffer.getNumSamples() * buffer.getNumChannels());
+        const auto count = std::max(1, buffer.getNumSamples() * buffer.getNumChannels());
         const auto blockRms = static_cast<float>(std::sqrt(sumSquares / count));
-        meterPeak = juce::jmax(blockPeak, meterPeak * 0.88f);
+        meterPeak = std::max(blockPeak, meterPeak * 0.88f);
         meterRms += 0.16f * (blockRms - meterRms);
     }
 
@@ -43,7 +46,7 @@ public:
     float getRms() const noexcept { return meterRms; }
 
 private:
-    juce::SmoothedValue<float> outputGain;
+    LinearSmoother outputGain;
     float meterPeak = 0.0f, meterRms = 0.0f;
 };
 }

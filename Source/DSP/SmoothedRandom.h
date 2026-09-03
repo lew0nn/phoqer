@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Core/Random.h"
-#include <JuceHeader.h>
+#include <algorithm>
 #include <cmath>
 
 namespace phoqer
@@ -12,7 +12,7 @@ public:
     void prepare(double newSampleRate, float updateRateHz, Random* source) noexcept
     {
         random = source;
-        samplesPerTarget = static_cast<int>(juce::jmax(1.0, newSampleRate / updateRateHz));
+        samplesPerTarget = static_cast<int>(std::max(1.0, newSampleRate / updateRateHz));
         reset();
     }
 

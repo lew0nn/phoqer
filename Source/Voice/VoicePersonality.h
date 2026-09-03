@@ -29,23 +29,23 @@ struct VoicePersonality
     static VoicePersonality create(Random& random) noexcept
     {
         VoicePersonality result;
-        result.pitchOvershoot = random.range(1.0f, 7.5f);
-        result.pitchDrift = random.range(0.07f, 0.42f);
-        result.pitchGestureDepth = random.range(0.72f, 1.32f);
-        result.gestureSelector = random.nextFloat();
-        result.vowelOffset = random.range(-0.065f, 0.065f);
-        result.vowelTravel = random.range(0.13f, 0.34f);
-        result.mouthOpeningBias = random.range(-0.11f, 0.12f);
-        result.formantScale = random.range(0.90f, 1.10f);
-        result.formantOffset = random.range(-110.0f, 110.0f);
-        result.throatDrive = random.range(0.84f, 1.20f);
-        result.throatBias = random.range(0.86f, 1.16f);
-        result.airiness = random.range(0.70f, 1.30f);
-        result.airBias = random.range(0.78f, 1.24f);
-        result.barkVariation = random.range(0.78f, 1.24f);
-        result.barkBias = random.range(0.82f, 1.18f);
-        result.movementSpeed = random.range(0.74f, 1.28f);
-        result.releaseDroop = random.range(-4.0f, -0.1f);
+        result.pitchOvershoot = 1.0f;
+        result.pitchDrift = 0.0f;
+        result.pitchGestureDepth = 1.0f;
+        result.gestureSelector = 0.0f;
+        result.vowelOffset = 0.0f;
+        result.vowelTravel = 0.24f;
+        result.mouthOpeningBias = 0.0f;
+        result.formantScale = 1.0f;
+        result.formantOffset = 0.0f;
+        result.throatDrive = 1.0f;
+        result.throatBias = random.range(0.97f, 1.03f);
+        result.airiness = random.range(0.94f, 1.06f);
+        result.airBias = random.range(0.96f, 1.04f);
+        result.barkVariation = random.range(0.95f, 1.05f);
+        result.barkBias = random.range(0.97f, 1.03f);
+        result.movementSpeed = 1.0f;
+        result.releaseDroop = -0.65f;
         return result;
     }
 };

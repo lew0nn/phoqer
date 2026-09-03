@@ -1,6 +1,7 @@
 #pragma once
 
-#include <JuceHeader.h>
+#include "../Core/AudioBuffer.h"
+#include "../Core/DspPrimitives.h"
 #include <array>
 #include <vector>
 
@@ -11,7 +12,7 @@ class CheapSpace
 public:
     void prepare(double sampleRate, int maxBlockSize);
     void reset() noexcept;
-    void process(juce::AudioBuffer<float>& buffer, float spaceAmount) noexcept;
+    void process(AudioBuffer& buffer, float spaceAmount) noexcept;
 
 private:
     static constexpr int lineCount = 4;
@@ -22,7 +23,6 @@ private:
     };
     std::array<DelayLine, lineCount> lines;
     float dampLeft = 0.0f, dampRight = 0.0f;
-    juce::SmoothedValue<float> wet;
+    LinearSmoother wet;
 };
 }
-

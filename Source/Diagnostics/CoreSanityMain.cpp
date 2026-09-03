@@ -1,15 +1,13 @@
 #include "CoreSanity.h"
-#include "../PluginProcessor.h"
 #include <iostream>
 
 int main()
 {
-    juce::ScopedJuceInitialiser_GUI juceInitialiser;
-    PhoqerAudioProcessor processor;
-    auto result = phoqer::CoreSanity::run(processor.getEngineForDiagnostics(),
-                                          processor.getValueTreeState());
+    phoqer::PhoqerEngine engine;
+    auto result = phoqer::CoreSanity::run(engine);
 
     std::cout << "silence=" << result.silenceIsSilent
+              << " characters=" << result.characterRoutingValid
               << " polyphony=" << result.eightVoicesFinite
               << " extremes=" << result.extremesBounded
               << " formants=" << result.formantSweepFinite

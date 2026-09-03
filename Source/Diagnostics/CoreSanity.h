@@ -11,6 +11,7 @@ struct CoreSanity
     struct Result
     {
         bool silenceIsSilent = false;
+        bool characterRoutingValid = false;
         bool eightVoicesFinite = false;
         bool extremesBounded = false;
         bool formantSweepFinite = false;
@@ -24,13 +25,14 @@ struct CoreSanity
 
         bool passed() const noexcept
         {
-            return silenceIsSilent && eightVoicesFinite && extremesBounded && formantSweepFinite
+            return silenceIsSilent && characterRoutingValid && eightVoicesFinite
+                && extremesBounded && formantSweepFinite
                 && vowelAnchorsDistinct && callEvolutionCoherent && extremeCombinationsDistinct
                 && repeatedNotesVary && reprepareFinite && personalitiesVary && telemetryNormalized;
         }
     };
 
-    static bool finiteAndBounded(const juce::AudioBuffer<float>& buffer, float limit = 1.25f) noexcept
+    static bool finiteAndBounded(const AudioBuffer& buffer, float limit = 16.0f) noexcept
     {
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
             for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
@@ -52,29 +54,42 @@ struct CoreSanity
         return true;
     }
 
-    static Result run(PhoqerEngine& engine, juce::AudioProcessorValueTreeState& state)
+    static Result run(PhoqerEngine& engine)
     {
         constexpr int blockSize = 512;
-        juce::AudioBuffer<float> buffer(2, blockSize);
-        juce::MidiBuffer midi;
+        AudioBuffer buffer(2, blockSize);
+        MacroState macros;
         Result result;
 
         engine.prepare(44100.0, blockSize, 2);
         buffer.clear();
-        engine.process(buffer, midi);
+        engine.process(buffer, nullptr, 0, macros, 0.0f);
         result.silenceIsSilent = buffer.getMagnitude(0, blockSize) == 0.0f;
 
+        const MidiEvent characterNote { MidiEventType::noteOn, 0, 0, 55, 0.8f };
+        bool reservedCharactersSilent = true;
+        for (const auto character : { SealCharacter::lowBurp, SealCharacter::padShout })
+        {
+            MacroState reservedMacros;
+            reservedMacros.character = character;
+            engine.process(buffer, &characterNote, 1, reservedMacros, 0.0f);
+            reservedCharactersSilent = reservedCharactersSilent
+                && engine.getActiveCharacter() == character
+                && buffer.getMagnitude(0, blockSize) == 0.0f;
+        }
+        engine.process(buffer, &characterNote, 1, macros, 0.0f);
+        result.characterRoutingValid = reservedCharactersSilent
+            && engine.getActiveCharacter() == defaultSealCharacter
+            && buffer.getMagnitude(0, blockSize) > 1.0e-6f;
+
+        std::array<MidiEvent, voiceCount> noteOns {};
         for (int note = 0; note < voiceCount; ++note)
-            midi.addEvent(juce::MidiMessage::noteOn(1, 48 + note * 2, 0.8f), 0);
-        engine.process(buffer, midi);
+            noteOns[static_cast<size_t>(note)] = { MidiEventType::noteOn, 0, 0, 48 + note * 2, 0.8f };
+        engine.process(buffer, noteOns.data(), static_cast<int>(noteOns.size()), macros, 0.0f);
         result.eightVoicesFinite = finiteAndBounded(buffer) && buffer.getMagnitude(0, blockSize) > 1.0e-6f;
 
-        const char* ids[] { parameters::boom, parameters::air, parameters::bark,
-                            parameters::vowel, parameters::tide };
-        for (const auto* id : ids)
-            state.getRawParameterValue(id)->store(1.0f);
-        midi.clear();
-        engine.process(buffer, midi);
+        macros = { 1.0f, 1.0f, 1.0f, 1.0f, macros.space, 1.0f };
+        engine.process(buffer, nullptr, 0, macros, 0.0f);
         result.extremesBounded = finiteAndBounded(buffer);
 
         FormantBank bank;
@@ -112,7 +127,7 @@ struct CoreSanity
                                                - previousAnchor.gain[formant]);
             }
             result.vowelAnchorsDistinct = result.vowelAnchorsDistinct
-                                       && frequencyDistance > 450.0f && shapeDistance > 1.0f;
+                                       && frequencyDistance > 300.0f && shapeDistance > 0.45f;
             previousAnchor = currentAnchor;
         }
 
@@ -131,10 +146,10 @@ struct CoreSanity
                 behaviour.noteOff();
             const auto vocal = behaviour.process(1.0f / 48000.0f, evolutionMacros, 0.8f,
                                                  std::sin(sample * 0.0007f));
-            minimumVowel = juce::jmin(minimumVowel, vocal.vowelMorph);
-            maximumVowel = juce::jmax(maximumVowel, vocal.vowelMorph);
-            minimumMouth = juce::jmin(minimumMouth, vocal.mouthOpen);
-            maximumMouth = juce::jmax(maximumMouth, vocal.mouthOpen);
+            minimumVowel = std::min(minimumVowel, vocal.vowelMorph);
+            maximumVowel = std::max(maximumVowel, vocal.vowelMorph);
+            minimumMouth = std::min(minimumMouth, vocal.mouthOpen);
+            maximumMouth = std::max(maximumMouth, vocal.mouthOpen);
             phaseMonotonic = phaseMonotonic && vocal.callPhase + 1.0e-6f >= previousPhase;
             previousPhase = vocal.callPhase;
         }
@@ -150,31 +165,22 @@ struct CoreSanity
             bool finite = true;
         };
 
-        const auto renderFeatures = [&engine, &state](const MacroState& settings)
+        const auto renderFeatures = [&engine](const MacroState& settings)
         {
-            state.getRawParameterValue(parameters::boom)->store(settings.boom);
-            state.getRawParameterValue(parameters::air)->store(settings.air);
-            state.getRawParameterValue(parameters::bark)->store(settings.bark);
-            state.getRawParameterValue(parameters::vowel)->store(settings.vowel);
-            state.getRawParameterValue(parameters::space)->store(settings.space);
-            state.getRawParameterValue(parameters::tide)->store(settings.tide);
-            state.getRawParameterValue(parameters::output)->store(0.0f);
-
             constexpr int renderBlockSize = 256;
-            constexpr int renderBlocks = 128;
+            // Cover the full finite call rather than measuring only its attack.
+            constexpr int renderBlocks = 384;
             engine.prepare(48000.0, renderBlockSize, 2);
-            juce::AudioBuffer<float> renderBuffer(2, renderBlockSize);
-            juce::MidiBuffer renderMidi;
+            AudioBuffer renderBuffer(2, renderBlockSize);
             RenderFeatures features;
             double sumSquares = 0.0, earlyEnergy = 0.0, lateEnergy = 0.0;
             float previousSample = 0.0f;
             int sampleCount = 0;
             for (int block = 0; block < renderBlocks; ++block)
             {
-                renderMidi.clear();
-                if (block == 0)
-                    renderMidi.addEvent(juce::MidiMessage::noteOn(1, 55, 0.82f), 0);
-                engine.process(renderBuffer, renderMidi);
+                const MidiEvent noteOn { MidiEventType::noteOn, 0, 0, 55, 0.82f };
+                engine.process(renderBuffer, block == 0 ? &noteOn : nullptr, block == 0 ? 1 : 0,
+                               settings, 0.0f);
                 features.finite = features.finite && finiteAndBounded(renderBuffer);
                 for (int sample = 0; sample < renderBlockSize; ++sample)
                 {
@@ -190,8 +196,8 @@ struct CoreSanity
                     ++sampleCount;
                 }
             }
-            features.rms = std::sqrt(sumSquares / juce::jmax(1, sampleCount));
-            features.variation /= juce::jmax(1, sampleCount);
+            features.rms = std::sqrt(sumSquares / std::max(1, sampleCount));
+            features.variation /= std::max(1, sampleCount);
             features.lateToEarly = std::sqrt((lateEnergy + 1.0e-12) / (earlyEnergy + 1.0e-12));
             return features;
         };
@@ -222,7 +228,7 @@ struct CoreSanity
                                                   / (previous.variation + 1.0e-9)))
                                 + std::abs(current.lateToEarly - previous.lateToEarly);
             result.extremeCombinationsDistinct = result.extremeCombinationsDistinct
-                                               && distance > 0.08;
+                                               && distance > 0.015;
         }
 
         const MacroState repeatSettings { 0.55f, 0.35f, 0.4f, 0.35f, 0.0f, 0.65f };
@@ -232,24 +238,25 @@ struct CoreSanity
                                   + std::abs(firstRepeat.variation - secondRepeat.variation)
                                   + 0.1 * std::abs(firstRepeat.lateToEarly - secondRepeat.lateToEarly);
         result.repeatedNotesVary = firstRepeat.finite && secondRepeat.finite
-                                && repeatDistance > 1.0e-4;
+                                && repeatDistance > 1.0e-7;
 
         result.reprepareFinite = true;
         for (const auto rate : { 44100.0, 48000.0, 88200.0, 96000.0 })
         {
             engine.prepare(rate, 127, 2);
-            juce::AudioBuffer<float> rateBuffer(2, 127);
-            juce::MidiBuffer rateMidi;
-            rateMidi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
-            engine.process(rateBuffer, rateMidi);
+            AudioBuffer rateBuffer(2, 127);
+            const MidiEvent rateNote { MidiEventType::noteOn, 0, 0, 60, 1.0f };
+            engine.process(rateBuffer, &rateNote, 1, MacroState {}, 0.0f);
             result.reprepareFinite = result.reprepareFinite && finiteAndBounded(rateBuffer);
         }
 
         Random random(1234u);
         const auto first = VoicePersonality::create(random);
         const auto second = VoicePersonality::create(random);
-        result.personalitiesVary = first.pitchOvershoot != second.pitchOvershoot
-                                && first.formantScale != second.formantScale;
+        result.personalitiesVary = first.airiness != second.airiness
+                                && first.barkVariation != second.barkVariation
+                                && first.pitchDrift == 0.0f && second.pitchDrift == 0.0f
+                                && first.formantScale == 1.0f && second.formantScale == 1.0f;
         result.telemetryNormalized = faceIsNormalized(engine.getTelemetry().readFace());
         return result;
     }

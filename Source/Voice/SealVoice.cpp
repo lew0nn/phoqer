@@ -1,15 +1,12 @@
 #include "SealVoice.h"
 
+#include <cmath>
+
 namespace phoqer
 {
 SealVoice::SealVoice(uint32_t seed, uint64_t& globalAgeCounter) noexcept
     : random(seed), ageCounter(globalAgeCounter)
 {
-}
-
-bool SealVoice::canPlaySound(juce::SynthesiserSound* sound)
-{
-    return dynamic_cast<SealSound*>(sound) != nullptr;
 }
 
 void SealVoice::prepare(double newSampleRate, int)
@@ -20,15 +17,16 @@ void SealVoice::prepare(double newSampleRate, int)
     exciter.prepare(sampleRate);
     throat.prepare(sampleRate);
     formants.prepare(sampleRate);
-    tideMovement.prepare(sampleRate, 1.7f, &random);
-    for (auto* smoother : { &smoothBoom, &smoothAir, &smoothBark, &smoothVowel, &smoothTide })
+    for (auto* smoother : { &smoothBoom, &smoothAir, &smoothBark, &smoothVowel,
+                            &smoothTide, &smoothDetune })
         smoother->reset(sampleRate, 0.035);
     smoothBoom.setCurrentAndTargetValue(macros.boom);
     smoothAir.setCurrentAndTargetValue(macros.air);
     smoothBark.setCurrentAndTargetValue(macros.bark);
     smoothVowel.setCurrentAndTargetValue(macros.vowel);
     smoothTide.setCurrentAndTargetValue(macros.tide);
-    resetDsp();
+    smoothDetune.setCurrentAndTargetValue(macros.detune);
+    hardReset();
 }
 
 void SealVoice::setMacros(const MacroState& newMacros) noexcept
@@ -39,6 +37,7 @@ void SealVoice::setMacros(const MacroState& newMacros) noexcept
     smoothBark.setTargetValue(macros.bark);
     smoothVowel.setTargetValue(macros.vowel);
     smoothTide.setTargetValue(macros.tide);
+    smoothDetune.setTargetValue(macros.detune);
 }
 
 void SealVoice::resetDsp() noexcept
@@ -46,17 +45,32 @@ void SealVoice::resetDsp() noexcept
     exciter.reset();
     throat.reset();
     formants.reset();
-    tideMovement.reset();
     previousOutput = 0.0f;
     telemetry = {};
 }
 
-void SealVoice::startNote(int midiNoteNumber, float velocity, juce::SynthesiserSound*,
+void SealVoice::deactivate() noexcept
+{
+    resetDsp();
+    active = false;
+    releasing = false;
+}
+
+void SealVoice::hardReset() noexcept
+{
+    amplitudeEnvelope.reset();
+    stolenTail = 0.0f;
+    stolenTailSamples = 0;
+    deactivate();
+}
+
+void SealVoice::startNote(int midiChannel, int midiNoteNumber, float velocity,
                           int currentPitchWheelPosition)
 {
     resetDsp();
+    currentMidiChannel = midiChannel;
     currentMidiNote = midiNoteNumber;
-    currentVelocity = juce::jlimit(0.0f, 1.0f, velocity);
+    currentVelocity = clamp(0.0f, 1.0f, velocity);
     personality = VoicePersonality::create(random);
     behaviour.start(currentVelocity, macros, personality);
 
@@ -64,23 +78,27 @@ void SealVoice::startNote(int midiNoteNumber, float velocity, juce::SynthesiserS
     pitchGesture.start(currentMidiNote, currentVelocity, macros, personality, barkAmount);
     pitchWheelMoved(currentPitchWheelPosition);
 
-    juce::ADSR::Parameters envelope;
-    envelope.attack = juce::jmap(barkAmount, 0.035f, 0.0018f);
-    envelope.decay = juce::jmap(barkAmount, 0.16f, 0.055f);
-    envelope.sustain = juce::jmap(barkAmount, 0.84f, 0.62f);
-    envelope.release = juce::jmap(barkAmount, 0.46f, 0.13f);
+    AdsrEnvelope::Parameters envelope;
+    envelope.attack = lerp(barkAmount, 0.0060f, 0.0015f);
+    envelope.decay = lerp(barkAmount, 0.32f, 0.18f);
+    envelope.sustain = lerp(barkAmount, 0.78f, 0.62f);
+    envelope.release = lerp(barkAmount, 0.26f, 0.14f);
     amplitudeEnvelope.setParameters(envelope);
     amplitudeEnvelope.noteOn();
 
     telemetry.velocity = currentVelocity;
-    telemetry.registerPosition = juce::jlimit(0.0f, 1.0f, (currentMidiNote - 36.0f) / 60.0f);
+    telemetry.registerPosition = clamp(0.0f, 1.0f, (currentMidiNote - 36.0f) / 60.0f);
     telemetry.age = ++ageCounter;
     telemetry.active = true;
+    active = true;
     releasing = false;
 }
 
-void SealVoice::stopNote(float, bool allowTailOff)
+void SealVoice::stopNote(bool allowTailOff)
 {
+    if (! active)
+        return;
+
     if (allowTailOff)
     {
         amplitudeEnvelope.noteOff();
@@ -93,19 +111,18 @@ void SealVoice::stopNote(float, bool allowTailOff)
     stolenTail = previousOutput;
     stolenTailSamples = 32;
     amplitudeEnvelope.reset();
-    resetDsp();
-    clearCurrentNote();
-    releasing = false;
+    deactivate();
 }
 
-void SealVoice::pitchWheelMoved(int value)
+void SealVoice::pitchWheelMoved(int value) noexcept
 {
-    pitchWheelSemitones = juce::jmap(static_cast<float>(value), 0.0f, 16383.0f, -2.0f, 2.0f);
+    pitchWheelSemitones = lerp(clamp(0.0f, 16383.0f, static_cast<float>(value)) / 16383.0f,
+                               -2.0f, 2.0f);
 }
 
-void SealVoice::renderNextBlock(juce::AudioBuffer<float>& output, int startSample, int numSamples)
+void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSamples)
 {
-    if (! isVoiceActive())
+    if (! active)
         return;
 
     const auto dt = static_cast<float>(1.0 / sampleRate);
@@ -115,19 +132,25 @@ void SealVoice::renderNextBlock(juce::AudioBuffer<float>& output, int startSampl
     {
         const MacroState sampleMacros {
             smoothBoom.getNextValue(), smoothAir.getNextValue(), smoothBark.getNextValue(),
-            smoothVowel.getNextValue(), macros.space, smoothTide.getNextValue()
+            smoothVowel.getNextValue(), macros.space, smoothTide.getNextValue(),
+            smoothDetune.getNextValue()
         };
+        if (behaviour.isFinished())
+        {
+            deactivate();
+            break;
+        }
         const auto envelope = amplitudeEnvelope.getNextSample();
-        const auto movement = tideMovement.next();
-        auto vocal = behaviour.process(dt, sampleMacros, envelope, movement);
+        auto vocal = behaviour.process(dt, sampleMacros, envelope, 0.0f);
         const auto frequency = pitchGesture.nextFrequency(sampleMacros, vocal.callPhase) * bendMultiplier;
         vocal.pitchLift = pitchGesture.getPitchLift();
         const auto excitation = exciter.process(frequency, sampleMacros, vocal, personality, random);
         const auto pressured = throat.process(excitation, sampleMacros, vocal, personality);
         auto value = formants.process(pressured, static_cast<float>(currentMidiNote), sampleMacros,
-                                      vocal, personality, movement);
-        const auto amplitudeWander = 1.0f + movement * (0.02f + sampleMacros.tide * 0.14f);
-        value *= envelope * vocal.amplitudeShape * amplitudeWander * (0.16f + 0.18f * currentVelocity);
+                                      vocal, personality, 0.0f);
+        const auto attackPunch = 1.0f + 1.20f * vocal.barkTransient;
+        value *= envelope * vocal.amplitudeShape * attackPunch
+               * (0.18f + 0.22f * currentVelocity);
 
         if (stolenTailSamples > 0)
         {
@@ -152,10 +175,6 @@ void SealVoice::renderNextBlock(juce::AudioBuffer<float>& output, int startSampl
     }
 
     if (! amplitudeEnvelope.isActive())
-    {
-        resetDsp();
-        clearCurrentNote();
-        releasing = false;
-    }
+        deactivate();
 }
 }

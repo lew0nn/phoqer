@@ -1,5 +1,8 @@
 #include "CheapSpace.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace phoqer
 {
 void CheapSpace::prepare(double sampleRate, int)
@@ -7,7 +10,7 @@ void CheapSpace::prepare(double sampleRate, int)
     constexpr std::array<double, lineCount> delaySeconds { 0.0297, 0.0371, 0.0411, 0.0533 };
     for (int line = 0; line < lineCount; ++line)
     {
-        const auto size = juce::jmax(8, static_cast<int>(std::ceil(delaySeconds[static_cast<size_t>(line)] * sampleRate)));
+        const auto size = std::max(8, static_cast<int>(std::ceil(delaySeconds[static_cast<size_t>(line)] * sampleRate)));
         lines[static_cast<size_t>(line)].data.assign(static_cast<size_t>(size), 0.0f);
         lines[static_cast<size_t>(line)].index = 0;
     }
@@ -26,10 +29,11 @@ void CheapSpace::reset() noexcept
     dampLeft = dampRight = 0.0f;
 }
 
-void CheapSpace::process(juce::AudioBuffer<float>& buffer, float spaceAmount) noexcept
+void CheapSpace::process(AudioBuffer& buffer, float spaceAmount) noexcept
 {
-    wet.setTargetValue(juce::jlimit(0.0f, 0.42f, spaceAmount * 0.42f));
-    const auto feedback = 0.46f + 0.22f * juce::jlimit(0.0f, 1.0f, spaceAmount);
+    const auto reverbAmount = clamp(0.0f, 1.0f, spaceAmount);
+    wet.setTargetValue(reverbAmount * 0.68f);
+    const auto feedback = 0.50f + 0.28f * reverbAmount;
     auto* left = buffer.getWritePointer(0);
     auto* right = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : left;
 
@@ -50,15 +54,18 @@ void CheapSpace::process(juce::AudioBuffer<float>& buffer, float spaceAmount) no
         for (int line = 0; line < lineCount; ++line)
         {
             auto& delay = lines[static_cast<size_t>(line)];
-            delay.data[static_cast<size_t>(delay.index)] = input * 0.28f + mixed[static_cast<size_t>(line)] * feedback;
+            delay.data[static_cast<size_t>(delay.index)] = input * 0.34f
+                + mixed[static_cast<size_t>(line)] * feedback;
             if (++delay.index >= static_cast<int>(delay.data.size())) delay.index = 0;
         }
 
         dampLeft += 0.24f * ((taps[0] + taps[2]) * 0.5f - dampLeft);
         dampRight += 0.24f * ((taps[1] + taps[3]) * 0.5f - dampRight);
         const auto mix = wet.getNextValue();
-        left[sample] = left[sample] * (1.0f - 0.18f * mix) + dampLeft * mix;
-        right[sample] = right[sample] * (1.0f - 0.18f * mix) + dampRight * mix;
+        const auto dryGain = 1.0f - 0.38f * mix;
+        const auto wetGain = 1.18f * mix;
+        left[sample] = left[sample] * dryGain + dampLeft * wetGain;
+        right[sample] = right[sample] * dryGain + dampRight * wetGain;
     }
 }
 }

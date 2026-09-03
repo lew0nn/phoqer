@@ -1,6 +1,8 @@
 #pragma once
 
-#include <JuceHeader.h>
+#include "SealCharacter.h"
+
+#include <cstdint>
 
 namespace phoqer
 {
@@ -32,6 +34,8 @@ struct MacroState
     float vowel = 0.35f;
     float space = 0.2f;
     float tide = 0.25f;
+    float detune = 0.0f;
+    SealCharacter character = defaultSealCharacter;
 };
 
 struct VocalState

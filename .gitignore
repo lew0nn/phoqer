@@ -1,5 +1,6 @@
 /Build/
 /build/
+/Build-*/
 /.vs/
 /.vscode/
 *.user
@@ -7,4 +8,3 @@
 *.VC.db
 *.VC.opendb
 *.log
-
