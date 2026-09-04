@@ -1,54 +1,67 @@
-# Licensing and release checklist
+# PHOQER licensing
 
-This file records the practical rules for maintaining PHOQER's licensing
-boundary. It is not a substitute for legal advice or the controlling license
-texts.
+PHOQER's original project material uses the unmodified BSD-3-Clause license in
+[LICENSE](LICENSE). SPDX identifier: `BSD-3-Clause`.
 
-## Ownership map
+## Scope and history
 
-- `Source/`, `config.h`, original project documentation, original resource
-  definitions, and original project artwork are PHOQER Project Material under
-  the root `LICENSE`, unless a file says otherwise.
-- `vendor/iPlug2` is a third-party git submodule and is never covered by the
-  root license.
-- format SDK directories populated by `Tools/BootstrapIPlug2.ps1` remain under
-  their upstream licenses.
-- `resources/fonts/Roboto-Regular.ttf` is under the Apache License 2.0; retain
-  its copyright notice and the complete license text.
-- files carrying their own copyright or license notice remain under that
-  notice.
+The license covers original PHOQER code in `Source/`, build scripts,
+`config.h`, documentation, resource definitions, and original project assets
+owned by lewonn / LWNX DSP, unless separately identified. Accepted contributions
+remain owned by their authors under the terms in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Before publishing source
+Third-party material is excluded. In particular, `vendor/iPlug2`, downloaded
+format SDKs, and `resources/fonts/Roboto-Regular.ttf` retain their own
+licenses. The bundled Roboto font uses Apache-2.0. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-1. Confirm the iPlug2 gitlink and all bootstrapped SDK revisions match
-   `THIRD_PARTY_NOTICES.md`.
-2. Keep the dependency as a gitlink. Do not flatten or copy the complete
-   `vendor/iPlug2` tree into a source archive.
-3. Keep the root `LICENSE`, `COMMERCIAL.md`, `THIRD_PARTY_NOTICES.md`,
-   `CONTRIBUTING.md`, and `LICENSES/` in the source release.
-4. Do not merge external copyrightable contributions without a separate
-   written contributor agreement.
+lewonn / LWNX DSP also offers original PHOQER material they own in earlier
+repository revisions under BSD-3-Clause. This additional permission does not
+withdraw rights already granted under earlier licenses or alter third-party
+terms. Historical JUCE references remain subject to JUCE's applicable license.
+The Git history is preserved.
 
-GitHub's automatically generated source archives contain the superproject and
-the submodule pointer, not a complete recursive dependency checkout. Build
-instructions should direct developers to initialize the submodule and run the
-bootstrap script.
+## Author credit and commercial use
 
-## Before publishing binaries
+Both commercial and noncommercial development and distribution are permitted,
+including closed-source derivatives, without contacting the author.
 
-1. Build only the VST3 and/or CLAP targets covered by the present audit.
-2. Do not publish the iPlug2 Windows standalone target while its default ASIO
-   path remains enabled.
-3. Include `LICENSE`, `COMMERCIAL.md`, `THIRD_PARTY_NOTICES.md`, and the entire
-   `LICENSES/` directory in every downloadable binary archive or installer.
-4. Do not remove copyright or license notices from source supplied with a
-   binary.
-5. Re-run the dependency audit whenever a submodule or SDK revision changes.
-6. Keep the Steinberg VST trademark attribution from
-   `THIRD_PARTY_NOTICES.md` anywhere the product documentation refers to VST
-   compatibility, and do not put VST in the PHOQER product or company name.
+Source redistributions retain the copyright notice, conditions, and disclaimer.
+Binary redistributions reproduce them in accompanying documentation or other
+supplied materials. The author credit is the copyright notice naming
+lewonn / LWNX DSP in LICENSE. A separate UI credit or advertising acknowledgment
+is not required. Private changes do not require a public acknowledgment.
 
-The build copies the distribution notices to `out/PHOQER-Licenses`. The VST3
-target also embeds that directory at
-`PHOQER.vst3/Contents/Resources/PHOQER-Licenses`. A CLAP zip or installer must
-place the copied directory beside the `.clap` binary.
+Musicians and consumers owe no author credit or royalties merely for using
+PHOQER or distributing their own audio output. Anyone redistributing the
+software itself must retain its notices. This explanation adds no conditions
+to BSD-3-Clause; see [COMMERCIAL.md](COMMERCIAL.md) for examples.
+
+## Contributions
+
+Contributors retain their copyright and offer accepted original material
+under BSD-3-Clause. No separate commercial relicensing agreement or CLA is
+needed for this model. Keep their copyright and license notices.
+
+## Distribution
+
+Include LICENSE, COMMERCIAL.md, THIRD_PARTY_NOTICES.md, and LICENSES/ in
+PHOQER's official binary packages. Preserve the notices in any third-party
+source you distribute and review dependency license changes when updating
+the pinned framework or SDKs.
+
+The build collects notices in `out/PHOQER-Licenses` and places them inside
+`PHOQER.vst3/Contents/Resources/PHOQER-Licenses`. A CLAP package must include
+the collected folder beside the binary. Source packages include the root
+license and dependency notices; initialize the pinned submodule and use
+`Tools/BootstrapIPlug2.ps1` to obtain build dependencies.
+
+The Windows standalone target remains disabled pending resolution of the ASIO
+licensing issue. BSD-3-Clause on PHOQER does not grant rights over the bundled
+legacy ASIO files. Current build targets are VST3 and CLAP.
+
+Official BSD-3-Clause terms:
+https://opensource.org/license/bsd-3-clause
+
+The dependency review and its limits are recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md#bsd-3-clause-compatibility-review).

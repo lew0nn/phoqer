@@ -28,6 +28,6 @@ Not implemented: behaviour profiles beyond CALL plus its BARK transient, presets
 
 ## Licensing
 
-Original PHOQER code, documentation, and project assets use the custom PHOQER Source-Available License. Musicians and other end users may use PHOQER in commercial music and audio production without payment, permission, attribution, or royalties. Public noncommercial forks are allowed with attribution; commercial exploitation of PHOQER-derived software requires a separate written license. This is source-available software, not OSI-approved open-source software. See `LICENSE` and `COMMERCIAL.md`.
+Original PHOQER code, documentation, and project assets are licensed under [BSD-3-Clause](LICENSE). Developers may modify, redistribute, and sell derivatives, including closed-source products, while retaining the copyright notice naming lewonn / LWNX DSP, license conditions, and disclaimer. No commercial permission is required. Musicians and consumers owe no credit or royalties for using PHOQER or sharing their audio. See [COMMERCIAL.md](COMMERCIAL.md) for examples and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution terms.
 
 iPlug2 uses its permissive zlib-style license. VST3, CLAP, the bundled font, and other third-party components remain under their own upstream licenses. The Windows standalone target is disabled pending a separate ASIO licensing decision. See `THIRD_PARTY_NOTICES.md` and `LICENSES/`.

@@ -1,60 +1,48 @@
-# PHOQER licensing guide
+# Using PHOQER
 
-This is a plain-language guide. The root `LICENSE` is the controlling legal
-text. PHOQER is source-available, not OSI-approved open-source software.
+PHOQER's original code is licensed under BSD-3-Clause. The full terms are in
+[LICENSE](LICENSE); this guide adds no restrictions.
 
-## No permission, credit, or payment required
+## Musicians and consumers
 
-You may use PHOQER as an instrument or audio tool to make music, recordings,
-performances, videos, games, streams, broadcasts, sound design, and presets.
-Those outputs may be released and monetized commercially. PHOQER does not
-require producer credits, track attribution, royalties, or contact for normal
-end-user use.
+You can use PHOQER to make and sell music, recordings, performances, videos,
+games, streams, sound design, and your own presets. Ordinary audio output and
+user-created presets do not carry PHOQER's software license. No author credit,
+royalties, payment, or permission is required merely for using the instrument.
 
-You may rebuild or privately modify PHOQER for your own music or audio
-production, including commercial production, as long as source notices remain
-intact. Paid development performed for an employer or client is different and
-requires a commercial software license.
+Redistributing the plug-in or its source is different from sharing your audio:
+anyone distributing that software must retain the notices described below.
 
-## Attribution required for public noncommercial forks
+## Developers
 
-Public, noncommercial forks and redistributed modifications are allowed. Their
-README or primary documentation must clearly state:
+You can use, study, rebuild, modify, fork, integrate, and redistribute PHOQER,
+including in paid products, closed-source products, paid client work, and
+company projects. You do not need a separate commercial agreement or permission
+from the original author.
+
+When sharing source, retain the copyright notice, license conditions, and
+disclaimer. When sharing binaries, reproduce those notices in the accompanying
+documentation or other supplied materials, such as a license file.
+
+Keeping the full LICENSE, including "Copyright (c) 2026, lewonn / LWNX DSP",
+provides the required author credit. A short additional acknowledgment is
+welcome but optional:
 
 > Based on PHOQER by lewonn / LWNX DSP
 >
 > https://github.com/lew0nn/phoqer
 
-They must also retain the project license and third-party notices, identify
-their changes, and avoid implying endorsement by the original author.
+Private development does not require a public acknowledgment. There is no
+requirement to show a credit in the interface, advertising, or music, or to
+publish modified source. Do not imply endorsement by the original author or
+contributors without their permission.
 
-## Contact and written agreement required
-
-A separate written license is required before anyone commercially exploits
-PHOQER-derived software. Examples include:
-
-- selling or licensing PHOQER or a modified fork;
-- including it in a paid software bundle or subscription;
-- charging for hosted or remote access to it;
-- accepting donations or sponsorship specifically for distributing or
-  developing PHOQER-derived software;
-- doing paid client or employer work that builds PHOQER-derived software; or
-- incorporating a substantial part of PHOQER source into another commercial
-  software product.
-
-Commercial music and audio output is expressly excluded from this requirement.
-
-To discuss commercial software licensing, contact the copyright holder through
-https://github.com/lew0nn. Contact or negotiation is not permission; permission
-exists only in a separate written agreement from the copyright holder.
-
-## Third-party software
+## Dependencies
 
 iPlug2, format SDKs, fonts, and other dependencies keep their own licenses.
-PHOQER's license neither replaces nor restricts those licenses. See
-`THIRD_PARTY_NOTICES.md` and `LICENSES/`.
+Follow their terms when including their material. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [LICENSES/](LICENSES/).
 
-The Windows standalone target is intentionally disabled because iPlug2's
-default standalone path includes Steinberg ASIO interface material with
-separate licensing requirements. VST3 and CLAP are the approved PHOQER targets
-under the repository's current setup.
+The Windows standalone target remains disabled pending resolution of the
+separate ASIO licensing issue. Changing PHOQER's license does not relicense
+Steinberg's ASIO files.

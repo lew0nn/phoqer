@@ -1,6 +1,6 @@
 # Third-party notices
 
-PHOQER's custom root `LICENSE` applies only to original PHOQER material owned
+PHOQER's BSD-3-Clause root `LICENSE` applies only to original PHOQER material owned
 by lewonn / LWNX DSP. It does not replace, sublicense, or add restrictions to
 the third-party software listed below. Copyright and trademark rights in those
 components remain with their respective owners.
@@ -19,7 +19,9 @@ remain controlling and must not be removed.
 | CLAP helpers | `c35dd4906bd8efbb900cb2b89e680fed463cc8b1` | MIT | `LICENSES/CLAP-Helpers.txt` |
 | NanoVG | version contained in the pinned iPlug2 revision | zlib | `LICENSES/NanoVG.txt` |
 | NanoSVG | version contained in the pinned iPlug2 revision | zlib | `LICENSES/NanoSVG.txt` |
-| stb headers | version contained in the pinned iPlug2 revision | MIT or public domain, at the recipient's option | `LICENSES/STB.txt` and notices embedded in the relevant headers |
+| FontStash | version contained in NanoVG in the pinned iPlug2 revision | zlib | `LICENSES/FontStash.txt` |
+| stb_textedit (and stb_image_write, when used) | version contained in the pinned iPlug2 revision | MIT or public domain, at the recipient's option | `LICENSES/STB.txt` and notices embedded in the relevant headers |
+| stb_image 2.10 and stb_truetype 1.09 | older headers inside NanoVG | public-domain declarations in these versions | headers in `vendor/iPlug2/Dependencies/IGraphics/NanoVG/src/`; the later MIT text must not be assumed to describe these versions |
 | glad-generated OpenGL loader and Khronos platform declarations | version contained in the pinned iPlug2 revision | generated glad code is offered as public domain/WTFPL/CC0; Khronos declarations retain their embedded notice | `LICENSES/Khronos-khrplatform.txt` and notices embedded in the relevant files |
 | Roboto Regular 1.100141 (2013) | NanoVG example font; font data copyright Google 2012 | Apache License 2.0 | `LICENSES/Roboto-NOTICE.txt` and `LICENSES/Apache-2.0.txt` |
 
@@ -50,11 +52,11 @@ The pinned iPlug2 source tree contains RtAudio, RtMidi, and legacy Steinberg
 ASIO interface files used by iPlug2's default Windows standalone-app target.
 They are not used by PHOQER's VST3 or CLAP plug-in targets.
 
-PHOQER disables the standalone target by default and does not authorize a
-distributable standalone build. Do not enable or distribute that target until
-the ASIO path has either been removed/replaced or the distributor has selected
-and complied with an applicable Steinberg ASIO license. PHOQER's custom license
-cannot grant ASIO rights.
+PHOQER's current build configuration omits the standalone target pending
+resolution of the separate ASIO licensing issue. Distributors enabling that
+target must remove/replace the ASIO path or establish and comply with a license
+applicable to the ASIO files they use. PHOQER's BSD-3-Clause license does not
+grant rights over Steinberg's material.
 
 Official ASIO licensing information:
 https://www.steinberg.net/developers/asiosdk-open/
@@ -80,3 +82,25 @@ copyright and license notices in every included dependency. Do not make a
 manually flattened or stripped archive of `vendor/iPlug2`.
 
 No third-party component is relicensed by PHOQER.
+
+## BSD-3-Clause compatibility review
+
+For the current Windows NanoVG/GL2 VST3 and CLAP targets, the source-level
+licenses reviewed permit combination with BSD-3-Clause PHOQER code, subject to
+retaining each dependency's own notices. iPlug2's three restrictions concern
+origin, marking altered upstream source, and preserving notices. MIT requires
+its copyright and permission notice; Apache-2.0 section 4 governs redistribution
+of the bundled Roboto font. These terms are retained separately from PHOQER's
+BSD-3-Clause license.
+
+The review used the pinned sources, generated project files, and the Windows
+compiler's dependency logs, including graphics headers compiled through
+IGraphicsWin.cpp. Those logs include NanoVG, FontStash, NanoSVG, glad/Khronos,
+stb, WDL, and the selected format SDK. They contain no ASIO, RtAudio, RtMidi,
+JUCE, Skia, Yoga, or WebView source in the two plug-in targets. Optional
+components present elsewhere in the framework are not covered by this binary
+review; changing formats, graphics backends, or dependencies needs a new check.
+
+The iPlug2 working tree was unmodified at review. The bundled Roboto file is
+unchanged from NanoVG's example and identifies Apache-2.0 in its metadata.
+No conclusion about compliance of previously distributed binaries is implied.
