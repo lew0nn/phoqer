@@ -24,8 +24,10 @@ iPlug2 owns host format integration, parameter serialization, MIDI translation, 
 
 Face telemetry is published as normalized atomics and may be polled by a future editor at 30-60 Hz. The output waveform uses a fixed single-writer/single-reader ring; meter peak and RMS are atomic.
 
-Not implemented: behaviour profiles beyond CALL plus its BARK transient, presets, installers, project licensing, and release automation.
+Not implemented: behaviour profiles beyond CALL plus its BARK transient, presets, installers, and release automation.
 
-## Framework licensing
+## Licensing
 
-iPlug2 uses its permissive zlib-style license. VST3 and CLAP remain under their own upstream licenses. PHOQER's own project license is intentionally not selected by this migration.
+Original PHOQER code, documentation, and project assets use the custom PHOQER Source-Available License. Musicians and other end users may use PHOQER in commercial music and audio production without payment, permission, attribution, or royalties. Public noncommercial forks are allowed with attribution; commercial exploitation of PHOQER-derived software requires a separate written license. See `LICENSE` and `COMMERCIAL.md`.
+
+iPlug2 uses its permissive zlib-style license. VST3, CLAP, the bundled font, and other third-party components remain under their own upstream licenses. See `THIRD_PARTY_NOTICES.md`.

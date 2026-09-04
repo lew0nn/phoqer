@@ -1,0 +1,130 @@
+PHOQER SOURCE-AVAILABLE LICENSE
+Version 1.0, 5 September 2026
+SPDX-License-Identifier: LicenseRef-PHOQER-Source-Available-1.0
+
+Copyright (c) 2026 lewonn / LWNX DSP
+
+All rights are reserved except for the permissions expressly granted below.
+
+1. Scope
+
+This license applies only to the original PHOQER source code, documentation,
+and project assets owned by lewonn / LWNX DSP (the "Project Material"). It does
+not apply to iPlug2, SDKs, fonts, libraries, or any other third-party material.
+Third-party material remains governed exclusively by its own license terms.
+
+Files or directories carrying a separate license or copyright notice are not
+Project Material to the extent of that separate material. In particular,
+`vendor/iPlug2`, downloaded format SDKs, and `resources/fonts` are excluded.
+
+By exercising any permission under this license, you accept its terms.
+
+2. Definitions
+
+"Software" means PHOQER in source or compiled form.
+
+"Modified Software" means any work based on or incorporating a substantial
+part of the Project Material, including a modification, fork, port, or reuse of
+PHOQER source code in another software product.
+
+"User Content" means music, audio recordings, performances, compositions,
+sound design, audiovisual works, games, broadcasts, streams, and user-created
+presets produced through normal use of the Software. User Content does not
+include the Software, Modified Software, source code, or original project
+assets themselves.
+
+"Commercial Software Activity" means selling, licensing, renting, charging
+for access to, commercially distributing, or otherwise receiving direct or
+indirect compensation for the Software or Modified Software. It also includes
+paid development for an employer or client when that work creates or modifies
+the Software or Modified Software. It does not include creating, using,
+publishing, performing, licensing, or monetizing User Content.
+
+3. End-user permission
+
+You may install, run, and use the Software as an audio tool for personal,
+professional, educational, or commercial music and audio production. You may
+create, publish, perform, sell, license, and otherwise monetize User Content
+without payment, permission, attribution, or royalties to the Copyright Holder.
+
+This permission includes private rebuilding or modification of the Software
+solely for your own end-user music or audio-production use, provided that all
+copyright and license notices are retained in the source.
+
+4. Source access and noncommercial modification
+
+You may view, study, copy, compile, fork, and modify the Project Material for
+personal, educational, research, evaluation, and other noncommercial purposes.
+
+You may publicly share or redistribute the Software or Modified Software only
+on a noncommercial basis and only if you comply with Section 5. You may not
+charge a fee for it, include it in a paid bundle or subscription, use it as a
+paid service, or use its distribution to promote or support a revenue-bearing
+software offering.
+
+5. Attribution and notices
+
+Every public fork or redistribution of the Software or Modified Software must:
+
+a. retain this license and all copyright and third-party notices;
+
+b. plainly identify that the work is modified, if applicable;
+
+c. include the following acknowledgment prominently in its README or primary
+   product documentation:
+
+   "Based on PHOQER by lewonn / LWNX DSP"
+   https://github.com/lew0nn/phoqer
+
+d. not state or imply that the Copyright Holder endorses the fork or modified
+   work.
+
+Attribution is not required in User Content, track credits, liner notes,
+performances, videos, games, broadcasts, or streams merely because PHOQER was
+used to create their audio.
+
+6. Commercial software licensing
+
+Commercial Software Activity is not granted by this license. Before conducting
+Commercial Software Activity, you must obtain a separate written license from
+the Copyright Holder. Contact the Copyright Holder through:
+
+https://github.com/lew0nn
+
+Contacting the Copyright Holder or beginning a discussion does not itself grant
+permission. Permission exists only after the Copyright Holder gives it in a
+separate written agreement.
+
+7. No trademark rights
+
+This license does not grant rights to use the names PHOQER, LWNX DSP, or lewonn,
+or related logos and branding, except as necessary to provide the attribution
+required by Section 5.
+
+8. Third-party compliance
+
+You are responsible for complying with all licenses that apply to third-party
+material used with or distributed alongside the Software. Nothing in this
+license changes, limits, sublicenses, or replaces those third-party licenses.
+
+9. Termination
+
+Your rights under this license terminate automatically if you materially breach
+it. They are reinstated if you cure the breach within 30 days after discovering
+it, unless the Copyright Holder has already given you written notice of the
+breach. Repeated or intentional breach requires express written reinstatement.
+
+10. Disclaimer of warranty and limitation of liability
+
+THE PROJECT MATERIAL AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. TO THE MAXIMUM EXTENT
+PERMITTED BY LAW, THE COPYRIGHT HOLDER WILL NOT BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY ARISING FROM OR RELATED TO THE PROJECT MATERIAL,
+SOFTWARE, OR THEIR USE.
+
+11. No implied rights
+
+No permission is granted by implication, estoppel, or otherwise. If an activity
+is not expressly permitted by this license, it requires prior written permission
+from the Copyright Holder.
