@@ -1,6 +1,6 @@
 PHOQER SOURCE-AVAILABLE LICENSE
-Version 1.0, 5 September 2026
-SPDX-License-Identifier: LicenseRef-PHOQER-Source-Available-1.0
+Version 1.1, 5 September 2026
+SPDX-License-Identifier: LicenseRef-PHOQER-Source-Available-1.1
 
 Copyright (c) 2026 lewonn / LWNX DSP
 
@@ -17,11 +17,20 @@ Files or directories carrying a separate license or copyright notice are not
 Project Material to the extent of that separate material. In particular,
 `vendor/iPlug2`, downloaded format SDKs, and `resources/fonts` are excluded.
 
+For clarity, the Copyright Holder also offers under this license any Project
+Material authored and owned by the Copyright Holder that appears in an earlier
+revision of the PHOQER repository, unless that material carries a different
+explicit license. This sentence does not license third-party material found in
+repository history, including JUCE or any other former dependency.
+
 By exercising any permission under this license, you accept its terms.
 
 2. Definitions
 
-"Software" means PHOQER in source or compiled form.
+"Copyright Holder" means lewonn / LWNX DSP.
+
+"Software" means PHOQER in source or compiled form, but excludes third-party
+material except when a section expressly discusses that material.
 
 "Modified Software" means any work based on or incorporating a substantial
 part of the Project Material, including a modification, fork, port, or reuse of
@@ -37,8 +46,16 @@ assets themselves.
 for access to, commercially distributing, or otherwise receiving direct or
 indirect compensation for the Software or Modified Software. It also includes
 paid development for an employer or client when that work creates or modifies
-the Software or Modified Software. It does not include creating, using,
-publishing, performing, licensing, or monetizing User Content.
+the Software or Modified Software, and donations or sponsorships offered in
+direct connection with distributing or developing that software. It does not
+include creating, using, publishing, performing, licensing, or monetizing User
+Content.
+
+"Noncommercial" means not primarily intended for or directed toward commercial
+advantage or monetary compensation for the person exercising the licensed
+rights. Using an ordinary commercial code-hosting or distribution service does
+not by itself make an activity commercial when that person receives no direct
+or indirect compensation from the activity.
 
 3. End-user permission
 
@@ -54,7 +71,7 @@ copyright and license notices are retained in the source.
 4. Source access and noncommercial modification
 
 You may view, study, copy, compile, fork, and modify the Project Material for
-personal, educational, research, evaluation, and other noncommercial purposes.
+personal, educational, research, evaluation, and other Noncommercial purposes.
 
 You may publicly share or redistribute the Software or Modified Software only
 on a noncommercial basis and only if you comply with Section 5. You may not
@@ -78,6 +95,11 @@ c. include the following acknowledgment prominently in its README or primary
 
 d. not state or imply that the Copyright Holder endorses the fork or modified
    work.
+
+Recipients receive the permissions in this license directly from the Copyright
+Holder. You may not offer different or additional rights in the Project
+Material, although you may apply your own terms to your original additions if
+those terms do not conflict with this license.
 
 Attribution is not required in User Content, track credits, liner notes,
 performances, videos, games, broadcasts, or streams merely because PHOQER was
@@ -128,3 +150,11 @@ SOFTWARE, OR THEIR USE.
 No permission is granted by implication, estoppel, or otherwise. If an activity
 is not expressly permitted by this license, it requires prior written permission
 from the Copyright Holder.
+
+12. General
+
+This license is the entire permission granted for the Project Material unless
+the Copyright Holder signs a separate written agreement. A failure to enforce
+one provision is not a waiver. If a provision is held unenforceable, it will be
+limited only as much as necessary, and the remaining provisions will continue
+to apply. Section headings are for convenience and do not change the terms.

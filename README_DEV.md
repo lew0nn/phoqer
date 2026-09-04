@@ -12,7 +12,7 @@ cmake -S . -B Build-iPlug2 -G "Visual Studio 17 2022" -A x64
 cmake --build Build-iPlug2 --config Release
 ```
 
-The migration targets the Windows Standalone app, VST3, and CLAP. iPlug2 is pinned as `vendor/iPlug2`; the bootstrap script retrieves the upstream VST3 and CLAP SDKs expected by iPlug2 without committing nested generated dependency trees.
+The migration targets VST3 and CLAP on Windows. The standalone app is intentionally disabled pending a separate ASIO licensing decision. iPlug2 is pinned as `vendor/iPlug2`; the bootstrap script retrieves the upstream VST3 and CLAP SDKs expected by iPlug2 without committing nested generated dependency trees.
 
 ## Architecture
 
@@ -28,6 +28,6 @@ Not implemented: behaviour profiles beyond CALL plus its BARK transient, presets
 
 ## Licensing
 
-Original PHOQER code, documentation, and project assets use the custom PHOQER Source-Available License. Musicians and other end users may use PHOQER in commercial music and audio production without payment, permission, attribution, or royalties. Public noncommercial forks are allowed with attribution; commercial exploitation of PHOQER-derived software requires a separate written license. See `LICENSE` and `COMMERCIAL.md`.
+Original PHOQER code, documentation, and project assets use the custom PHOQER Source-Available License. Musicians and other end users may use PHOQER in commercial music and audio production without payment, permission, attribution, or royalties. Public noncommercial forks are allowed with attribution; commercial exploitation of PHOQER-derived software requires a separate written license. This is source-available software, not OSI-approved open-source software. See `LICENSE` and `COMMERCIAL.md`.
 
-iPlug2 uses its permissive zlib-style license. VST3, CLAP, the bundled font, and other third-party components remain under their own upstream licenses. See `THIRD_PARTY_NOTICES.md`.
+iPlug2 uses its permissive zlib-style license. VST3, CLAP, the bundled font, and other third-party components remain under their own upstream licenses. The Windows standalone target is disabled pending a separate ASIO licensing decision. See `THIRD_PARTY_NOTICES.md` and `LICENSES/`.

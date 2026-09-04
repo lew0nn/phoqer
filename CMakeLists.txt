@@ -58,11 +58,70 @@ iplug_add_plugin(PHOQER
     RESOURCES
         resources/fonts/Roboto-Regular.ttf
     FORMATS
-        APP
         VST3
         CLAP
     DEFINES
         SAMPLE_TYPE_FLOAT)
+
+# The default iPlug2 Windows APP target compiles Steinberg ASIO interface
+# material. PHOQER intentionally does not create that target until a separate
+# ASIO licensing decision is made. Keep distributable builds to VST3 and CLAP.
+
+set(PHOQER_NOTICE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/out/PHOQER-Licenses")
+set(PHOQER_NOTICE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+    "${CMAKE_CURRENT_SOURCE_DIR}/COMMERCIAL.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md")
+
+add_custom_target(PHOQERLicenses ALL
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${PHOQER_NOTICE_OUTPUT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PHOQER_NOTICE_OUTPUT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PHOQER_NOTICE_OUTPUT_DIR}/LICENSES"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${PHOQER_NOTICE_FILES}
+        "${PHOQER_NOTICE_OUTPUT_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES"
+        "${PHOQER_NOTICE_OUTPUT_DIR}/LICENSES"
+    COMMENT "Collecting PHOQER distribution licenses")
+
+add_dependencies(PHOQER-vst3 PHOQERLicenses)
+add_dependencies(PHOQER-clap PHOQERLicenses)
+
+if(WIN32)
+    add_custom_target(PHOQERVST3Licenses
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "${CMAKE_BINARY_DIR}/out/PHOQER.vst3/Contents/Resources/PHOQER-Licenses"
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_BINARY_DIR}/out/PHOQER.vst3/Contents/Resources/PHOQER-Licenses"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${PHOQER_NOTICE_OUTPUT_DIR}"
+            "${CMAKE_BINARY_DIR}/out/PHOQER.vst3/Contents/Resources/PHOQER-Licenses"
+        COMMENT "Preparing license notices in the PHOQER VST3 bundle")
+    add_dependencies(PHOQERVST3Licenses PHOQERLicenses)
+    add_dependencies(PHOQER-vst3 PHOQERVST3Licenses)
+
+    if(IPLUG_DEPLOY_PLUGINS)
+        if(IPLUG_CLAP_DEPLOY_PATH)
+            set(PHOQER_CLAP_DEPLOY_DIR "${IPLUG_CLAP_DEPLOY_PATH}")
+        else()
+            set(PHOQER_CLAP_DEPLOY_DIR "$ENV{LOCALAPPDATA}/Programs/Common/CLAP")
+        endif()
+        add_custom_command(TARGET PHOQER-clap POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf
+                "${PHOQER_CLAP_DEPLOY_DIR}/PHOQER-Licenses"
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "${PHOQER_CLAP_DEPLOY_DIR}/PHOQER-Licenses"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${PHOQER_NOTICE_OUTPUT_DIR}"
+                "${PHOQER_CLAP_DEPLOY_DIR}/PHOQER-Licenses"
+            COMMENT "Deploying PHOQER CLAP license notices")
+    endif()
+endif()
+
+install(FILES ${PHOQER_NOTICE_FILES} DESTINATION PHOQER-Licenses)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/"
+    DESTINATION PHOQER-Licenses/LICENSES)
 
 option(PHOQER_BUILD_SANITY "Build the offline core sanity executable" ON)
 if(PHOQER_BUILD_SANITY)

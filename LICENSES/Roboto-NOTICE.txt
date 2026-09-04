@@ -1,0 +1,9 @@
+Roboto Regular
+Font data copyright Google 2012.
+Roboto is a trademark of Google.
+
+The bundled font identifies itself as Roboto Regular, version 1.100141 (2013),
+designed by Google / Christian Robertson, and licensed under the Apache License,
+Version 2.0. It was sourced from NanoVG's example resources.
+
+The complete Apache License 2.0 text is in `Apache-2.0.txt` in this directory.
