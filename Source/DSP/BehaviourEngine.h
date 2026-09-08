@@ -75,8 +75,6 @@ public:
 
         const auto attackGate = smoothStep(0.0f,
             0.0015f + 0.0035f * (1.0f - barkAmount), elapsed);
-        const auto tailGate = 1.0f
-            - smoothStep(callDuration * 0.84f, callDuration, elapsed);
         const auto barkTransient = (0.48f + 0.52f * barkAmount)
             * std::exp(-elapsed / (0.032f + 0.030f * (1.0f - barkAmount)));
 
@@ -134,7 +132,7 @@ public:
             / (0.78f + 0.40f * (1.0f - barkAmount)));
         const auto thrustGate = 0.70f + 0.30f * thrust;
         current.amplitudeShape = clamp(0.0f, 1.22f,
-            attackGate * tailGate
+            attackGate
             * ((0.58f + 0.42f * groanDecay) * thrustGate
                + 0.62f * barkTransient) * amplitudeScale);
         current.callIntensity = clamp(0.0f, 1.0f,
@@ -145,10 +143,6 @@ public:
     }
 
     float getBarkAmount() const noexcept { return barkAmount; }
-    bool isFinished() const noexcept
-    {
-        return elapsed >= callDuration || (release && releaseElapsed >= 0.30f);
-    }
 
 private:
     static float smoothStep(float start, float end, float value) noexcept

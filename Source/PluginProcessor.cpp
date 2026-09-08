@@ -60,7 +60,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PhoqerAudioProcessor::create
         juce::AudioParameterFloatAttributes().withLabel("dB")));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         ParameterId { "character", 1 }, "CHARACTER",
-        juce::StringArray { "BURP", "DEFAULT", "SYNTH" }, 1));
+        juce::StringArray { "BURP", "SQUEAL", "GROAN" }, 1));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         ParameterId { "behavior", 1 }, "BEHAVIOR",
         juce::StringArray { "CALL", "HONK", "BARK", "WAIL", "MURMUR" }, 0));

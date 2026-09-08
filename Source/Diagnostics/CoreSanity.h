@@ -23,6 +23,8 @@ struct CoreSanity
         bool personalitiesVary = false;
         bool telemetryNormalized = false;
         bool behaviorModesDistinct = false;
+        bool charactersDistinct = false;
+        bool sustainHolds = false;
 
         bool passed() const noexcept
         {
@@ -30,7 +32,7 @@ struct CoreSanity
                 && extremesBounded && formantSweepFinite
                 && vowelAnchorsDistinct && callEvolutionCoherent && extremeCombinationsDistinct
                 && repeatedNotesVary && reprepareFinite && personalitiesVary && telemetryNormalized
-                && behaviorModesDistinct;
+                && behaviorModesDistinct && charactersDistinct && sustainHolds;
         }
     };
 
@@ -68,21 +70,29 @@ struct CoreSanity
         engine.process(buffer, nullptr, 0, macros, 0.0f);
         result.silenceIsSilent = buffer.getMagnitude(0, blockSize) == 0.0f;
 
+        // Every character must speak. GROAN swells in over 280 ms, so give each
+        // one time to reach level rather than judging a single block.
         const MidiEvent characterNote { MidiEventType::noteOn, 0, 0, 55, 0.8f };
-        bool reservedCharactersSilent = true;
-        for (const auto character : { SealCharacter::lowBurp, SealCharacter::padShout })
+        bool everyCharacterAudible = true;
+        for (const auto character : { SealCharacter::burp, SealCharacter::squeal,
+                                      SealCharacter::groan })
         {
-            MacroState reservedMacros;
-            reservedMacros.character = character;
-            engine.process(buffer, &characterNote, 1, reservedMacros, 0.0f);
-            reservedCharactersSilent = reservedCharactersSilent
+            MacroState characterMacros;
+            characterMacros.character = character;
+            float peak = 0.0f;
+            for (int block = 0; block < 64; ++block)
+            {
+                engine.process(buffer, block == 0 ? &characterNote : nullptr,
+                               block == 0 ? 1 : 0, characterMacros, 0.0f);
+                const auto magnitude = buffer.getMagnitude(0, blockSize);
+                if (magnitude > peak)
+                    peak = magnitude;
+            }
+            everyCharacterAudible = everyCharacterAudible
                 && engine.getActiveCharacter() == character
-                && buffer.getMagnitude(0, blockSize) == 0.0f;
+                && peak > 0.01f;
         }
-        engine.process(buffer, &characterNote, 1, macros, 0.0f);
-        result.characterRoutingValid = reservedCharactersSilent
-            && engine.getActiveCharacter() == defaultSealCharacter
-            && buffer.getMagnitude(0, blockSize) > 1.0e-6f;
+        result.characterRoutingValid = everyCharacterAudible;
 
         std::array<MidiEvent, voiceCount> noteOns {};
         for (int note = 0; note < voiceCount; ++note)
@@ -94,43 +104,52 @@ struct CoreSanity
         engine.process(buffer, nullptr, 0, macros, 0.0f);
         result.extremesBounded = finiteAndBounded(buffer);
 
-        FormantBank bank;
-        bank.prepare(48000.0);
-        MacroState sweepMacros { 1.0f, 1.0f, 1.0f, 0.5f, 0.0f, 1.0f };
-        VoicePersonality sweepPersonality;
-        VocalState sweepVocal;
+        // Stress the FOF band across its whole range, including a 4 Hz bandwidth
+        // that the old feedback filter bank could never have run.
+        FofFormant sweepFormant;
+        sweepFormant.prepare(48000.0);
         result.formantSweepFinite = true;
-        for (int sample = 0; sample < 4096; ++sample)
+        for (int sample = 0; sample < 48000; ++sample)
         {
-            sweepVocal.mouthOpen = static_cast<float>(sample) / 4095.0f;
-            sweepVocal.mouthRound = 1.0f - sweepVocal.mouthOpen;
-            sweepVocal.vowelMorph = sweepVocal.mouthOpen;
-            sweepVocal.callPhase = sweepVocal.mouthOpen;
-            const auto input = sample == 0 ? 1.0f : 0.03f * std::sin(sample * 0.17f);
-            const auto value = bank.process(input, 60.0f, sweepMacros, sweepVocal,
-                                            sweepPersonality, std::sin(sample * 0.013f));
+            if (sample % 80 == 0)
+            {
+                const auto position = static_cast<float>(sample) / 48000.0f;
+                FormantSpec spec;
+                spec.frequency = lerp(position, 120.0f, 9000.0f);
+                spec.bandwidth = lerp(position, 4.0f, 900.0f);
+                spec.gain = 1.0f;
+                sweepFormant.trigger(spec, 80.0, 0.0015, 1.0f);
+            }
+            const auto value = sweepFormant.process();
             result.formantSweepFinite = result.formantSweepFinite
-                                     && std::isfinite(value) && std::abs(value) <= 2.01f;
+                                     && std::isfinite(value) && std::abs(value) <= 8.0f;
         }
 
-        result.vowelAnchorsDistinct = true;
-        auto previousAnchor = FormantBank::describeVowel(0.0f);
-        for (int anchor = 1; anchor < 5; ++anchor)
+        // The character presets must stay genuinely different, and the two
+        // narrow formants that define GROAN and BURP must survive any edit.
         {
-            const auto currentAnchor = FormantBank::describeVowel(static_cast<float>(anchor) / 4.0f);
-            float frequencyDistance = 0.0f;
-            float shapeDistance = 0.0f;
-            for (size_t formant = 0; formant < 4; ++formant)
-            {
-                frequencyDistance += std::abs(currentAnchor.frequency[formant]
-                                            - previousAnchor.frequency[formant]);
-                shapeDistance += std::abs(currentAnchor.q[formant] - previousAnchor.q[formant])
-                               + 10.0f * std::abs(currentAnchor.gain[formant]
-                                               - previousAnchor.gain[formant]);
-            }
-            result.vowelAnchorsDistinct = result.vowelAnchorsDistinct
-                                       && frequencyDistance > 300.0f && shapeDistance > 0.45f;
-            previousAnchor = currentAnchor;
+            const auto& burpPreset = characterPreset(SealCharacter::burp);
+            const auto& squealPreset = characterPreset(SealCharacter::squeal);
+            const auto& groanPreset = characterPreset(SealCharacter::groan);
+            // Band 1 is the formant that defines each character: GROAN's narrow
+            // singing formant, and BURP's very narrow second formant at band 2.
+            const auto groanQ = groanPreset.formants[1].frequency
+                              / groanPreset.formants[1].bandwidth;
+            const auto burpQ = burpPreset.formants[2].frequency
+                             / burpPreset.formants[2].bandwidth;
+            result.vowelAnchorsDistinct = groanQ > 25.0f && burpQ > 40.0f;
+
+            const CharacterPreset* presets[3] { &burpPreset, &squealPreset, &groanPreset };
+            for (int first = 0; first < 3; ++first)
+                for (int second = first + 1; second < 3; ++second)
+                {
+                    float distance = 0.0f;
+                    for (size_t formant = 0; formant < formantBandCount; ++formant)
+                        distance += std::abs(presets[first]->formants[formant].frequency
+                                           - presets[second]->formants[formant].frequency);
+                    result.vowelAnchorsDistinct = result.vowelAnchorsDistinct
+                                               && distance > 200.0f;
+                }
         }
 
         BehaviourEngine behaviour;
@@ -257,6 +276,32 @@ struct CoreSanity
                                                && distance > 0.015;
         }
 
+        std::array<RenderFeatures, 3> characterFeatures {};
+        for (size_t index = 0; index < characterFeatures.size(); ++index)
+        {
+            MacroState settings;
+            settings.character = static_cast<SealCharacter>(index);
+            characterFeatures[index] = renderFeatures(settings);
+        }
+        result.charactersDistinct = true;
+        for (size_t index = 0; index < characterFeatures.size(); ++index)
+        {
+            result.charactersDistinct = result.charactersDistinct
+                                      && characterFeatures[index].finite
+                                      && characterFeatures[index].rms > 1.0e-4;
+            for (size_t other = index + 1; other < characterFeatures.size(); ++other)
+            {
+                const auto& earlier = characterFeatures[index];
+                const auto& later = characterFeatures[other];
+                const auto distance = std::abs(std::log((later.rms + 1.0e-9)
+                                                      / (earlier.rms + 1.0e-9)))
+                                    + std::abs(std::log((later.variation + 1.0e-9)
+                                                      / (earlier.variation + 1.0e-9)))
+                                    + std::abs(later.lateToEarly - earlier.lateToEarly);
+                result.charactersDistinct = result.charactersDistinct && distance > 0.05;
+            }
+        }
+
         const MacroState repeatSettings { 0.55f, 0.35f, 0.4f, 0.35f, 0.0f, 0.65f };
         const auto firstRepeat = renderFeatures(repeatSettings);
         const auto secondRepeat = renderFeatures(repeatSettings);
@@ -283,6 +328,41 @@ struct CoreSanity
                                 && first.barkVariation != second.barkVariation
                                 && first.pitchDrift == 0.0f && second.pitchDrift == 0.0f
                                 && first.formantScale == 1.0f && second.formantScale == 1.0f;
+        // A held key must still sound after 9 s and must stop after release.
+        {
+            constexpr int sustainBlockSize = 512;
+            constexpr int blocksPerSecond = 48000 / sustainBlockSize;
+            engine.prepare(48000.0, sustainBlockSize, 2);
+            AudioBuffer sustainBuffer(2, sustainBlockSize);
+            const MidiEvent held { MidiEventType::noteOn, 0, 0, 55, 0.85f };
+            float lateMagnitude = 0.0f;
+            for (int block = 0; block < blocksPerSecond * 10; ++block)
+            {
+                engine.process(sustainBuffer, block == 0 ? &held : nullptr,
+                               block == 0 ? 1 : 0, MacroState {}, 0.0f);
+                if (block >= blocksPerSecond * 9)
+                {
+                    const auto magnitude = sustainBuffer.getMagnitude(0, sustainBlockSize);
+                    if (magnitude > lateMagnitude)
+                        lateMagnitude = magnitude;
+                }
+            }
+            const MidiEvent lift { MidiEventType::noteOff, 0, 0, 55, 0.0f };
+            float tailMagnitude = 0.0f;
+            for (int block = 0; block < blocksPerSecond * 2; ++block)
+            {
+                engine.process(sustainBuffer, block == 0 ? &lift : nullptr,
+                               block == 0 ? 1 : 0, MacroState {}, 0.0f);
+                if (block >= blocksPerSecond)
+                {
+                    const auto magnitude = sustainBuffer.getMagnitude(0, sustainBlockSize);
+                    if (magnitude > tailMagnitude)
+                        tailMagnitude = magnitude;
+                }
+            }
+            result.sustainHolds = lateMagnitude > 0.01f && tailMagnitude < 1.0e-4f;
+        }
+
         result.telemetryNormalized = faceIsNormalized(engine.getTelemetry().readFace());
         return result;
     }

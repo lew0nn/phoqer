@@ -47,25 +47,26 @@ target_sources(PHOQER PRIVATE
     Source/PluginEditor.cpp
     Source/PluginEditor.h
     Source/Core/AudioBuffer.h
+    Source/Core/CharacterPreset.h
     Source/Core/DspPrimitives.h
     Source/Core/FaceTelemetry.h
     Source/Core/MidiEvent.h
     Source/Core/PhoqerEngine.cpp
     Source/Core/PhoqerEngine.h
-    Source/Core/PhoqerParameters.h
     Source/Core/PhoqerTypes.h
     Source/Core/Random.h
     Source/Core/SealCharacter.h
     Source/DSP/BehaviourEngine.h
     Source/DSP/CheapSpace.cpp
     Source/DSP/CheapSpace.h
-    Source/DSP/Exciter.h
-    Source/DSP/FormantBank.cpp
-    Source/DSP/FormantBank.h
+    Source/DSP/FofBank.cpp
+    Source/DSP/FofBank.h
+    Source/DSP/FofFormant.h
+    Source/DSP/FofGrain.h
+    Source/DSP/GlottalPulse.h
+    Source/DSP/Limiter.h
     Source/DSP/OutputStage.h
-    Source/DSP/PitchGesture.h
     Source/DSP/SmoothedRandom.h
-    Source/DSP/ThroatStage.h
     Source/Voice/SealVoice.cpp
     Source/Voice/SealVoice.h
     Source/Voice/VoicePersonality.h
@@ -132,7 +133,7 @@ if(PHOQER_BUILD_SANITY)
         Source/Diagnostics/CoreSanityMain.cpp
         Source/Core/PhoqerEngine.cpp
         Source/DSP/CheapSpace.cpp
-        Source/DSP/FormantBank.cpp
+        Source/DSP/FofBank.cpp
         Source/Voice/SealVoice.cpp)
     target_include_directories(PHOQERCoreSanity PRIVATE Source)
     target_compile_features(PHOQERCoreSanity PRIVATE cxx_std_17)

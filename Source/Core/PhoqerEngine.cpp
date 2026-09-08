@@ -149,21 +149,10 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
     const auto requestedCharacter = isKnownSealCharacter(inputMacros.character)
         ? inputMacros.character
         : defaultSealCharacter;
-    if (requestedCharacter != activeCharacter)
-    {
-        for (auto& voice : voices)
-            voice.hardReset();
-        spaceStage.reset();
-        activeCharacter = requestedCharacter;
-    }
-
-    // Character slots without an approved synthesis design remain deliberately
-    // silent. They must not masquerade as the completed main character.
-    if (! isImplementedSealCharacter(activeCharacter))
-    {
-        publishTelemetry(output);
-        return;
-    }
+    // Each voice captures its character preset at note-on, so switching CHARACTER
+    // affects only new notes. Held notes keep their identity rather than being
+    // cut off, which matters now that a note sustains for as long as it is held.
+    activeCharacter = requestedCharacter;
 
     const MacroState macros {
         clamp(0.0f, 1.0f, inputMacros.boom),

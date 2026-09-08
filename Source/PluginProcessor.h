@@ -4,7 +4,6 @@
 
 #include "Core/MidiEvent.h"
 #include "Core/PhoqerEngine.h"
-#include "Core/PhoqerParameters.h"
 
 #include <array>
 #include <atomic>

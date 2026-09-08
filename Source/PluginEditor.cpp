@@ -191,9 +191,9 @@ void PhoqerAudioProcessorEditor::showVoiceMenu()
 {
     juce::PopupMenu menu;
     menu.addSectionHeader("VOICE");
-    menu.addItem(101, "DEFAULT", true, characterIndex == 1);
+    menu.addItem(101, "SQUEAL", true, characterIndex == 1);
     menu.addItem(102, "BURP", true, characterIndex == 0);
-    menu.addItem(103, "SYNTH", true, characterIndex == 2);
+    menu.addItem(103, "GROAN", true, characterIndex == 2);
 
     const auto safeThis = juce::Component::SafePointer<PhoqerAudioProcessorEditor>(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(modeButtons.front().get()),

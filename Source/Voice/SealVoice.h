@@ -4,11 +4,9 @@
 #include "../Core/DspPrimitives.h"
 #include "../Core/PhoqerTypes.h"
 #include "../Core/Random.h"
+#include "../Core/CharacterPreset.h"
 #include "../DSP/BehaviourEngine.h"
-#include "../DSP/Exciter.h"
-#include "../DSP/FormantBank.h"
-#include "../DSP/PitchGesture.h"
-#include "../DSP/ThroatStage.h"
+#include "../DSP/FofBank.h"
 #include "VoicePersonality.h"
 
 namespace phoqer
@@ -46,14 +44,17 @@ private:
     VoicePersonality personality;
     MacroState macros;
     BehaviourEngine behaviour;
-    PitchGesture pitchGesture;
-    Exciter exciter;
-    ThroatStage throat;
-    FormantBank formants;
+    FofBank fofBank;
     AdsrEnvelope amplitudeEnvelope;
     LinearSmoother smoothBoom, smoothAir, smoothBark, smoothVowel, smoothTide, smoothDetune;
     VoiceTelemetry telemetry;
+    const CharacterPreset* preset = &characterPreset(defaultSealCharacter);
     double sampleRate = 44100.0;
+    float baseFrequency = 261.63f;
+    float noteAgeSeconds = 0.0f;
+    float detuneOffsetSemitones = 0.0f;
+    float panLeft = 0.70710678f;
+    float panRight = 0.70710678f;
     int currentMidiChannel = 0;
     int currentMidiNote = 60;
     float currentVelocity = 0.0f;

@@ -18,6 +18,8 @@ int main()
               << " reprepare=" << result.reprepareFinite
               << " personalities=" << result.personalitiesVary
               << " telemetry=" << result.telemetryNormalized
-              << " behaviors=" << result.behaviorModesDistinct << std::endl;
+              << " behaviors=" << result.behaviorModesDistinct
+              << " distinct=" << result.charactersDistinct
+              << " sustain=" << result.sustainHolds << std::endl;
     return result.passed() ? 0 : 1;
 }
