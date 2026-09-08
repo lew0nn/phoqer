@@ -22,13 +22,15 @@ struct CoreSanity
         bool reprepareFinite = false;
         bool personalitiesVary = false;
         bool telemetryNormalized = false;
+        bool behaviorModesDistinct = false;
 
         bool passed() const noexcept
         {
             return silenceIsSilent && characterRoutingValid && eightVoicesFinite
                 && extremesBounded && formantSweepFinite
                 && vowelAnchorsDistinct && callEvolutionCoherent && extremeCombinationsDistinct
-                && repeatedNotesVary && reprepareFinite && personalitiesVary && telemetryNormalized;
+                && repeatedNotesVary && reprepareFinite && personalitiesVary && telemetryNormalized
+                && behaviorModesDistinct;
         }
     };
 
@@ -201,6 +203,30 @@ struct CoreSanity
             features.lateToEarly = std::sqrt((lateEnergy + 1.0e-12) / (earlyEnergy + 1.0e-12));
             return features;
         };
+
+        std::array<RenderFeatures, 5> behaviorFeatures {};
+        for (int mode = 0; mode < 5; ++mode)
+        {
+            MacroState settings;
+            settings.behaviorMode = static_cast<BehaviourMode>(mode);
+            behaviorFeatures[static_cast<size_t>(mode)] = renderFeatures(settings);
+        }
+        result.behaviorModesDistinct = true;
+        for (size_t mode = 0; mode < behaviorFeatures.size(); ++mode)
+        {
+            result.behaviorModesDistinct = result.behaviorModesDistinct
+                                         && behaviorFeatures[mode].finite
+                                         && behaviorFeatures[mode].rms > 1.0e-5;
+            if (mode == 0) continue;
+            const auto& firstMode = behaviorFeatures[0];
+            const auto& currentMode = behaviorFeatures[mode];
+            const auto distance = std::abs(std::log((currentMode.rms + 1.0e-9)
+                                                  / (firstMode.rms + 1.0e-9)))
+                                + std::abs(std::log((currentMode.variation + 1.0e-9)
+                                                  / (firstMode.variation + 1.0e-9)))
+                                + std::abs(currentMode.lateToEarly - firstMode.lateToEarly);
+            result.behaviorModesDistinct = result.behaviorModesDistinct && distance > 0.02;
+        }
 
         const std::array<MacroState, 4> contrastSettings {{
             { 1.0f, 0.0f, 0.0f, 0.00f, 0.0f, 0.0f },

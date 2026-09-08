@@ -133,7 +133,7 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
         const MacroState sampleMacros {
             smoothBoom.getNextValue(), smoothAir.getNextValue(), smoothBark.getNextValue(),
             smoothVowel.getNextValue(), macros.space, smoothTide.getNextValue(),
-            smoothDetune.getNextValue()
+            smoothDetune.getNextValue(), macros.character, macros.behaviorMode
         };
         if (behaviour.isFinished())
         {

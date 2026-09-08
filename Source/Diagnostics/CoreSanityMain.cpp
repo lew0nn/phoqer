@@ -17,6 +17,7 @@ int main()
               << " repeats=" << result.repeatedNotesVary
               << " reprepare=" << result.reprepareFinite
               << " personalities=" << result.personalitiesVary
-              << " telemetry=" << result.telemetryNormalized << std::endl;
+              << " telemetry=" << result.telemetryNormalized
+              << " behaviors=" << result.behaviorModesDistinct << std::endl;
     return result.passed() ? 0 : 1;
 }

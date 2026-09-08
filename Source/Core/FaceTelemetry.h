@@ -23,7 +23,8 @@ struct FaceTelemetry
 class TelemetryPublisher
 {
 public:
-    static constexpr uint32_t waveformSize = 1024;
+    // Enough full-rate history for a 900 ms call capture at 96 kHz.
+    static constexpr uint32_t waveformSize = 131072;
 
     TelemetryPublisher() noexcept
     {
@@ -57,6 +58,24 @@ public:
         return value;
     }
 
+    void setSampleRate(double value) noexcept
+    {
+        sampleRateHz.store(static_cast<float>(value), std::memory_order_release);
+    }
+
+    float getSampleRate() const noexcept
+    {
+        return sampleRateHz.load(std::memory_order_acquire);
+    }
+
+    uint32_t getWaveformWriteIndex() const noexcept
+    {
+        return writeIndex.load(std::memory_order_acquire);
+    }
+
+    void beginCall() noexcept { callSerial.fetch_add(1u, std::memory_order_release); }
+    uint32_t getCallSerial() const noexcept { return callSerial.load(std::memory_order_acquire); }
+
     void pushWaveform(float sample) noexcept
     {
         const auto next = writeIndex.load(std::memory_order_relaxed) + 1u;
@@ -64,12 +83,13 @@ public:
         writeIndex.store(next, std::memory_order_release);
     }
 
-    void copyWaveform(std::array<float, waveformSize>& destination) const noexcept
+    uint32_t copyWaveform(std::array<float, waveformSize>& destination) const noexcept
     {
         const auto end = writeIndex.load(std::memory_order_acquire);
         for (uint32_t i = 0; i < waveformSize; ++i)
             destination[i] = waveform[(end - waveformSize + 1u + i) & (waveformSize - 1u)]
                                  .load(std::memory_order_relaxed);
+        return end;
     }
 
     void publishMeter(float newPeak, float newRms) noexcept
@@ -86,7 +106,9 @@ private:
     std::atomic<float> throatTension { 0.0f }, eyeSquint { 0.0f }, eyeOpen { 0.0f };
     std::atomic<float> headLift { 0.0f }, intensity { 0.0f };
     std::array<std::atomic<float>, waveformSize> waveform;
+    std::atomic<uint32_t> callSerial { 0 };
     std::atomic<uint32_t> writeIndex { waveformSize - 1u };
+    std::atomic<float> sampleRateHz { 44100.0f };
     std::atomic<float> peak { 0.0f }, rms { 0.0f };
 };
 }

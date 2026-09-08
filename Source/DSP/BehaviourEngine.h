@@ -25,13 +25,24 @@ public:
     void start(float newVelocity, const MacroState& newMacros,
                const VoicePersonality& personality) noexcept
     {
+        mode = newMacros.behaviorMode;
         velocity = newVelocity;
         voicePersonality = personality;
-        barkAmount = clamp(0.0f, 1.0f,
+        const auto rawBark = clamp(0.0f, 1.0f,
             std::pow(newMacros.bark, 0.66f) * (0.34f + 0.66f * velocity)
             * personality.barkVariation * personality.barkBias);
-        callDuration = clamp(1.20f, 2.25f,
-            1.82f - 0.42f * barkAmount + 0.28f * newMacros.tide);
+        barkAmount = rawBark;
+        float durationScale = 1.0f;
+        switch (mode)
+        {
+            case BehaviourMode::honk:   barkAmount *= 0.62f; durationScale = 0.88f; break;
+            case BehaviourMode::bark:   barkAmount = clamp(0.0f, 1.0f, rawBark + 0.30f); durationScale = 0.62f; break;
+            case BehaviourMode::wail:   barkAmount *= 0.72f; durationScale = 1.24f; break;
+            case BehaviourMode::murmur: barkAmount *= 0.28f; durationScale = 1.12f; break;
+            case BehaviourMode::call:   break;
+        }
+        callDuration = clamp(0.55f, 2.75f,
+            (1.82f - 0.42f * barkAmount + 0.28f * newMacros.tide) * durationScale);
         elapsed = 0.0f;
         releaseElapsed = 0.0f;
         releaseStartPhase = 0.0f;
@@ -51,6 +62,7 @@ public:
 
     VocalState process(float dt, const MacroState& macros, float envelope, float) noexcept
     {
+        mode = macros.behaviorMode;
         elapsed += dt;
         if (release)
             releaseElapsed += dt;
@@ -75,8 +87,21 @@ public:
                                 * (0.58f + 0.34f * macros.tide);
         const auto thirdThrust = bellPulse(elapsed, 0.650f, 0.145f)
                                * (0.12f + 0.46f * macros.tide);
+        float vowelBias = 0.0f;
+        float openBias = 0.0f;
+        float roundBias = 0.0f;
+        float amplitudeScale = 1.0f;
+        float thrustScale = 1.0f;
+        switch (mode)
+        {
+            case BehaviourMode::honk:   vowelBias = -0.18f; openBias = -0.05f; roundBias = 0.18f; thrustScale = 0.88f; break;
+            case BehaviourMode::bark:   vowelBias = -0.05f; openBias = 0.10f; roundBias = -0.06f; amplitudeScale = 1.08f; thrustScale = 1.18f; break;
+            case BehaviourMode::wail:   vowelBias = 0.20f; openBias = 0.17f; roundBias = -0.14f; amplitudeScale = 0.94f; thrustScale = 0.82f; break;
+            case BehaviourMode::murmur: vowelBias = -0.08f; openBias = -0.19f; roundBias = 0.08f; amplitudeScale = 0.64f; thrustScale = 0.58f; break;
+            case BehaviourMode::call:   break;
+        }
         const auto thrust = clamp(0.0f, 1.0f,
-            firstThrust + secondThrust + thirdThrust);
+            (firstThrust + secondThrust + thirdThrust) * thrustScale);
 
         const auto opening = smoothStep(0.018f, 0.14f, elapsed);
         const auto closing = smoothStep(callDuration * 0.68f,
@@ -86,19 +111,19 @@ public:
                                * smoothStep(0.08f, 0.42f, elapsed);
         const auto vowelTarget = clamp(0.0f, 1.0f,
             macros.vowel - 0.12f * barkTransient + groanTravel
-            - 0.10f * closing + 0.035f * thrust);
+            - 0.10f * closing + 0.035f * thrust + vowelBias);
         const auto vowelRate = 1.0f - std::exp(-dt * (10.0f + 12.0f * barkAmount));
         current.vowelMorph += (vowelTarget - current.vowelMorph) * vowelRate;
 
         const auto openTarget = clamp(0.0f, 1.0f,
             0.07f + 0.66f * openPlateau + 0.22f * thrust
-            + 0.30f * barkTransient + voicePersonality.mouthOpeningBias);
+            + 0.30f * barkTransient + voicePersonality.mouthOpeningBias + openBias);
         const auto openingRate = 18.0f + 34.0f * barkAmount;
         current.mouthOpen += (openTarget - current.mouthOpen)
                            * std::min(1.0f, openingRate * dt);
         current.mouthRound = clamp(0.0f, 1.0f,
             0.88f - 0.66f * current.vowelMorph + 0.12f * macros.boom
-            + 0.08f * closing - 0.18f * barkTransient);
+            + 0.08f * closing - 0.18f * barkTransient + roundBias);
 
         current.throatPressure = clamp(0.0f, 1.0f,
             (0.18f + 0.18f * envelope + 0.58f * thrust
@@ -111,7 +136,7 @@ public:
         current.amplitudeShape = clamp(0.0f, 1.22f,
             attackGate * tailGate
             * ((0.58f + 0.42f * groanDecay) * thrustGate
-               + 0.62f * barkTransient));
+               + 0.62f * barkTransient) * amplitudeScale);
         current.callIntensity = clamp(0.0f, 1.0f,
             envelope * current.amplitudeShape * (0.38f + 0.62f * velocity));
         current.barkTransient = barkTransient;
@@ -146,6 +171,7 @@ private:
     float callDuration = 1.1f;
     float velocity = 0.0f;
     float barkAmount = 0.0f;
+    BehaviourMode mode = BehaviourMode::call;
     bool release = false;
 };
 }

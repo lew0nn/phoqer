@@ -39,7 +39,5 @@ private:
     OutputStage outputStage;
     TelemetryPublisher telemetry;
     SealCharacter activeCharacter = defaultSealCharacter;
-    int waveformDecimation = 44;
-    int waveformCountdown = 0;
 };
 }

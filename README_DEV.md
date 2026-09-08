@@ -1,33 +1,35 @@
 # PHOQER development notes
 
-PHOQER engineering version 0.1.0-dev is a C++17/iPlug2 MIDI instrument. The repository contains a framework-independent seal synthesis engine and an intentionally restrained iPlug2 editor scaffold.
-
-## Clone and build
-
-```powershell
-git clone --recurse-submodules <repository-url> PHOQER
-cd PHOQER
-powershell -ExecutionPolicy Bypass -File Tools/BootstrapIPlug2.ps1
-cmake -S . -B Build-iPlug2 -G "Visual Studio 17 2022" -A x64
-cmake --build Build-iPlug2 --config Release
-```
-
-The migration targets VST3 and CLAP on Windows. The standalone app is intentionally disabled pending a separate ASIO licensing decision. iPlug2 is pinned as `vendor/iPlug2`; the bootstrap script retrieves the upstream VST3 and CLAP SDKs expected by iPlug2 without committing nested generated dependency trees.
+PHOQER 0.1.0-dev is a C++17/JUCE 8 MIDI instrument. The project separates a
+framework-neutral synthesis engine from its JUCE host and editor adapters.
 
 ## Architecture
 
-The core defines three independent seal-character slots: `Low / Burping`, `Main / Bark-Groan`, and `Pad / Moan-Shout`. A temporary three-way selector exposes the architecture while the final editor and themes are still pending. Only the middle `Main / Bark-Groan` character is currently implemented and it remains the default. The low and pad characters are intentionally silent placeholders until their reference audio and synthesis designs are approved. They do not reuse or recolor the main character.
+`PhoqerEngine` owns eight fixed voices, sample-accurate MIDI dispatch, character
+selection, room processing, transparent output gain, and lock-free telemetry. It has no
+JUCE dependency. `PhoqerAudioProcessor` translates JUCE audio, MIDI, parameters, and
+state into that core without allocation or string lookup in the sample-processing path.
 
-`PhoqerEngine` owns eight fixed seal voices, sample-accurate MIDI dispatch, character selection, an optional room stage, transparent output gain, and lock-free telemetry. It has no framework dependency. The implemented `Main / Bark-Groan` character produces a finite fast bark-to-groan call from a clean band-limited glottal source with an extended phase-locked harmonic ladder, a falling attack followed by rising decay/release contours, a sustained open body, a linear throat stage, and a four-way parallel formant bank. Register compensation lowers and broadens the tract while adding chest and harmonic energy below the tenor range, leaving the established upper register unchanged. Chest-pressure thrusts shape articulation without cyclic pitch modulation. Per-note variation is restricted to breath and articulation; pitch and tract tuning are deterministic. The optional detuned second glottal source is silent at the default zero setting. The loudest or most recent active voice drives face state.
+The engine defines Low / Burp, Main / Bark-Groan, and Pad / Moan-Shout character slots.
+Only Main is implemented; Low and Pad remain intentionally silent until their reference
+audio and synthesis designs are approved.
 
-iPlug2 owns host format integration, parameter serialization, MIDI translation, and the editor. Stable parameters are `boom`, `air`, `bark`, `vowel`, `reverb` (internally retaining the stable `space` ID), `tide`, `detune`, `output`, and the three-state `character` selector. The seven macros are normalized; output spans -24 to +18 dB.
+The editor uses APVTS attachments for controls. A 30 Hz timer reads the fixed waveform
+ring, meter atomics, and normalized face telemetry. The audio callback never calls UI,
+filesystem, or message-thread code.
 
-Face telemetry is published as normalized atomics and may be polled by a future editor at 30-60 Hz. The output waveform uses a fixed single-writer/single-reader ring; meter peak and RMS are atomic.
+Stable parameter IDs are `boom`, `air`, `bark`, `vowel`, `space`, `tide`, `detune`,
+`output`, `character`, and `behavior`. The `space` ID is displayed as REVERB. Visual
+identity is derived from `character` and is not stored as an independent parameter.
 
-Not implemented: behaviour profiles beyond CALL plus its BARK transient, presets, installers, and release automation.
+## Validation
+
+Build and run `PHOQERCoreSanity` for offline engine checks. Validate the complete VST3
+bundle with Steinberg's validator before distributing it. Test VST3 and Standalone at
+44.1, 48, 88.2, and 96 kHz with block sizes including 32, 64, 128, 512, and 1024.
 
 ## Licensing
 
-Original PHOQER code, documentation, and project assets are licensed under [BSD-3-Clause](LICENSE). Developers may modify, redistribute, and sell derivatives, including closed-source products, while retaining the copyright notice naming lewonn / LWNX DSP, license conditions, and disclaimer. No commercial permission is required. Musicians and consumers owe no credit or royalties for using PHOQER or sharing their audio. See [COMMERCIAL.md](COMMERCIAL.md) for examples and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution terms.
-
-iPlug2 uses its permissive zlib-style license. VST3, CLAP, the bundled font, and other third-party components remain under their own upstream licenses. The Windows standalone target is disabled pending a separate ASIO licensing decision. See `THIRD_PARTY_NOTICES.md` and `LICENSES/`.
+Original PHOQER material is `AGPL-3.0-only`. JUCE 8.0.8 is used under its AGPLv3 option.
+Third-party components retain their own notices; see `THIRD_PARTY_NOTICES.md` and
+`vendor/JUCE/LICENSE.md`.

@@ -2,18 +2,13 @@
 
 Bug reports, testing notes, feature suggestions, and pull requests are welcome.
 
-Unless explicitly agreed otherwise before submission, original code,
-documentation, and other original project material you intentionally submit
-for inclusion in PHOQER are offered under the BSD-3-Clause license in
-[LICENSE](LICENSE). You retain copyright in your contribution; there is no
-copyright assignment and no separate CLA is required.
+Unless agreed otherwise before submission, original code, documentation, and project
+material intentionally contributed for inclusion in PHOQER are offered under
+`AGPL-3.0-only`. Contributors retain copyright; there is no copyright assignment or CLA.
 
-Only submit material you wrote or have permission to contribute under those
-terms, including any required employer permission. Identify third-party code,
-fonts, samples, and assets, their source, and their licenses. Preserve their
-notices and obtain maintainer agreement before adding a dependency with
-different terms.
+Only submit material you wrote or have permission to contribute under compatible terms,
+including any required employer permission. Identify third-party code, fonts, samples,
+and assets together with their source and license. Preserve all required notices and get
+maintainer agreement before adding a dependency.
 
-The project and its users can use and distribute accepted BSD-3-Clause
-contributions in commercial or closed-source software while retaining the
-required notices. Contributors' copyright and license notices must remain.
+Do not commit build outputs, installed plug-ins, generated caches, or proprietary SDKs.

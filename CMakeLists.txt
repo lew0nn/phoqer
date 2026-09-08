@@ -2,27 +2,50 @@ cmake_minimum_required(VERSION 3.22)
 
 project(PHOQER VERSION 0.1.0 LANGUAGES CXX)
 
-set(IPLUG2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/iPlug2" CACHE PATH "iPlug2 root directory")
-if(NOT EXISTS "${IPLUG2_DIR}/iPlug2.cmake")
-    message(FATAL_ERROR
-        "iPlug2 is missing. Run: git submodule update --init --recursive")
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/JUCE/CMakeLists.txt")
+    message(FATAL_ERROR "JUCE is missing. Run: git submodule update --init --recursive")
 endif()
 
-if(NOT EXISTS "${IPLUG2_DIR}/Dependencies/IPlug/VST3_SDK/CMakeLists.txt"
-   OR NOT EXISTS "${IPLUG2_DIR}/Dependencies/IPlug/CLAP_SDK/include/clap/clap.h")
-    message(FATAL_ERROR
-        "The iPlug2 format SDKs are missing. Run: powershell -ExecutionPolicy Bypass -File Tools/BootstrapIPlug2.ps1")
-endif()
+add_subdirectory(vendor/JUCE)
 
-include(${IPLUG2_DIR}/iPlug2.cmake)
-find_package(iPlug2 REQUIRED)
+file(GLOB_RECURSE PHOQER_PRODUCTION_IMAGES CONFIGURE_DEPENDS
+    "Resources/UI/PHOQER/Knobs/*.png" "Resources/UI/PHOQER/Tide/*.png"
+    "Resources/UI/PHOQER/Buttons/*.png" "Resources/UI/PHOQER/SmallParts/*.png"
+    "Resources/UI/PHOQER/Displays/*.png")
+juce_add_binary_data(PHOQER_UIAssets
+    HEADER_NAME PhoqerAssets.h NAMESPACE PhoqerAssets
+    SOURCES ${PHOQER_PRODUCTION_IMAGES}
+        Resources/UI/Shared/Roboto-Regular.ttf
+        Resources/UI/Purple/purple_seal.png
+        Resources/UI/Ice/ice_seal.png
+        Resources/UI/Red/red_seal.png)
 
-if(WIN32)
-    set_source_files_properties(resources/PHOQERResources.rc PROPERTIES
-        COMPILE_FLAGS "/I\"${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts\"")
-endif()
+juce_add_plugin(PHOQER
+    COMPANY_NAME "LWNX DSP"
+    BUNDLE_ID "io.github.lew0nn.phoqer"
+    PLUGIN_MANUFACTURER_CODE Lwnx
+    PLUGIN_CODE Phqr
+    FORMATS VST3 Standalone
+    PRODUCT_NAME "PHOQER"
+    DESCRIPTION "PHOQER synthetic seal vocal instrument"
+    IS_SYNTH TRUE
+    NEEDS_MIDI_INPUT TRUE
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    VST3_CATEGORIES Instrument Synth
+    COPY_PLUGIN_AFTER_BUILD FALSE)
 
-set(PHOQER_CORE_SOURCES
+target_sources(PHOQER PRIVATE
+    Source/PluginProcessor.cpp
+    Source/PluginProcessor.h
+    Source/PluginEditor.cpp
+    Source/PluginEditor.h
     Source/Core/AudioBuffer.h
     Source/Core/DspPrimitives.h
     Source/Core/FaceTelemetry.h
@@ -45,90 +68,72 @@ set(PHOQER_CORE_SOURCES
     Source/DSP/ThroatStage.h
     Source/Voice/SealVoice.cpp
     Source/Voice/SealVoice.h
-    Source/Voice/VoicePersonality.h)
+    Source/Voice/VoicePersonality.h
+    Source/UI/PhoqerComponents.cpp
+    Source/UI/PhoqerComponents.h
+    Source/UI/PhoqerLayout.h
+    Source/UI/PhoqerLookAndFeel.cpp
+    Source/UI/PhoqerLookAndFeel.h
+    Source/UI/PhoqerTheme.cpp
+    Source/UI/PhoqerTheme.h)
 
-iplug_add_plugin(PHOQER
-    SOURCES
-        Source/Phoqer.cpp
-        Source/Phoqer.h
-        config.h
-        resources/resource.h
-        resources/PHOQERResources.rc
-        ${PHOQER_CORE_SOURCES}
-    RESOURCES
-        resources/fonts/Roboto-Regular.ttf
-    FORMATS
-        VST3
-        CLAP
-    DEFINES
-        SAMPLE_TYPE_FLOAT)
+target_include_directories(PHOQER PRIVATE Source)
 
-# The default iPlug2 Windows APP target compiles Steinberg ASIO interface
-# material. PHOQER intentionally does not create that target until a separate
-# ASIO licensing decision is made. Keep distributable builds to VST3 and CLAP.
+target_compile_definitions(PHOQER PUBLIC
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS=0)
 
-set(PHOQER_NOTICE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/out/PHOQER-Licenses")
+target_link_libraries(PHOQER PRIVATE
+    PHOQER_UIAssets
+    juce::juce_audio_utils
+    juce::juce_dsp
+    PUBLIC
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_lto_flags
+    juce::juce_recommended_warning_flags)
+
+juce_generate_juce_header(PHOQER)
+
 set(PHOQER_NOTICE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
-    "${CMAKE_CURRENT_SOURCE_DIR}/COMMERCIAL.md"
-    "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md")
+    "${CMAKE_CURRENT_SOURCE_DIR}/NOTICE.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/Apache-2.0.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/Roboto-NOTICE.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/JUCE/LICENSE.md")
 
-add_custom_target(PHOQERLicenses ALL
-    COMMAND ${CMAKE_COMMAND} -E rm -rf "${PHOQER_NOTICE_OUTPUT_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${PHOQER_NOTICE_OUTPUT_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${PHOQER_NOTICE_OUTPUT_DIR}/LICENSES"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${PHOQER_NOTICE_FILES}
-        "${PHOQER_NOTICE_OUTPUT_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES"
-        "${PHOQER_NOTICE_OUTPUT_DIR}/LICENSES"
-    COMMENT "Collecting PHOQER distribution licenses")
+add_custom_command(TARGET PHOQER_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:PHOQER_VST3>/../Resources/PHOQER-Licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PHOQER_NOTICE_FILES}
+        "$<TARGET_FILE_DIR:PHOQER_VST3>/../Resources/PHOQER-Licenses"
+    COMMENT "Embedding PHOQER and JUCE license notices in the VST3 bundle")
 
-add_dependencies(PHOQER-vst3 PHOQERLicenses)
-add_dependencies(PHOQER-clap PHOQERLicenses)
-
-if(WIN32)
-    add_custom_target(PHOQERVST3Licenses
-        COMMAND ${CMAKE_COMMAND} -E rm -rf
-            "${CMAKE_BINARY_DIR}/out/PHOQER.vst3/Contents/Resources/PHOQER-Licenses"
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-            "${CMAKE_BINARY_DIR}/out/PHOQER.vst3/Contents/Resources/PHOQER-Licenses"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${PHOQER_NOTICE_OUTPUT_DIR}"
-            "${CMAKE_BINARY_DIR}/out/PHOQER.vst3/Contents/Resources/PHOQER-Licenses"
-        COMMENT "Preparing license notices in the PHOQER VST3 bundle")
-    add_dependencies(PHOQERVST3Licenses PHOQERLicenses)
-    add_dependencies(PHOQER-vst3 PHOQERVST3Licenses)
-
-    if(IPLUG_DEPLOY_PLUGINS)
-        if(IPLUG_CLAP_DEPLOY_PATH)
-            set(PHOQER_CLAP_DEPLOY_DIR "${IPLUG_CLAP_DEPLOY_PATH}")
-        else()
-            set(PHOQER_CLAP_DEPLOY_DIR "$ENV{LOCALAPPDATA}/Programs/Common/CLAP")
-        endif()
-        add_custom_command(TARGET PHOQER-clap POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E rm -rf
-                "${PHOQER_CLAP_DEPLOY_DIR}/PHOQER-Licenses"
-            COMMAND ${CMAKE_COMMAND} -E make_directory
-                "${PHOQER_CLAP_DEPLOY_DIR}/PHOQER-Licenses"
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${PHOQER_NOTICE_OUTPUT_DIR}"
-                "${PHOQER_CLAP_DEPLOY_DIR}/PHOQER-Licenses"
-            COMMENT "Deploying PHOQER CLAP license notices")
-    endif()
-endif()
-
-install(FILES ${PHOQER_NOTICE_FILES} DESTINATION PHOQER-Licenses)
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/"
-    DESTINATION PHOQER-Licenses/LICENSES)
+add_custom_command(TARGET PHOQER_Standalone POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:PHOQER_Standalone>/PHOQER-Licenses"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PHOQER_NOTICE_FILES}
+        "$<TARGET_FILE_DIR:PHOQER_Standalone>/PHOQER-Licenses"
+    COMMENT "Collecting PHOQER and JUCE license notices for Standalone")
 
 option(PHOQER_BUILD_SANITY "Build the offline core sanity executable" ON)
+option(PHOQER_BUILD_VISUAL_ACCEPTANCE "Build the window-free UI acceptance renderer" OFF)
+if(PHOQER_BUILD_VISUAL_ACCEPTANCE)
+    juce_add_console_app(PHOQERVisualAcceptance PRODUCT_NAME "PHOQER Visual Acceptance")
+    target_sources(PHOQERVisualAcceptance PRIVATE Source/Diagnostics/VisualAcceptance.cpp)
+    target_include_directories(PHOQERVisualAcceptance PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
+    target_link_libraries(PHOQERVisualAcceptance PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp)
+endif()
 if(PHOQER_BUILD_SANITY)
     add_executable(PHOQERCoreSanity
         Source/Diagnostics/CoreSanity.h
         Source/Diagnostics/CoreSanityMain.cpp
-        ${PHOQER_CORE_SOURCES})
+        Source/Core/PhoqerEngine.cpp
+        Source/DSP/CheapSpace.cpp
+        Source/DSP/FormantBank.cpp
+        Source/Voice/SealVoice.cpp)
     target_include_directories(PHOQERCoreSanity PRIVATE Source)
     target_compile_features(PHOQERCoreSanity PRIVATE cxx_std_17)
     if(MSVC)

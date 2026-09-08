@@ -36,6 +36,7 @@ struct MacroState
     float tide = 0.25f;
     float detune = 0.0f;
     SealCharacter character = defaultSealCharacter;
+    BehaviourMode behaviorMode = BehaviourMode::call;
 };
 
 struct VocalState

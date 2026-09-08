@@ -28,8 +28,7 @@ void PhoqerEngine::prepare(double sampleRate, int maximumBlockSize, int)
 
     spaceStage.prepare(sampleRate, maximumBlockSize);
     outputStage.prepare(sampleRate);
-    waveformDecimation = std::max(1, static_cast<int>(sampleRate / 1000.0));
-    waveformCountdown = 0;
+    telemetry.setSampleRate(sampleRate);
     reset();
 }
 
@@ -102,6 +101,7 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
                 break;
             }
 
+            telemetry.beginCall();
             if (auto* voice = findVoiceForNoteOn())
             {
                 if (voice->isActive())
@@ -161,8 +161,7 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
     // silent. They must not masquerade as the completed main character.
     if (! isImplementedSealCharacter(activeCharacter))
     {
-        telemetry.publishFace({});
-        telemetry.publishMeter(0.0f, 0.0f);
+        publishTelemetry(output);
         return;
     }
 
@@ -174,7 +173,8 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
         clamp(0.0f, 1.0f, inputMacros.space),
         clamp(0.0f, 1.0f, inputMacros.tide),
         clamp(0.0f, 1.0f, inputMacros.detune),
-        activeCharacter
+        activeCharacter,
+        inputMacros.behaviorMode
     };
     for (auto& voice : voices)
         voice.setMacros(macros);
@@ -238,14 +238,10 @@ void PhoqerEngine::publishTelemetry(const AudioBuffer& output) noexcept
         return;
     for (int sample = 0; sample < output.getNumSamples(); ++sample)
     {
-        if (--waveformCountdown <= 0)
-        {
-            const auto mono = output.getNumChannels() > 1
-                ? 0.5f * (output.getSample(0, sample) + output.getSample(1, sample))
-                : output.getSample(0, sample);
-            telemetry.pushWaveform(mono);
-            waveformCountdown = waveformDecimation;
-        }
+        const auto mono = output.getNumChannels() > 1
+            ? 0.5f * (output.getSample(0, sample) + output.getSample(1, sample))
+            : output.getSample(0, sample);
+        telemetry.pushWaveform(mono);
     }
 }
 }

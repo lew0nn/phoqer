@@ -15,6 +15,7 @@ enum Index
     detune,
     output,
     character,
+    behaviorMode,
     count
 };
 
@@ -38,6 +39,7 @@ inline constexpr std::array<Descriptor, count> descriptors {{
     { "tide",   "TIDE",   0.25f,   0.0f, 1.0f, 0.001f, "" },
     { "detune", "DETUNE", 0.00f,   0.0f, 1.0f, 0.001f, "" },
     { "output",    "OUTPUT",    0.00f, -24.0f, 18.0f, 0.010f, "dB" },
-    { "character", "CHARACTER", 1.00f,   0.0f,  2.0f, 1.000f, "" }
+    { "character", "CHARACTER", 1.00f,   0.0f,  2.0f, 1.000f, "" },
+    { "behavior",  "BEHAVIOR",  0.00f,   0.0f,  4.0f, 1.000f, "" }
 }};
 }
