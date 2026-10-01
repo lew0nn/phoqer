@@ -89,6 +89,11 @@ juce::Rectangle<float> windowClient(juce::Rectangle<float> r) noexcept
     return { r.getX() + 6.0f, r.getY() + 24.0f, r.getWidth() - 12.0f, r.getHeight() - 30.0f };
 }
 
+juce::Rectangle<float> windowTitleBar(juce::Rectangle<float> r) noexcept
+{
+    return { r.getX() + 4.0f, r.getY() + 4.0f, r.getWidth() - 8.0f, 16.0f };
+}
+
 juce::Rectangle<float> window98(juce::Graphics& g, juce::Rectangle<float> r, const juce::String& title,
                                 juce::Colour titleColour, bool active)
 {
@@ -98,24 +103,10 @@ juce::Rectangle<float> window98(juce::Graphics& g, juce::Rectangle<float> r, con
     g.setColour(face);
     g.fillRect(r);
     bevel(g, r, true);
-    const juce::Rectangle<float> bar { r.getX() + 4.0f, r.getY() + 4.0f, r.getWidth() - 8.0f, 16.0f };
+    const auto bar = windowTitleBar(r);
     g.setColour(active ? titleColour : shadow);
     g.fillRect(bar);
     drawText(g, title, bar.reduced(4.0f, 0.0f), pixelFont(10.0f, true), active ? juce::Colours::white : juce::Colour(0xffd0d0d0));
-    const int boxes = r.getWidth() < 120.0f ? 1 : 3;
-    for (int k = 0; k < boxes; ++k)
-    {
-        const juce::Rectangle<float> b { bar.getRight() - 16.0f - k * 16.0f, bar.getY() + 2.0f, 14.0f, 12.0f };
-        button98(g, b, false);
-        g.setColour(juce::Colours::black);
-        if (k == 0)
-        {
-            g.drawLine(b.getX() + 4, b.getY() + 3, b.getRight() - 4, b.getBottom() - 3, 1.5f);
-            g.drawLine(b.getRight() - 4, b.getY() + 3, b.getX() + 4, b.getBottom() - 3, 1.5f);
-        }
-        if (k == 1) g.drawRect(b.reduced(3.5f, 3.0f), 1.0f);
-        if (k == 2) g.fillRect(b.getX() + 4.0f, b.getBottom() - 4.0f, 6.0f, 1.5f);
-    }
     return windowClient(r);
 }
 

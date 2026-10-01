@@ -192,6 +192,7 @@ if(PHOQER_BUILD_TEST_UI)
         Source/TestUI/TestUiLogo.h
         Source/TestUI/TestUiPortrait.cpp
         Source/TestUI/TestUiPortrait.h
+        Source/TestUI/TestUiStandaloneApp.cpp
         Source/TestUI/TestUiStyle.cpp
         Source/TestUI/TestUiStyle.h
         Source/TestUI/TestUiViews.cpp
@@ -199,6 +200,7 @@ if(PHOQER_BUILD_TEST_UI)
     target_include_directories(PHOQER_TestUI PRIVATE Source)
     target_compile_definitions(PHOQER_TestUI PUBLIC
         PHOQER_TEST_UI=1
+        JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0

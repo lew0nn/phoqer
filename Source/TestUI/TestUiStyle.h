@@ -34,7 +34,9 @@ void bevel(juce::Graphics&, juce::Rectangle<float>, bool raised);
 void button98(juce::Graphics&, juce::Rectangle<float>, bool pressed);
 void sunken(juce::Graphics&, juce::Rectangle<float>, juce::Colour fill = juce::Colours::white);
 
-// Draws a Win98 window (frame, title bar, caption buttons) and returns its client area.
+// Draws a Win98 window (frame and title bar) and returns its client area. Caption buttons are real
+// components (TitleButton98), placed by the editor only where they do something.
+juce::Rectangle<float> windowTitleBar(juce::Rectangle<float> bounds) noexcept;
 juce::Rectangle<float> window98(juce::Graphics&, juce::Rectangle<float> bounds, const juce::String& title,
                                 juce::Colour titleColour, bool active);
 juce::Rectangle<float> windowClient(juce::Rectangle<float> bounds) noexcept;

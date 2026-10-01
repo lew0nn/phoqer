@@ -8,16 +8,25 @@
 #include "TestUiViews.h"
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <vector>
 
 namespace phoqer::testui
 {
+// What the PHOQER.EXE title bar can do to its window. The standalone app (TestUiStandaloneApp.cpp)
+// supplies these for its frameless window; in a DAW none are set and the title bar has no buttons.
+struct WindowControls
+{
+    std::function<void()> minimise, toggleFullscreen, close, audioSettings;
+    std::function<void(const juce::MouseEvent&)> startDrag, drag;
+};
+
 // Experimental "Pure 98" editor, built only into the PHOQER Test UI target.
 class TestUiEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
-    static constexpr int width = 760, height = 754;
+    static constexpr int width = 760, height = 724;
 
     explicit TestUiEditor(PhoqerAudioProcessor&);
     ~TestUiEditor() override;
@@ -26,6 +35,11 @@ public:
     void resized() override;
     bool keyPressed(const juce::KeyPress&) override;
     bool keyStateChanged(bool isKeyDown) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override;
+
+    void setWindowControls(WindowControls);
 
     // One UI frame: reads telemetry, animates the face, refreshes the views. Driven by the timer,
     // and called directly by the offline acceptance renderer.
@@ -38,6 +52,7 @@ private:
     void rebuildChrome(float scale);
     void setChoice(const char* id, int index);
     void releaseQwertyNotes();
+    bool onTitleBar(juce::Point<float>) const;
 
     PhoqerAudioProcessor& processor;
     PortraitRenderer portrait;
@@ -45,10 +60,12 @@ private:
     ScopeView scope;
     MeterView meter;
     MenuBar98 menuBar;
-    Taskbar98 taskbar;
     PianoView piano;
     std::array<std::unique_ptr<ChoiceButton>, 3> voiceTabs;
     std::array<std::unique_ptr<ChoiceButton>, 5> modeButtons;
+    std::array<std::unique_ptr<TitleButton98>, 3> titleButtons;    // minimise, maximise, close
+    WindowControls windowControls;
+    bool draggingWindow = false;
     std::vector<std::unique_ptr<PixelKnob>> knobs;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
     juce::ParameterAttachment characterAttachment;

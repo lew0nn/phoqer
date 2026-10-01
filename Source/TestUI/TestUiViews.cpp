@@ -1,7 +1,5 @@
 #include "TestUiViews.h"
 
-#include "TestUiLogo.h"
-
 #include "TestUiStyle.h"
 
 #include <cmath>
@@ -227,7 +225,7 @@ void ChoiceButton::paintButton(juce::Graphics& g, bool, bool down)
 juce::Rectangle<float> MenuBar98::itemBounds(int index) const
 {
     float x = 2.0f;
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < itemCount; ++i)
     {
         const float w = juce::GlyphArrangement::getStringWidth(pixelFont(9.5f), items[i]) + 12.0f;
         if (i == index) return { x, 0.0f, w, 14.0f };
@@ -238,7 +236,7 @@ juce::Rectangle<float> MenuBar98::itemBounds(int index) const
 
 void MenuBar98::paint(juce::Graphics& g)
 {
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < itemCount; ++i)
     {
         const auto r = itemBounds(i);
         drawText(g, items[i], r, pixelFont(9.5f), juce::Colours::black, juce::Justification::centred);
@@ -253,92 +251,69 @@ void MenuBar98::paint(juce::Graphics& g)
 
 void MenuBar98::mouseDown(const juce::MouseEvent& e)
 {
-    for (int i = 0; i < 5; ++i)
+    enum { voiceBase = 1, audioSettings = 10, exitApp = 11 };
+    for (int i = 0; i < itemCount; ++i)
     {
         const auto r = itemBounds(i);
         if (! r.contains(e.position)) continue;
         juce::PopupMenu menu;
-        if (i == 2)
+        if (i == 0)
+        {
+            if (onAudioSettings) menu.addItem(audioSettings, "Audio/MIDI Settings...");
+            if (onExit) { menu.addSeparator(); menu.addItem(exitApp, "Exit"); }
+            if (! onAudioSettings && ! onExit) menu.addItem(200, "Audio and MIDI are set up in your DAW", false, false);
+        }
+        else if (i == 1)
         {
             const int current = currentVoice ? currentVoice() : 1;
-            menu.addItem(2, "SQUEAL", true, current == 1);
-            menu.addItem(1, "BURP", true, current == 0);
-            menu.addItem(3, "GROAN", true, current == 2);
+            menu.addItem(voiceBase + 1, "SQUEAL", true, current == 1);
+            menu.addItem(voiceBase + 0, "BURP", true, current == 0);
+            menu.addItem(voiceBase + 2, "GROAN", true, current == 2);
         }
-        else if (i == 4)
+        else
         {
             menu.addItem(100, "PHOQER Test UI", false, false);
             menu.addItem(101, "Experimental editor - not the release UI", false, false);
         }
-        else
-            menu.addItem(200, "Not available in the test UI", false, false);
         const auto target = localAreaToGlobal(r.toNearestInt());
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(target),
                            [safe = juce::Component::SafePointer<MenuBar98>(this)](int result)
                            {
-                               if (safe != nullptr && result >= 1 && result <= 3 && safe->onVoiceChosen)
-                                   safe->onVoiceChosen(result - 1);
+                               if (safe == nullptr) return;
+                               if (result >= voiceBase && result < voiceBase + 3 && safe->onVoiceChosen) safe->onVoiceChosen(result - voiceBase);
+                               if (result == audioSettings && safe->onAudioSettings) safe->onAudioSettings();
+                               if (result == exitApp && safe->onExit) safe->onExit();
                            });
         return;
     }
 }
 
-// -------------------------------------------------------------------------------------- TASKBAR
-Taskbar98::Taskbar98() { setCharacter(1); }
-
-void Taskbar98::setCharacter(int c)
+// ---------------------------------------------------------------------------------- TITLE BUTTONS
+TitleButton98::TitleButton98(Kind k) : juce::Button({}), kind(k)
 {
-    character = c;
-    startIcon = renderSealSunIcon(character, 16);    // the .exe's own 16 px icon
-    repaint();
+    setWantsKeyboardFocus(false);
+    setTooltip(k == Kind::minimise ? "Minimise" : k == Kind::maximise ? "Fullscreen" : "Close");
 }
 
-void Taskbar98::setMidiActive(bool active)
+void TitleButton98::paintButton(juce::Graphics& g, bool, bool down)
 {
-    if (active == midiActive) return;
-    midiActive = active;
-    repaint();
-}
-
-void Taskbar98::tickClock()
-{
-    const auto text = juce::Time::getCurrentTime().formatted("%I:%M %p").trimCharactersAtStart("0");
-    if (text != clock) { clock = text; repaint(); }
-}
-
-void Taskbar98::paint(juce::Graphics& g)
-{
-    const auto& pal = paletteFor(character);
-    const auto r = getLocalBounds().toFloat();
-    g.setColour(win98::face);
-    g.fillRect(r);
-    g.setColour(win98::light);
-    g.fillRect(r.getX(), r.getY() + 1.0f, r.getWidth(), 1.5f);
-    const juce::Rectangle<float> start { 4.0f, 4.0f, 92.0f, 22.0f };
-    button98(g, start, false);
-    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
-    g.setOpacity(1.0f);
-    g.drawImage(startIcon, juce::Rectangle<float>(16.0f, 16.0f).withPosition(start.getX() + 5.0f, start.getY() + 3.0f));
-    drawText(g, "PHOQER", start.withTrimmedLeft(26.0f), pixelFont(11.0f, true), juce::Colours::black);
-    const char* voices[] { "BURP.BMP", "SQUEAL.BMP", "GROAN.BMP" };
-    const char* tasks[] { "PHOQER.EXE", voices[juce::jlimit(0, 2, character)], "SCOPE.EXE", "MIXER.EXE" };
-    float x = 104.0f;
-    for (int i = 0; i < 4; ++i)
+    const auto b = getLocalBounds().toFloat();
+    button98(g, b, down);
+    const auto o = down ? juce::Point<float>(1.0f, 1.0f) : juce::Point<float>();
+    g.setColour(juce::Colours::black);
+    if (kind == Kind::close)
     {
-        const juce::Rectangle<float> b { x, 4.0f, 118.0f, 22.0f };
-        button98(g, b, i == 0);
-        drawText(g, tasks[i], b.reduced(8.0f, 0.0f), pixelFont(9.0f, true), juce::Colours::black);
-        x += 122.0f;
+        g.drawLine(b.getX() + 4 + o.x, b.getY() + 3 + o.y, b.getRight() - 4 + o.x, b.getBottom() - 3 + o.y, 1.5f);
+        g.drawLine(b.getRight() - 4 + o.x, b.getY() + 3 + o.y, b.getX() + 4 + o.x, b.getBottom() - 3 + o.y, 1.5f);
     }
-    const juce::Rectangle<float> tray { r.getWidth() - 140.0f, 4.0f, 136.0f, 22.0f };
-    bevel(g, tray, false);
-    // MIDI note: lit while the seal is sounding.
-    g.setColour(midiActive ? pal.accent : win98::shadow);
-    g.fillRect(tray.getX() + 10.0f, tray.getY() + 13.0f, 5.0f, 4.0f);
-    g.fillRect(tray.getX() + 14.0f, tray.getY() + 5.0f, 1.5f, 10.0f);
-    g.fillRect(tray.getX() + 14.0f, tray.getY() + 5.0f, 5.0f, 2.0f);
-    drawText(g, "MIDI", { tray.getX() + 24.0f, tray.getY(), 40.0f, tray.getHeight() }, pixelFont(8.5f), juce::Colours::black);
-    drawText(g, clock, tray.reduced(6.0f, 0.0f), pixelFont(9.5f), juce::Colours::black, juce::Justification::centredRight);
+    else if (kind == Kind::maximise)
+    {
+        const auto box = b.reduced(3.5f, 3.0f) + o;
+        g.drawRect(box, 1.0f);
+        g.fillRect(box.withHeight(2.0f));
+    }
+    else
+        g.fillRect(b.getX() + 4.0f + o.x, b.getBottom() - 4.0f + o.y, 6.0f, 1.5f);
 }
 
 // ---------------------------------------------------------------------------------------- PIANO
@@ -369,8 +344,10 @@ void PianoView::setQwertyBase(int note)
 
 void PianoView::resized()
 {
-    setKeyWidth(static_cast<float>(getWidth()) / static_cast<float>(whiteKeysShown));
+    if (getWidth() > 0)
+        setKeyWidth(static_cast<float>(getWidth()) / static_cast<float>(whiteKeysShown));
     setLowestVisibleKey(qwertyBase - 12);
+    juce::MidiKeyboardComponent::resized();
 }
 
 juce::String PianoView::keyLabel(int note) const

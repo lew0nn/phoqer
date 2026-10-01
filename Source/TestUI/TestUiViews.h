@@ -105,34 +105,32 @@ private:
     int character = 1, qwertyBase = 60;
 };
 
-// Menu bar with Win98 mnemonics. Voice and Help open real menus; the rest are disabled in this build.
+// Menu bar with Win98 mnemonics. File holds the standalone app's audio settings and exit (empty in a DAW,
+// where the host owns both); Voice switches the voice; Help shows the build.
 class MenuBar98 final : public juce::Component
 {
 public:
     std::function<void(int)> onVoiceChosen;     // character index
     std::function<int()> currentVoice;
+    std::function<void()> onAudioSettings, onExit;
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
 
 private:
     juce::Rectangle<float> itemBounds(int index) const;
-    static constexpr const char* items[] { "File", "Edit", "Voice", "Preset", "Help" };
+    static constexpr const char* items[] { "File", "Voice", "Help" };
+    static constexpr int itemCount = 3;
 };
 
-// Taskbar: Start button, (decorative) task buttons, tray with MIDI activity and the clock.
-class Taskbar98 final : public juce::Component
+// A working Win98 title-bar button: minimise, maximise (fullscreen) or close.
+class TitleButton98 final : public juce::Button
 {
 public:
-    Taskbar98();
-    void setCharacter(int c);
-    void setMidiActive(bool active);
-    void tickClock();
-    void paint(juce::Graphics&) override;
+    enum class Kind { minimise, maximise, close };
+    explicit TitleButton98(Kind);
+    void paintButton(juce::Graphics&, bool over, bool down) override;
 
 private:
-    int character = 1;
-    bool midiActive = false;
-    juce::String clock;
-    juce::Image startIcon;
+    Kind kind;
 };
 }

@@ -89,8 +89,15 @@ TestUiEditor::TestUiEditor(PhoqerAudioProcessor& owner)
         knobs.push_back(std::move(knob));
     }
 
-    for (auto* view : std::initializer_list<juce::Component*> { &seal, &scope, &meter, &menuBar, &taskbar, &piano })
+    for (auto* view : std::initializer_list<juce::Component*> { &seal, &scope, &meter, &menuBar, &piano })
         addAndMakeVisible(*view);
+    const TitleButton98::Kind kinds[] { TitleButton98::Kind::minimise, TitleButton98::Kind::maximise, TitleButton98::Kind::close };
+    for (size_t k = 0; k < titleButtons.size(); ++k)
+        titleButtons[k] = std::make_unique<TitleButton98>(kinds[k]);    // shown once the window supplies controls
+    titleButtons[0]->onClick = [this] { if (windowControls.minimise) windowControls.minimise(); };
+    titleButtons[1]->onClick = [this] { if (windowControls.toggleFullscreen) windowControls.toggleFullscreen(); };
+    titleButtons[2]->onClick = [this] { if (windowControls.close) windowControls.close(); };
+    for (auto& b : titleButtons) addChildComponent(*b);
     heldNotes.fill(-1);
 
     // Key presses always land on the editor so the computer keyboard keeps playing after clicks.
@@ -105,7 +112,6 @@ TestUiEditor::TestUiEditor(PhoqerAudioProcessor& owner)
 
     characterAttachment.sendInitialUpdate();
     setSize(width, height);
-    taskbar.tickClock();
     tick(juce::Time::getMillisecondCounterHiRes() * 0.001);
     startTimerHz(30);
 }
@@ -159,6 +165,38 @@ bool TestUiEditor::keyStateChanged(bool)
     return used;
 }
 
+void TestUiEditor::setWindowControls(WindowControls controls)
+{
+    windowControls = std::move(controls);
+    titleButtons[0]->setVisible(windowControls.minimise != nullptr);
+    titleButtons[1]->setVisible(windowControls.toggleFullscreen != nullptr);
+    titleButtons[2]->setVisible(windowControls.close != nullptr);
+    menuBar.onAudioSettings = windowControls.audioSettings;
+    menuBar.onExit = windowControls.close;
+}
+
+bool TestUiEditor::onTitleBar(juce::Point<float> p) const
+{
+    return windowTitleBar(headWindow).contains(p);
+}
+
+// The PHOQER.EXE title bar moves the standalone window, and double-clicking it toggles fullscreen.
+void TestUiEditor::mouseDown(const juce::MouseEvent& e)
+{
+    draggingWindow = windowControls.startDrag != nullptr && onTitleBar(e.position);
+    if (draggingWindow) windowControls.startDrag(e);
+}
+
+void TestUiEditor::mouseDrag(const juce::MouseEvent& e)
+{
+    if (draggingWindow && windowControls.drag) windowControls.drag(e);
+}
+
+void TestUiEditor::mouseDoubleClick(const juce::MouseEvent& e)
+{
+    if (windowControls.toggleFullscreen && onTitleBar(e.position)) windowControls.toggleFullscreen();
+}
+
 bool TestUiEditor::keyPressed(const juce::KeyPress& key)
 {
     // Swallow the playing keys so the host or OS does not also act on them.
@@ -184,7 +222,6 @@ void TestUiEditor::applyCharacter(int c)
     for (auto& b : modeButtons) b->setCharacter(character);
     scope.setCharacter(character);
     meter.setCharacter(character);
-    taskbar.setCharacter(character);
     piano.setCharacter(character);
     chrome = {};
     repaint();
@@ -197,7 +234,7 @@ void TestUiEditor::resized()
     menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, head.getWidth(), 17.0f).toNearestInt());
     const auto row = head.withTrimmedTop(17.0f);
     for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
-        voiceTabs[slot]->setBounds(juce::Rectangle<float>(234.0f + slot * 94.0f, row.getCentreY() - 12.0f, 90.0f, 24.0f).toNearestInt());
+        voiceTabs[slot]->setBounds(juce::Rectangle<float>(row.getRight() - 4.0f - (3 - slot) * 94.0f + 4.0f, row.getCentreY() - 12.0f, 90.0f, 24.0f).toNearestInt());
 
     const auto tools = client(modeWindow);
     for (size_t m = 0; m < modeButtons.size(); ++m)
@@ -220,7 +257,10 @@ void TestUiEditor::resized()
     const auto keys = client(keysWindow);
     const float pianoWidth = std::floor((keys.getWidth() - 6.0f) / PianoView::whiteKeysShown) * PianoView::whiteKeysShown;
     piano.setBounds(juce::Rectangle<float>(pianoWidth, keys.getHeight() - 24.0f).withCentre({ keys.getCentreX(), keys.getY() + 3.0f + (keys.getHeight() - 24.0f) * 0.5f }).toNearestInt());
-    taskbar.setBounds(0, height - 30, width, 30);
+    const auto bar = windowTitleBar(headWindow);
+    for (size_t k = 0; k < titleButtons.size(); ++k)
+        titleButtons[k]->setBounds(juce::Rectangle<float>(bar.getRight() - 16.0f - static_cast<float>(2 - k) * 16.0f, bar.getY() + 2.0f, 14.0f, 12.0f)
+                                       .toNearestInt());
 }
 
 void TestUiEditor::rebuildChrome(float scale)
@@ -252,7 +292,7 @@ void TestUiEditor::rebuildChrome(float scale)
         }
     }
 
-    // Header window: app logo (seal sun + Outrun wordmark), preset combo (disabled until presets exist).
+    // Header window: app logo (seal sun + Outrun wordmark); the voice tabs sit on the right.
     const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, title, true);
     const auto row = head.withTrimmedTop(17.0f);
     g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
@@ -262,25 +302,6 @@ void TestUiEditor::rebuildChrome(float scale)
     g.drawImage(logoIcon, iconArea);
     const float wordW = logoWord.getWidth() * logoPixel, wordH = logoWord.getHeight() * logoPixel;
     g.drawImage(logoWord, { iconArea.getRight() + 8.0f, std::round(row.getCentreY() - wordH * 0.5f), wordW, wordH });
-    const juce::Rectangle<float> combo { 536.0f, row.getCentreY() - 12.0f, 168.0f, 24.0f };
-    sunken(g, combo);
-    drawText(g, "001 INIT", combo.reduced(6.0f, 0.0f), pixelFont(10.0f), win98::shadow);
-    const juce::Rectangle<float> drop { combo.getRight() - 18.0f, combo.getY() + 3.0f, 15.0f, combo.getHeight() - 6.0f };
-    button98(g, drop, false);
-    juce::Path tri;
-    tri.addTriangle(drop.getCentreX() - 4, drop.getCentreY() - 2, drop.getCentreX() + 4, drop.getCentreY() - 2, drop.getCentreX(), drop.getCentreY() + 2);
-    g.setColour(win98::shadow);
-    g.fillPath(tri);
-    for (int k = 0; k < 2; ++k)
-    {
-        const juce::Rectangle<float> b { 708.0f + k * 20.0f, combo.getY(), 18.0f, combo.getHeight() };
-        button98(g, b, false);
-        juce::Path arrow;
-        const float cx = b.getCentreX(), cy = b.getCentreY();
-        if (k == 0) arrow.addTriangle(cx + 2, cy - 4, cx + 2, cy + 4, cx - 2, cy);
-        else arrow.addTriangle(cx - 2, cy - 4, cx - 2, cy + 4, cx + 2, cy);
-        g.fillPath(arrow);
-    }
 
     window98(g, modeWindow, "MODE", title, false);
     const auto sealClient = window98(g, sealWindow, voice + ".BMP", title, true);
@@ -359,7 +380,6 @@ void TestUiEditor::tick(double now)
         seal.update(portrait, character, ex);
     scope.refresh();
     meter.refresh();
-    taskbar.setMidiActive(target.intensity > 0.02f);
 
     // Keep the computer keyboard live: take focus whenever the window is active, and let go of
     // held notes when it is not (key-up events would never arrive).
@@ -372,7 +392,6 @@ void TestUiEditor::tick(double now)
         releaseQwertyNotes();
         controlKeysDown = {};
     }
-    if ((frame % 15) == 0) taskbar.tickClock();
     repaint(windowClient(sealWindow).withTrimmedTop(windowClient(sealWindow).getHeight() - 15.0f).toNearestInt());
     repaint(windowClient(scopeWindow).withTrimmedTop(windowClient(scopeWindow).getHeight() - 15.0f).toNearestInt());
     ++frame;
