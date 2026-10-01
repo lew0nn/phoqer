@@ -17,7 +17,7 @@ namespace phoqer::testui
 class TestUiEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
-    static constexpr int width = 760, height = 742;
+    static constexpr int width = 760, height = 754;
 
     explicit TestUiEditor(PhoqerAudioProcessor&);
     ~TestUiEditor() override;
@@ -55,7 +55,7 @@ private:
     juce::TooltipWindow tooltips { this, 700 };
 
     int character = 1;
-    juce::Image chrome;
+    juce::Image chrome, logoIcon, logoWord;
     float chromeScale = 0.0f;
     FaceTelemetry face {};
     float grin = 0.0f;

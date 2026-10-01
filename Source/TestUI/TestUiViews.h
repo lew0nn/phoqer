@@ -123,7 +123,8 @@ private:
 class Taskbar98 final : public juce::Component
 {
 public:
-    void setCharacter(int c) { character = c; repaint(); }
+    Taskbar98();
+    void setCharacter(int c);
     void setMidiActive(bool active);
     void tickClock();
     void paint(juce::Graphics&) override;
@@ -132,5 +133,6 @@ private:
     int character = 1;
     bool midiActive = false;
     juce::String clock;
+    juce::Image startIcon;
 };
 }

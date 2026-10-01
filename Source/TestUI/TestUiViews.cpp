@@ -1,5 +1,7 @@
 #include "TestUiViews.h"
 
+#include "TestUiLogo.h"
+
 #include "TestUiStyle.h"
 
 #include <cmath>
@@ -282,6 +284,15 @@ void MenuBar98::mouseDown(const juce::MouseEvent& e)
 }
 
 // -------------------------------------------------------------------------------------- TASKBAR
+Taskbar98::Taskbar98() { setCharacter(1); }
+
+void Taskbar98::setCharacter(int c)
+{
+    character = c;
+    startIcon = renderSealSunIcon(character, 16);    // the .exe's own 16 px icon
+    repaint();
+}
+
 void Taskbar98::setMidiActive(bool active)
 {
     if (active == midiActive) return;
@@ -305,8 +316,9 @@ void Taskbar98::paint(juce::Graphics& g)
     g.fillRect(r.getX(), r.getY() + 1.0f, r.getWidth(), 1.5f);
     const juce::Rectangle<float> start { 4.0f, 4.0f, 92.0f, 22.0f };
     button98(g, start, false);
-    g.setColour(pal.accent);
-    g.fillEllipse(juce::Rectangle<float>(12.0f, 10.0f).withCentre({ start.getX() + 14.0f, start.getCentreY() + 1.0f }));
+    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+    g.setOpacity(1.0f);
+    g.drawImage(startIcon, juce::Rectangle<float>(16.0f, 16.0f).withPosition(start.getX() + 5.0f, start.getY() + 3.0f));
     drawText(g, "PHOQER", start.withTrimmedLeft(26.0f), pixelFont(11.0f, true), juce::Colours::black);
     const char* voices[] { "BURP.BMP", "SQUEAL.BMP", "GROAN.BMP" };
     const char* tasks[] { "PHOQER.EXE", voices[juce::jlimit(0, 2, character)], "SCOPE.EXE", "MIXER.EXE" };

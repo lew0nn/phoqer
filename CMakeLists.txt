@@ -170,11 +170,13 @@ if(PHOQER_BUILD_TEST_UI)
         FORMATS VST3 Standalone
         PRODUCT_NAME "PHOQER Test UI"
         DESCRIPTION "PHOQER with the experimental Pure 98 editor"
+        ICON_BIG resources/branding/app/phoqer-app-icon-256.png
+        ICON_SMALL resources/branding/app/phoqer-app-icon-16.png
         IS_SYNTH TRUE
         NEEDS_MIDI_INPUT TRUE
         NEEDS_MIDI_OUTPUT FALSE
         IS_MIDI_EFFECT FALSE
-        EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+        EDITOR_WANTS_KEYBOARD_FOCUS TRUE
         VST3_CATEGORIES Instrument Synth
         COPY_PLUGIN_AFTER_BUILD FALSE)
 
@@ -186,6 +188,8 @@ if(PHOQER_BUILD_TEST_UI)
         Source/TestUI/TestUiEditor.h
         Source/TestUI/TestUiKnob.cpp
         Source/TestUI/TestUiKnob.h
+        Source/TestUI/TestUiLogo.cpp
+        Source/TestUI/TestUiLogo.h
         Source/TestUI/TestUiPortrait.cpp
         Source/TestUI/TestUiPortrait.h
         Source/TestUI/TestUiStyle.cpp

@@ -1,5 +1,6 @@
 #include "TestUiEditor.h"
 
+#include "TestUiLogo.h"
 #include "TestUiStyle.h"
 
 namespace phoqer::testui
@@ -7,13 +8,17 @@ namespace phoqer::testui
 namespace
 {
 // Window frames (editor coordinates).
-const juce::Rectangle<float> headWindow { 6, 4, 748, 72 };
-const juce::Rectangle<float> modeWindow { 6, 82, 86, 278 };
-const juce::Rectangle<float> sealWindow { 98, 82, 262, 278 };
-const juce::Rectangle<float> scopeWindow { 366, 82, 388, 194 };
-const juce::Rectangle<float> outputWindow { 366, 282, 388, 78 };
-const juce::Rectangle<float> mixerWindow { 6, 366, 748, 228 };
-const juce::Rectangle<float> keysWindow { 6, 600, 748, 106 };
+const juce::Rectangle<float> headWindow { 6, 4, 748, 84 };
+const juce::Rectangle<float> modeWindow { 6, 94, 86, 278 };
+const juce::Rectangle<float> sealWindow { 98, 94, 262, 278 };
+const juce::Rectangle<float> scopeWindow { 366, 94, 388, 194 };
+const juce::Rectangle<float> outputWindow { 366, 294, 388, 78 };
+const juce::Rectangle<float> mixerWindow { 6, 378, 748, 228 };
+const juce::Rectangle<float> keysWindow { 6, 612, 748, 106 };
+
+// Header logo: the seal-sun icon at 18 px and the wordmark, both at 2 units per pixel like the rest of the UI.
+constexpr int headerIconPixels = 18;
+constexpr float logoPixel = 2.0f;
 
 // MANIC: the first 150 ms of a new call in BARK mode above this face intensity flashes the grin.
 constexpr float manicIntensity = 0.85f;
@@ -173,6 +178,8 @@ void TestUiEditor::setChoice(const char* id, int index)
 void TestUiEditor::applyCharacter(int c)
 {
     character = juce::jlimit(0, 2, c);
+    logoIcon = renderSealSunIcon(character, headerIconPixels);
+    logoWord = renderOutrunWordmark(character, false);
     for (auto& k : knobs) k->setCharacter(character);
     for (auto& b : modeButtons) b->setCharacter(character);
     scope.setCharacter(character);
@@ -190,7 +197,7 @@ void TestUiEditor::resized()
     menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, head.getWidth(), 17.0f).toNearestInt());
     const auto row = head.withTrimmedTop(17.0f);
     for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
-        voiceTabs[slot]->setBounds(juce::Rectangle<float>(234.0f + slot * 94.0f, row.getY() + 3.0f, 90.0f, row.getHeight() - 6.0f).toNearestInt());
+        voiceTabs[slot]->setBounds(juce::Rectangle<float>(234.0f + slot * 94.0f, row.getCentreY() - 12.0f, 90.0f, 24.0f).toNearestInt());
 
     const auto tools = client(modeWindow);
     for (size_t m = 0; m < modeButtons.size(); ++m)
@@ -245,13 +252,17 @@ void TestUiEditor::rebuildChrome(float scale)
         }
     }
 
-    // Header window: logo (RGB split), preset combo (disabled until presets exist).
+    // Header window: app logo (seal sun + Outrun wordmark), preset combo (disabled until presets exist).
     const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, title, true);
     const auto row = head.withTrimmedTop(17.0f);
-    const std::pair<float, juce::Colour> split[] { { -2.0f, pal.accent.withAlpha(0.85f) }, { 2.0f, pal.secondary.withAlpha(0.85f) }, { 0.0f, juce::Colours::black } };
-    for (const auto& [dx, colour] : split)
-        drawText(g, "PHOQER", row.withWidth(200.0f).translated(6.0f + dx, 0.0f), logoFont(19.0f), colour);
-    const juce::Rectangle<float> combo { 536.0f, row.getY() + 3.0f, 168.0f, row.getHeight() - 6.0f };
+    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+    g.setOpacity(1.0f);
+    const float iconSize = headerIconPixels * logoPixel;
+    const juce::Rectangle<float> iconArea { row.getX() + 4.0f, std::round(row.getCentreY() - iconSize * 0.5f), iconSize, iconSize };
+    g.drawImage(logoIcon, iconArea);
+    const float wordW = logoWord.getWidth() * logoPixel, wordH = logoWord.getHeight() * logoPixel;
+    g.drawImage(logoWord, { iconArea.getRight() + 8.0f, std::round(row.getCentreY() - wordH * 0.5f), wordW, wordH });
+    const juce::Rectangle<float> combo { 536.0f, row.getCentreY() - 12.0f, 168.0f, 24.0f };
     sunken(g, combo);
     drawText(g, "001 INIT", combo.reduced(6.0f, 0.0f), pixelFont(10.0f), win98::shadow);
     const juce::Rectangle<float> drop { combo.getRight() - 18.0f, combo.getY() + 3.0f, 15.0f, combo.getHeight() - 6.0f };
