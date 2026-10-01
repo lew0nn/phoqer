@@ -41,11 +41,7 @@ juce_add_plugin(PHOQER
     VST3_CATEGORIES Instrument Synth
     COPY_PLUGIN_AFTER_BUILD FALSE)
 
-target_sources(PHOQER PRIVATE
-    Source/PluginProcessor.cpp
-    Source/PluginProcessor.h
-    Source/PluginEditor.cpp
-    Source/PluginEditor.h
+set(PHOQER_ENGINE_SOURCES
     Source/Core/AudioBuffer.h
     Source/Core/CharacterPreset.h
     Source/Core/DspPrimitives.h
@@ -69,7 +65,14 @@ target_sources(PHOQER PRIVATE
     Source/DSP/SmoothedRandom.h
     Source/Voice/SealVoice.cpp
     Source/Voice/SealVoice.h
-    Source/Voice/VoicePersonality.h
+    Source/Voice/VoicePersonality.h)
+
+target_sources(PHOQER PRIVATE
+    Source/PluginProcessor.cpp
+    Source/PluginProcessor.h
+    Source/PluginEditor.cpp
+    Source/PluginEditor.h
+    ${PHOQER_ENGINE_SOURCES}
     Source/UI/PhoqerComponents.cpp
     Source/UI/PhoqerComponents.h
     Source/UI/PhoqerLayout.h
@@ -141,5 +144,75 @@ if(PHOQER_BUILD_SANITY)
         target_compile_options(PHOQERCoreSanity PRIVATE /W4 /permissive-)
     else()
         target_compile_options(PHOQERCoreSanity PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+endif()
+
+# Experimental "Pure 98" editor, built as a separate plugin ("PHOQER Test UI") so it can be
+# tried side by side with the release editor. Off by default; the release build is unaffected.
+option(PHOQER_BUILD_TEST_UI "Build the experimental PHOQER Test UI plugin (separate target)" OFF)
+if(PHOQER_BUILD_TEST_UI)
+    juce_add_binary_data(PHOQER_TestUIAssets
+        HEADER_NAME PhoqerTestUIAssets.h NAMESPACE PhoqerTestUIAssets
+        SOURCES
+            Resources/UI/TestUI/Silkscreen-Regular.ttf
+            Resources/UI/TestUI/Silkscreen-Bold.ttf
+            Resources/UI/TestUI/PressStart2P-Regular.ttf
+            Resources/UI/Shared/Roboto-Regular.ttf
+            Resources/UI/Purple/purple_seal.png
+            Resources/UI/Ice/ice_seal.png
+            Resources/UI/Red/red_seal.png)
+
+    juce_add_plugin(PHOQER_TestUI
+        COMPANY_NAME "LWNX DSP"
+        BUNDLE_ID "io.github.lew0nn.phoqer.testui"
+        PLUGIN_MANUFACTURER_CODE Lwnx
+        PLUGIN_CODE Phqt
+        FORMATS VST3 Standalone
+        PRODUCT_NAME "PHOQER Test UI"
+        DESCRIPTION "PHOQER with the experimental Pure 98 editor"
+        IS_SYNTH TRUE
+        NEEDS_MIDI_INPUT TRUE
+        NEEDS_MIDI_OUTPUT FALSE
+        IS_MIDI_EFFECT FALSE
+        EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+        VST3_CATEGORIES Instrument Synth
+        COPY_PLUGIN_AFTER_BUILD FALSE)
+
+    target_sources(PHOQER_TestUI PRIVATE
+        Source/PluginProcessor.cpp
+        Source/PluginProcessor.h
+        ${PHOQER_ENGINE_SOURCES}
+        Source/TestUI/TestUiEditor.cpp
+        Source/TestUI/TestUiEditor.h
+        Source/TestUI/TestUiKnob.cpp
+        Source/TestUI/TestUiKnob.h
+        Source/TestUI/TestUiPortrait.cpp
+        Source/TestUI/TestUiPortrait.h
+        Source/TestUI/TestUiStyle.cpp
+        Source/TestUI/TestUiStyle.h
+        Source/TestUI/TestUiViews.cpp
+        Source/TestUI/TestUiViews.h)
+    target_include_directories(PHOQER_TestUI PRIVATE Source)
+    target_compile_definitions(PHOQER_TestUI PUBLIC
+        PHOQER_TEST_UI=1
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
+        JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS=0)
+    target_link_libraries(PHOQER_TestUI PRIVATE
+        PHOQER_TestUIAssets
+        juce::juce_audio_utils
+        juce::juce_dsp
+        PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
+    juce_generate_juce_header(PHOQER_TestUI)
+
+    if(PHOQER_BUILD_VISUAL_ACCEPTANCE)
+        juce_add_console_app(PHOQERTestUIAcceptance PRODUCT_NAME "PHOQER Test UI Acceptance")
+        target_sources(PHOQERTestUIAcceptance PRIVATE Source/Diagnostics/TestUiAcceptance.cpp)
+        target_include_directories(PHOQERTestUIAcceptance PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_TestUI_artefacts/JuceLibraryCode")
+        target_link_libraries(PHOQERTestUIAcceptance PRIVATE PHOQER_TestUI PHOQER_TestUIAssets juce::juce_audio_utils juce::juce_dsp)
     endif()
 endif()

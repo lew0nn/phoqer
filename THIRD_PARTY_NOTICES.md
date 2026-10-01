@@ -30,6 +30,14 @@ The embedded Roboto Regular font is provided under Apache License 2.0. Its upstr
 license and notice are retained in `LICENSES/Apache-2.0.txt` and
 `LICENSES/Roboto-NOTICE.txt`.
 
+## Silkscreen and Press Start 2P (Test UI only)
+
+The experimental PHOQER Test UI target (`-DPHOQER_BUILD_TEST_UI=ON`) embeds the
+Silkscreen Regular/Bold and Press Start 2P fonts, provided under the SIL Open Font
+License 1.1. Their copyright lines and full license texts are retained in
+`resources/ui/TestUI/OFL-Silkscreen.txt` and `resources/ui/TestUI/OFL-PressStart2P.txt`.
+The main PHOQER plugin does not include these fonts.
+
 ## Distribution
 
 Binary distributions must include the PHOQER AGPL license, this notice, and all notices
