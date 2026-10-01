@@ -140,6 +140,9 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                         juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
+#if PHOQER_TEST_UI
+    keyboardState.processNextMidiBuffer(midiMessages, 0, buffer.getNumSamples(), true);
+#endif
     translateMidi(midiMessages);
 
     phoqer::MacroState macros;

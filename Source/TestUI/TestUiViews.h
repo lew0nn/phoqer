@@ -80,6 +80,31 @@ private:
     juce::ParameterAttachment attachment;
 };
 
+// Computer-keyboard layout shared by the editor and the piano labels: one row plays 17 semitones
+// up from the base note, like a DAW's typing keyboard.
+inline constexpr const char* qwertyKeys = "awsedftgyhujkolp;";
+inline constexpr int qwertyKeyCount = 17;
+
+// KEYS.EXE client area: a clickable Win98 piano bound to the processor's keyboard state. Keys are
+// labelled with the computer key that plays them; notes from MIDI input light up too.
+class PianoView final : public juce::MidiKeyboardComponent
+{
+public:
+    static constexpr int whiteKeysShown = 22;    // three octaves plus the top C
+    explicit PianoView(juce::MidiKeyboardState&);
+    void setCharacter(int c) { character = c; repaint(); }
+    void setQwertyBase(int note);                // shows an octave below to two above the base note
+
+private:
+    void drawWhiteNote(int note, juce::Graphics&, juce::Rectangle<float>, bool down, bool over, juce::Colour, juce::Colour) override;
+    void drawBlackNote(int note, juce::Graphics&, juce::Rectangle<float>, bool down, bool over, juce::Colour) override;
+    juce::String getWhiteNoteText(int) override { return {}; }
+    juce::String keyLabel(int note) const;
+    void resized() override;
+
+    int character = 1, qwertyBase = 60;
+};
+
 // Menu bar with Win98 mnemonics. Voice and Help open real menus; the rest are disabled in this build.
 class MenuBar98 final : public juce::Component
 {

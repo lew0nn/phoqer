@@ -17,13 +17,15 @@ namespace phoqer::testui
 class TestUiEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
-    static constexpr int width = 760, height = 630;
+    static constexpr int width = 760, height = 742;
 
     explicit TestUiEditor(PhoqerAudioProcessor&);
     ~TestUiEditor() override;
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    bool keyPressed(const juce::KeyPress&) override;
+    bool keyStateChanged(bool isKeyDown) override;
 
     // One UI frame: reads telemetry, animates the face, refreshes the views. Driven by the timer,
     // and called directly by the offline acceptance renderer.
@@ -35,6 +37,7 @@ private:
     void applyCharacter(int);
     void rebuildChrome(float scale);
     void setChoice(const char* id, int index);
+    void releaseQwertyNotes();
 
     PhoqerAudioProcessor& processor;
     PortraitRenderer portrait;
@@ -43,6 +46,7 @@ private:
     MeterView meter;
     MenuBar98 menuBar;
     Taskbar98 taskbar;
+    PianoView piano;
     std::array<std::unique_ptr<ChoiceButton>, 3> voiceTabs;
     std::array<std::unique_ptr<ChoiceButton>, 5> modeButtons;
     std::vector<std::unique_ptr<PixelKnob>> knobs;
@@ -58,6 +62,11 @@ private:
     double manicUntil = 0.0, watchUntil = 0.0;
     uint32_t lastCallSerial = 0;
     int frame = 0;
+
+    // Computer-keyboard playing: base note of the A key, velocity, and the note each key is holding.
+    int qwertyBase = 60, qwertyVelocity = 120;
+    std::array<int, qwertyKeyCount> heldNotes;
+    std::array<bool, 4> controlKeysDown {};    // Z X C V
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TestUiEditor)
 };

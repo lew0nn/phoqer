@@ -42,6 +42,11 @@ public:
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+#if PHOQER_TEST_UI
+    // Notes played from the Test UI's on-screen piano and computer keyboard; merged into each block.
+    juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
+#endif
+
 private:
     void translateMidi(const juce::MidiBuffer& midiMessages) noexcept;
     static std::atomic<float>* requireParameter(juce::AudioProcessorValueTreeState& state,
@@ -50,6 +55,9 @@ private:
     phoqer::PhoqerEngine engine;
     std::array<phoqer::MidiEvent, 256> midiEvents {};
     int midiEventCount = 0;
+#if PHOQER_TEST_UI
+    juce::MidiKeyboardState keyboardState;
+#endif
 
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float>* boom = nullptr;

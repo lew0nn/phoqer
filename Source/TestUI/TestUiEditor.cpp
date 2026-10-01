@@ -13,6 +13,7 @@ const juce::Rectangle<float> sealWindow { 98, 82, 262, 278 };
 const juce::Rectangle<float> scopeWindow { 366, 82, 388, 194 };
 const juce::Rectangle<float> outputWindow { 366, 282, 388, 78 };
 const juce::Rectangle<float> mixerWindow { 6, 366, 748, 228 };
+const juce::Rectangle<float> keysWindow { 6, 600, 748, 106 };
 
 // MANIC: the first 150 ms of a new call in BARK mode above this face intensity flashes the grin.
 constexpr float manicIntensity = 0.85f;
@@ -30,10 +31,15 @@ juce::RangedAudioParameter& parameterFor(juce::AudioProcessorValueTreeState& sta
 
 juce::String percent(double v) { return juce::String(juce::roundToInt(v * 100.0)) + "%"; }
 juce::String decibels(double v) { return (v > 0.0 ? "+" : "") + juce::String(v, 1) + " dB"; }
+juce::String noteName(int note) { return juce::MidiMessage::getMidiNoteName(note, true, true, 4); }
+
+constexpr char controlKeys[] { 'z', 'x', 'c', 'v' };    // octave down/up, velocity down/up
+constexpr int lowestBase = 24, highestBase = 96, velocityStep = 10;
 }
 
 TestUiEditor::TestUiEditor(PhoqerAudioProcessor& owner)
     : AudioProcessorEditor(owner), processor(owner), scope(owner.getTelemetry()), meter(owner.getTelemetry()),
+      piano(owner.getKeyboardState()),
       characterAttachment(parameterFor(owner.getParameters(), "character"),
                           [this](float value) { applyCharacter(juce::roundToInt(value)); }, nullptr)
 {
@@ -78,8 +84,17 @@ TestUiEditor::TestUiEditor(PhoqerAudioProcessor& owner)
         knobs.push_back(std::move(knob));
     }
 
-    for (auto* view : std::initializer_list<juce::Component*> { &seal, &scope, &meter, &menuBar, &taskbar })
+    for (auto* view : std::initializer_list<juce::Component*> { &seal, &scope, &meter, &menuBar, &taskbar, &piano })
         addAndMakeVisible(*view);
+    heldNotes.fill(-1);
+
+    // Key presses always land on the editor so the computer keyboard keeps playing after clicks.
+    for (auto* child : getChildren())
+    {
+        child->setWantsKeyboardFocus(false);
+        child->setMouseClickGrabsKeyboardFocus(false);
+    }
+    setWantsKeyboardFocus(true);
     menuBar.currentVoice = [this] { return character; };
     menuBar.onVoiceChosen = [this](int c) { setChoice("character", c); };
 
@@ -90,7 +105,62 @@ TestUiEditor::TestUiEditor(PhoqerAudioProcessor& owner)
     startTimerHz(30);
 }
 
-TestUiEditor::~TestUiEditor() { stopTimer(); }
+TestUiEditor::~TestUiEditor()
+{
+    stopTimer();
+    releaseQwertyNotes();
+}
+
+void TestUiEditor::releaseQwertyNotes()
+{
+    for (auto& note : heldNotes)
+        if (note >= 0) { processor.getKeyboardState().noteOff(1, note, 0.0f); note = -1; }
+}
+
+bool TestUiEditor::keyStateChanged(bool)
+{
+    bool used = false;
+    for (int i = 0; i < qwertyKeyCount; ++i)
+    {
+        auto& held = heldNotes[static_cast<size_t>(i)];
+        const bool down = juce::KeyPress::isKeyCurrentlyDown(qwertyKeys[i]);
+        if (down && held < 0)
+        {
+            held = qwertyBase + i;
+            processor.getKeyboardState().noteOn(1, held, static_cast<float>(qwertyVelocity) / 127.0f);
+            used = true;
+        }
+        else if (! down && held >= 0)
+        {
+            processor.getKeyboardState().noteOff(1, held, 0.0f);
+            held = -1;
+            used = true;
+        }
+    }
+    // Octave and velocity change once per press, not on key repeat. Held notes keep their pitch.
+    for (size_t k = 0; k < controlKeysDown.size(); ++k)
+    {
+        const bool down = juce::KeyPress::isKeyCurrentlyDown(controlKeys[k]);
+        if (down && ! controlKeysDown[k])
+        {
+            if (k < 2) qwertyBase = juce::jlimit(lowestBase, highestBase, qwertyBase + (k == 0 ? -12 : 12));
+            else qwertyVelocity = juce::jlimit(velocityStep, 127, qwertyVelocity + (k == 2 ? -velocityStep : velocityStep));
+            piano.setQwertyBase(qwertyBase);
+            repaint(windowClient(keysWindow).toNearestInt());
+            used = true;
+        }
+        controlKeysDown[k] = down;
+    }
+    return used;
+}
+
+bool TestUiEditor::keyPressed(const juce::KeyPress& key)
+{
+    // Swallow the playing keys so the host or OS does not also act on them.
+    const auto c = static_cast<char>(juce::CharacterFunctions::toLowerCase(static_cast<juce::juce_wchar>(key.getKeyCode())));
+    return ! key.getModifiers().isCommandDown() && c != 0
+        && (juce::String(qwertyKeys).containsChar(c) || juce::String("zxcv").containsChar(c));
+}
 
 void TestUiEditor::setChoice(const char* id, int index)
 {
@@ -108,6 +178,7 @@ void TestUiEditor::applyCharacter(int c)
     scope.setCharacter(character);
     meter.setCharacter(character);
     taskbar.setCharacter(character);
+    piano.setCharacter(character);
     chrome = {};
     repaint();
 }
@@ -139,6 +210,9 @@ void TestUiEditor::resized()
                               : juce::Rectangle<float>(mix.getX() + 544.0f + (i - 4) * 64.0f, mix.getY(), 64.0f, mix.getHeight());
         knobs[static_cast<size_t>(i)]->setBounds(cell.toNearestInt());
     }
+    const auto keys = client(keysWindow);
+    const float pianoWidth = std::floor((keys.getWidth() - 6.0f) / PianoView::whiteKeysShown) * PianoView::whiteKeysShown;
+    piano.setBounds(juce::Rectangle<float>(pianoWidth, keys.getHeight() - 24.0f).withCentre({ keys.getCentreX(), keys.getY() + 3.0f + (keys.getHeight() - 24.0f) * 0.5f }).toNearestInt());
     taskbar.setBounds(0, height - 30, width, 30);
 }
 
@@ -208,6 +282,9 @@ void TestUiEditor::rebuildChrome(float scale)
     g.fillRect(mix.getX() + 541.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
     g.setColour(win98::light);
     g.fillRect(mix.getX() + 542.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
+    const auto keys = window98(g, keysWindow, "KEYS.EXE", title, false);
+    sunken(g, piano.getBounds().toFloat().expanded(2.0f), win98::dark);
+    juce::ignoreUnused(keys);
 }
 
 void TestUiEditor::paint(juce::Graphics& g)
@@ -225,6 +302,9 @@ void TestUiEditor::paint(juce::Graphics& g)
     statusBar(g, scopeClient.withTrimmedTop(scopeClient.getHeight() - 15.0f),
               { juce::String(juce::roundToInt(processor.getTelemetry().getSampleRate() / 1000.0f)) + " kHz",
                 juce::String(juce::roundToInt(scope.capturedMilliseconds())) + " ms", "TRIG NOTE" });
+    const auto keysClient = windowClient(keysWindow);
+    statusBar(g, keysClient.withTrimmedTop(keysClient.getHeight() - 15.0f),
+              { "TYPE A TO ; TO PLAY", "Z/X OCTAVE  A=" + noteName(qwertyBase), "C/V VELOCITY " + juce::String(qwertyVelocity) });
 }
 
 void TestUiEditor::timerCallback()
@@ -269,6 +349,18 @@ void TestUiEditor::tick(double now)
     scope.refresh();
     meter.refresh();
     taskbar.setMidiActive(target.intensity > 0.02f);
+
+    // Keep the computer keyboard live: take focus whenever the window is active, and let go of
+    // held notes when it is not (key-up events would never arrive).
+    if (auto* peer = getPeer(); peer != nullptr && peer->isFocused())
+    {
+        if (! hasKeyboardFocus(true) && isShowing()) grabKeyboardFocus();
+    }
+    else
+    {
+        releaseQwertyNotes();
+        controlKeysDown = {};
+    }
     if ((frame % 15) == 0) taskbar.tickClock();
     repaint(windowClient(sealWindow).withTrimmedTop(windowClient(sealWindow).getHeight() - 15.0f).toNearestInt());
     repaint(windowClient(scopeWindow).withTrimmedTop(windowClient(scopeWindow).getHeight() - 15.0f).toNearestInt());
