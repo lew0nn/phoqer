@@ -8,13 +8,17 @@ namespace phoqer::testui
 namespace
 {
 // Window frames (editor coordinates).
-const juce::Rectangle<float> headWindow { 6, 4, 748, 84 };
-const juce::Rectangle<float> modeWindow { 6, 94, 86, 278 };
-const juce::Rectangle<float> sealWindow { 98, 94, 262, 278 };
-const juce::Rectangle<float> scopeWindow { 366, 94, 388, 194 };
-const juce::Rectangle<float> outputWindow { 366, 294, 388, 78 };
-const juce::Rectangle<float> mixerWindow { 6, 378, 748, 228 };
-const juce::Rectangle<float> keysWindow { 6, 612, 748, 106 };
+const juce::Rectangle<float> headWindow { 6, 4, 748, 90 };
+const juce::Rectangle<float> modeWindow { 6, 100, 86, 278 };
+const juce::Rectangle<float> sealWindow { 98, 100, 262, 278 };
+const juce::Rectangle<float> scopeWindow { 366, 100, 388, 194 };
+const juce::Rectangle<float> outputWindow { 366, 300, 388, 78 };
+const juce::Rectangle<float> mixerWindow { 6, 384, 748, 228 };
+const juce::Rectangle<float> keysWindow { 6, 618, 748, 106 };
+
+// The main window's title bar is taller than the others' so its real caption buttons are easy to hit.
+constexpr float headTitleHeight = 22.0f;
+constexpr float captionButtonW = 20.0f, captionButtonH = 18.0f;
 
 // Header logo: the seal-sun icon at 18 px and the wordmark, both at 2 units per pixel like the rest of the UI.
 constexpr int headerIconPixels = 18;
@@ -177,7 +181,7 @@ void TestUiEditor::setWindowControls(WindowControls controls)
 
 bool TestUiEditor::onTitleBar(juce::Point<float> p) const
 {
-    return windowTitleBar(headWindow).contains(p);
+    return windowTitleBar(headWindow, headTitleHeight).contains(p);
 }
 
 // The PHOQER.EXE title bar moves the standalone window, and double-clicking it toggles fullscreen.
@@ -230,7 +234,7 @@ void TestUiEditor::applyCharacter(int c)
 void TestUiEditor::resized()
 {
     const auto client = [](juce::Rectangle<float> r) { return windowClient(r); };
-    const auto head = client(headWindow);
+    const auto head = windowClient(headWindow, headTitleHeight);
     menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, head.getWidth(), 17.0f).toNearestInt());
     const auto row = head.withTrimmedTop(17.0f);
     for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
@@ -257,10 +261,13 @@ void TestUiEditor::resized()
     const auto keys = client(keysWindow);
     const float pianoWidth = std::floor((keys.getWidth() - 6.0f) / PianoView::whiteKeysShown) * PianoView::whiteKeysShown;
     piano.setBounds(juce::Rectangle<float>(pianoWidth, keys.getHeight() - 24.0f).withCentre({ keys.getCentreX(), keys.getY() + 3.0f + (keys.getHeight() - 24.0f) * 0.5f }).toNearestInt());
-    const auto bar = windowTitleBar(headWindow);
+    const auto bar = windowTitleBar(headWindow, headTitleHeight);
     for (size_t k = 0; k < titleButtons.size(); ++k)
-        titleButtons[k]->setBounds(juce::Rectangle<float>(bar.getRight() - 16.0f - static_cast<float>(2 - k) * 16.0f, bar.getY() + 2.0f, 14.0f, 12.0f)
-                                       .toNearestInt());
+    {
+        // Win98 spacing: minimise and maximise touch, close stands 2 px apart.
+        const float right = bar.getRight() - 2.0f - static_cast<float>(2 - k) * captionButtonW - (k < 2 ? 2.0f : 0.0f);
+        titleButtons[k]->setBounds(juce::Rectangle<float>(right - captionButtonW, bar.getY() + 2.0f, captionButtonW, captionButtonH).toNearestInt());
+    }
 }
 
 void TestUiEditor::rebuildChrome(float scale)
@@ -293,7 +300,7 @@ void TestUiEditor::rebuildChrome(float scale)
     }
 
     // Header window: app logo (seal sun + Outrun wordmark); the voice tabs sit on the right.
-    const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, title, true);
+    const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, title, true, headTitleHeight);
     const auto row = head.withTrimmedTop(17.0f);
     g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
     g.setOpacity(1.0f);

@@ -26,7 +26,7 @@ struct WindowControls
 class TestUiEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
-    static constexpr int width = 760, height = 724;
+    static constexpr int width = 760, height = 730;
 
     explicit TestUiEditor(PhoqerAudioProcessor&);
     ~TestUiEditor() override;

@@ -36,10 +36,11 @@ void sunken(juce::Graphics&, juce::Rectangle<float>, juce::Colour fill = juce::C
 
 // Draws a Win98 window (frame and title bar) and returns its client area. Caption buttons are real
 // components (TitleButton98), placed by the editor only where they do something.
-juce::Rectangle<float> windowTitleBar(juce::Rectangle<float> bounds) noexcept;
+inline constexpr float defaultTitleHeight = 16.0f;
+juce::Rectangle<float> windowTitleBar(juce::Rectangle<float> bounds, float titleHeight = defaultTitleHeight) noexcept;
 juce::Rectangle<float> window98(juce::Graphics&, juce::Rectangle<float> bounds, const juce::String& title,
-                                juce::Colour titleColour, bool active);
-juce::Rectangle<float> windowClient(juce::Rectangle<float> bounds) noexcept;
+                                juce::Colour titleColour, bool active, float titleHeight = defaultTitleHeight);
+juce::Rectangle<float> windowClient(juce::Rectangle<float> bounds, float titleHeight = defaultTitleHeight) noexcept;
 
 void statusBar(juce::Graphics&, juce::Rectangle<float>, const juce::StringArray& fields);
 

@@ -84,18 +84,18 @@ void sunken(juce::Graphics& g, juce::Rectangle<float> r, juce::Colour fill)
     bevel(g, r, false);
 }
 
-juce::Rectangle<float> windowClient(juce::Rectangle<float> r) noexcept
+juce::Rectangle<float> windowClient(juce::Rectangle<float> r, float titleHeight) noexcept
 {
-    return { r.getX() + 6.0f, r.getY() + 24.0f, r.getWidth() - 12.0f, r.getHeight() - 30.0f };
+    return { r.getX() + 6.0f, r.getY() + 8.0f + titleHeight, r.getWidth() - 12.0f, r.getHeight() - 14.0f - titleHeight };
 }
 
-juce::Rectangle<float> windowTitleBar(juce::Rectangle<float> r) noexcept
+juce::Rectangle<float> windowTitleBar(juce::Rectangle<float> r, float titleHeight) noexcept
 {
-    return { r.getX() + 4.0f, r.getY() + 4.0f, r.getWidth() - 8.0f, 16.0f };
+    return { r.getX() + 4.0f, r.getY() + 4.0f, r.getWidth() - 8.0f, titleHeight };
 }
 
 juce::Rectangle<float> window98(juce::Graphics& g, juce::Rectangle<float> r, const juce::String& title,
-                                juce::Colour titleColour, bool active)
+                                juce::Colour titleColour, bool active, float titleHeight)
 {
     using namespace win98;
     g.setColour(juce::Colours::black.withAlpha(0.45f));
@@ -103,11 +103,11 @@ juce::Rectangle<float> window98(juce::Graphics& g, juce::Rectangle<float> r, con
     g.setColour(face);
     g.fillRect(r);
     bevel(g, r, true);
-    const auto bar = windowTitleBar(r);
+    const auto bar = windowTitleBar(r, titleHeight);
     g.setColour(active ? titleColour : shadow);
     g.fillRect(bar);
-    drawText(g, title, bar.reduced(4.0f, 0.0f), pixelFont(10.0f, true), active ? juce::Colours::white : juce::Colour(0xffd0d0d0));
-    return windowClient(r);
+    drawText(g, title, bar.reduced(4.0f, 0.0f), pixelFont(titleHeight >= 20.0f ? 12.0f : 10.0f, true), active ? juce::Colours::white : juce::Colour(0xffd0d0d0));
+    return windowClient(r, titleHeight);
 }
 
 void statusBar(juce::Graphics& g, juce::Rectangle<float> r, const juce::StringArray& fields)

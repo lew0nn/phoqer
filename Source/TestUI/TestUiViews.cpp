@@ -299,21 +299,27 @@ void TitleButton98::paintButton(juce::Graphics& g, bool, bool down)
 {
     const auto b = getLocalBounds().toFloat();
     button98(g, b, down);
-    const auto o = down ? juce::Point<float>(1.0f, 1.0f) : juce::Point<float>();
+    // Pixel glyphs as Win98 drew them, nudged down-right while pressed.
+    const float cx = std::floor(b.getCentreX()) + (down ? 1.0f : 0.0f), cy = std::floor(b.getCentreY()) + (down ? 1.0f : 0.0f);
     g.setColour(juce::Colours::black);
     if (kind == Kind::close)
     {
-        g.drawLine(b.getX() + 4 + o.x, b.getY() + 3 + o.y, b.getRight() - 4 + o.x, b.getBottom() - 3 + o.y, 1.5f);
-        g.drawLine(b.getRight() - 4 + o.x, b.getY() + 3 + o.y, b.getX() + 4 + o.x, b.getBottom() - 3 + o.y, 1.5f);
+        for (int i = 0; i < 8; ++i)
+        {
+            g.fillRect(cx - 4.0f + i, cy - 4.0f + i, 2.0f, 1.0f);
+            g.fillRect(cx + 2.0f - i, cy - 4.0f + i, 2.0f, 1.0f);
+        }
     }
     else if (kind == Kind::maximise)
     {
-        const auto box = b.reduced(3.5f, 3.0f) + o;
-        g.drawRect(box, 1.0f);
+        const juce::Rectangle<float> box { cx - 5.0f, cy - 5.0f, 10.0f, 9.0f };
         g.fillRect(box.withHeight(2.0f));
+        g.fillRect(box.withTop(box.getBottom() - 1.0f));
+        g.fillRect(box.withWidth(1.0f));
+        g.fillRect(box.withLeft(box.getRight() - 1.0f));
     }
     else
-        g.fillRect(b.getX() + 4.0f + o.x, b.getBottom() - 4.0f + o.y, 6.0f, 1.5f);
+        g.fillRect(cx - 4.0f, cy + 2.0f, 7.0f, 2.0f);
 }
 
 // ---------------------------------------------------------------------------------------- PIANO
