@@ -48,7 +48,7 @@ int main(int argc, char** argv)
         if (editor == nullptr) { std::cerr << "editor is not the test UI\n"; return 1; }
 
         double now = 1000.0;
-        save(*editor, folder.getChildFile(juce::String("testui-") + names[character] + "-idle.png"));
+        save(editor->getView(), folder.getChildFile(juce::String("testui-") + names[character] + "-idle.png"));
         juce::AudioBuffer<float> buffer(2, block);
         float maxIntensity = 0.0f;
         for (int b = 0; b < 260; ++b)
@@ -65,12 +65,12 @@ int main(int argc, char** argv)
                 editor->tick(now);
             }
             if (b == 12 || b == 60 || b == 150)
-                save(*editor, folder.getChildFile(juce::String("testui-") + names[character] + "-" + juce::String(b) + ".png"));
+                save(editor->getView(), folder.getChildFile(juce::String("testui-") + names[character] + "-" + juce::String(b) + ".png"));
         }
         // MANIC, forced for the snapshot (live it flashes on hard BARK hits).
         editor->forceManicForTest(now);
         for (int k = 0; k < 4; ++k) { now += 1.0 / 30.0; editor->tick(now); }
-        save(*editor, folder.getChildFile(juce::String("testui-") + names[character] + "-manic.png"));
+        save(editor->getView(), folder.getChildFile(juce::String("testui-") + names[character] + "-manic.png"));
         std::cout << names[character] << " max face intensity " << maxIntensity << '\n';
         base.reset();
         processor.releaseResources();

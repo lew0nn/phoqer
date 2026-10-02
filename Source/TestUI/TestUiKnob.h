@@ -6,23 +6,23 @@
 
 namespace phoqer::testui
 {
-// Digitized Yamaha-style hi-fi knob: a machined silver knob rendered as a palette bitmap in the
-// character's colours, with a crisp pixel outline, value LED, printed scale and labels.
+// Win98-style pixel dial: grey face with a 2 px 3D rim, a black pointer, and a value arc around it
+// that fills in the voice colour. Drawn at one pixel per UI unit with hard edges.
 class PixelKnob final : public juce::Slider
 {
 public:
     enum class Layout
     {
-        mixer,    // scale around the knob, name + description/value underneath
-        output    // bare knob on the left, name + value box on the right
+        mixer,    // name above (big) or below (small) the dial, value field underneath
+        output    // dial on the left, name + value field on the right
     };
 
     struct Spec
     {
         juce::String name, description;
-        float diameter = 70.0f;
-        float centreY = 84.0f;          // knob centre, from the top of the component
-        bool showNumbers = true;        // 0..10 numerals on the scale
+        float radius = 34.0f;
+        float centreY = 82.0f;          // dial centre, from the top of the component
+        bool big = true;                // big dials carry their name above, in the large font
         Layout layout = Layout::mixer;
         std::function<juce::String(double)> format;
     };
@@ -33,16 +33,10 @@ public:
     void paint(juce::Graphics&) override;
 
 private:
-    const juce::Image& knobBitmap();
-
     Spec spec;
-    int character = 1;
-    juce::Image cached;
-    int cachedCharacter = -1;
+    int character = 0;
 };
 
-// TEMPORARY: the knob's digitized look ("C3", pixel-art edge dither) is a placeholder chosen
-// for the test UI. Everything about it lives in renderDigitizedKnob(); replace that function
-// to change the treatment.
-juce::Image renderDigitizedKnob(int bitmapSize, int character);
+// The dial bitmap: a square centred on the dial, value arc included. 'proportion' is 0..1.
+juce::Image renderDial98(int character, float radius, float proportion);
 }

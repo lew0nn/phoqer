@@ -160,7 +160,17 @@ if(PHOQER_BUILD_TEST_UI)
             Resources/UI/Shared/Roboto-Regular.ttf
             Resources/UI/Purple/purple_seal.png
             Resources/UI/Ice/ice_seal.png
-            Resources/UI/Red/red_seal.png)
+            Resources/UI/Red/red_seal.png
+            resources/branding/app/phoqer-app-icon-256.png)
+
+    # App icon. Windows takes a hand-built multi-size .ico (added below) so every size is drawn for its
+    # size; elsewhere JUCE builds the icon from the 32 px and 256 px PNGs.
+    set(PHOQER_TEST_UI_ICONS)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+        set(PHOQER_TEST_UI_ICONS
+            ICON_BIG resources/branding/app/phoqer-app-icon-256.png
+            ICON_SMALL resources/branding/app/phoqer-app-icon-32.png)
+    endif()
 
     juce_add_plugin(PHOQER_TestUI
         COMPANY_NAME "LWNX DSP"
@@ -170,8 +180,7 @@ if(PHOQER_BUILD_TEST_UI)
         FORMATS VST3 Standalone
         PRODUCT_NAME "PHOQER Test UI"
         DESCRIPTION "PHOQER with the experimental Pure 98 editor"
-        ICON_BIG resources/branding/app/phoqer-app-icon-256.png
-        ICON_SMALL resources/branding/app/phoqer-app-icon-16.png
+        ${PHOQER_TEST_UI_ICONS}
         IS_SYNTH TRUE
         NEEDS_MIDI_INPUT TRUE
         NEEDS_MIDI_OUTPUT FALSE
@@ -186,12 +195,20 @@ if(PHOQER_BUILD_TEST_UI)
         ${PHOQER_ENGINE_SOURCES}
         Source/TestUI/TestUiEditor.cpp
         Source/TestUI/TestUiEditor.h
+        Source/TestUI/TestUiHistory.cpp
+        Source/TestUI/TestUiHistory.h
         Source/TestUI/TestUiKnob.cpp
         Source/TestUI/TestUiKnob.h
         Source/TestUI/TestUiLogo.cpp
         Source/TestUI/TestUiLogo.h
         Source/TestUI/TestUiPortrait.cpp
         Source/TestUI/TestUiPortrait.h
+        Source/TestUI/TestUiPresets.cpp
+        Source/TestUI/TestUiPresets.h
+        Source/TestUI/TestUiRecorder.cpp
+        Source/TestUI/TestUiRecorder.h
+        Source/TestUI/TestUiSettings.cpp
+        Source/TestUI/TestUiSettings.h
         Source/TestUI/TestUiStandaloneApp.cpp
         Source/TestUI/TestUiStyle.cpp
         Source/TestUI/TestUiStyle.h
@@ -214,6 +231,9 @@ if(PHOQER_BUILD_TEST_UI)
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
     juce_generate_juce_header(PHOQER_TestUI)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND TARGET PHOQER_TestUI_Standalone)
+        target_sources(PHOQER_TestUI_Standalone PRIVATE resources/branding/app/phoqer-app-icon.rc)
+    endif()
 
     if(PHOQER_BUILD_VISUAL_ACCEPTANCE)
         juce_add_console_app(PHOQERTestUIAcceptance PRODUCT_NAME "PHOQER Test UI Acceptance")

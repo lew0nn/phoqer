@@ -47,6 +47,34 @@ void statusBar(juce::Graphics&, juce::Rectangle<float>, const juce::StringArray&
 void drawText(juce::Graphics&, const juce::String&, juce::Rectangle<float>, const juce::Font&, juce::Colour,
               juce::Justification = juce::Justification::centredLeft);
 
+// Win98 look for the parts JUCE draws itself: popup menus, tooltips and the window's size grip.
+// Menu items whose IDs fall in the radio range show a dot when ticked (one-of-several); any other
+// ticked item shows a checkmark (on/off).
+class Win98LookAndFeel final : public juce::LookAndFeel_V4
+{
+public:
+    static constexpr int radioIdFirst = 2000, radioIdLast = 2999;
+
+    Win98LookAndFeel();
+    void setCharacter(int c) noexcept { character = c; }
+
+    juce::Font getPopupMenuFont() override;
+    void drawPopupMenuBackgroundWithOptions(juce::Graphics&, int width, int height, const juce::PopupMenu::Options&) override;
+    void drawPopupMenuItemWithOptions(juce::Graphics&, const juce::Rectangle<int>& area, bool isHighlighted,
+                                      const juce::PopupMenu::Item&, const juce::PopupMenu::Options&) override;
+    void getIdealPopupMenuItemSizeWithOptions(const juce::String& text, bool isSeparator, int standardMenuItemHeight,
+                                              int& idealWidth, int& idealHeight, const juce::PopupMenu::Options&) override;
+    int getPopupMenuBorderSizeWithOptions(const juce::PopupMenu::Options&) override { return 4; }
+
+    juce::Rectangle<int> getTooltipBounds(const juce::String& text, juce::Point<int> screenPos, juce::Rectangle<int> parentArea) override;
+    void drawTooltip(juce::Graphics&, const juce::String& text, int width, int height) override;
+
+    void drawCornerResizer(juce::Graphics&, int width, int height, bool isMouseOver, bool isMouseDragging) override;
+
+private:
+    int character = 0;
+};
+
 // Glyphs for the five behaviour modes (CALL, HONK, BARK, WAIL, MURMUR).
 juce::Path modeGlyph(int mode, juce::Rectangle<float> area);
 

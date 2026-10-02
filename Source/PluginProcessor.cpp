@@ -62,9 +62,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout PhoqerAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         ParameterId { "output", 1 }, "OUTPUT", makeRange(-24.0f, 18.0f, 0.01f), 0.0f,
         juce::AudioParameterFloatAttributes().withLabel("dB")));
+#if PHOQER_TEST_UI
+    constexpr int defaultCharacter = 0;    // the Test UI opens on BURP
+#else
+    constexpr int defaultCharacter = 1;
+#endif
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         ParameterId { "character", 1 }, "CHARACTER",
-        juce::StringArray { "BURP", "SQUEAL", "GROAN" }, 1));
+        juce::StringArray { "BURP", "SQUEAL", "GROAN" }, defaultCharacter));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         ParameterId { "behavior", 1 }, "BEHAVIOR",
         juce::StringArray { "CALL", "HONK", "BARK", "WAIL", "MURMUR" }, 0));
@@ -164,6 +169,9 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     engine.process(outputBuffer, midiEvents.data(), midiEventCount, macros,
                    output->load(std::memory_order_relaxed));
     midiEventCount = 0;
+#if PHOQER_TEST_UI
+    recorder.process(buffer);
+#endif
 }
 
 void PhoqerAudioProcessor::getStateInformation(juce::MemoryBlock& destinationData)

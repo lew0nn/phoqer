@@ -20,7 +20,7 @@ public:
 private:
     juce::Image bitmap;
     float intensity = 0.0f;
-    int character = 1;
+    int character = 0;
 };
 
 // SCOPE.EXE client area: captures the last call from the telemetry ring and draws it as pixel columns.
@@ -44,7 +44,7 @@ private:
     double silentSeconds = 0.0, holdSeconds = 0.0;
     float displayGain = 1.0f, traceOpacity = 0.0f, capturePeak = 0.0f, capturedMs = 0.0f;
     CaptureState captureState = CaptureState::idle;
-    int character = 1;
+    int character = 0;
 };
 
 // OUTPUT meter: chunky segment bar with a dB scale.
@@ -59,7 +59,7 @@ public:
 private:
     const TelemetryPublisher& telemetry;
     float peak = 0.0f;
-    int character = 1;
+    int character = 0;
 };
 
 // A Win98 push button bound to a choice parameter value (voice tab or mode button).
@@ -76,7 +76,7 @@ private:
     Kind kind;
     int index;
     bool selected = false;
-    int character = 1;
+    int character = 0;
     juce::ParameterAttachment attachment;
 };
 
@@ -105,21 +105,66 @@ private:
     int character = 1, qwertyBase = 60;
 };
 
-// Menu bar with Win98 mnemonics. File holds the standalone app's audio settings and exit (empty in a DAW,
-// where the host owns both); Voice switches the voice; Help shows the build.
+// Win98 menu bar: EDIT, VIEW, PRESET, HELP. It only draws the titles (the open one pressed in) and
+// reports clicks; the editor builds each menu. The underlined first letter opens it with Alt.
 class MenuBar98 final : public juce::Component
 {
 public:
-    std::function<void(int)> onVoiceChosen;     // character index
-    std::function<int()> currentVoice;
-    std::function<void()> onAudioSettings, onExit;
+    static constexpr const char* items[] { "EDIT", "VIEW", "PRESET", "HELP" };
+    static constexpr int itemCount = 4;
+
+    std::function<void(int)> onOpen;
+    void setOpenIndex(int index);
+    juce::Rectangle<float> itemBounds(int index) const;
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
 
 private:
-    juce::Rectangle<float> itemBounds(int index) const;
-    static constexpr const char* items[] { "File", "Voice", "Help" };
-    static constexpr int itemCount = 3;
+    int openIndex = -1;
+};
+
+// Small Win98 button with a pixel arrow, for stepping through presets.
+class ArrowButton98 final : public juce::Button
+{
+public:
+    explicit ArrowButton98(bool pointsLeft);
+    void paintButton(juce::Graphics&, bool over, bool down) override;
+
+private:
+    bool left;
+};
+
+// The header's preset box: the current preset's number and name in a sunken field (a star when it
+// has been changed), with previous / next arrows. Clicking the field opens the preset list.
+class PresetBox98 final : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    PresetBox98();
+    std::function<juce::String()> text;
+    std::function<void()> onPrevious, onNext, onOpenList;
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    void mouseDown(const juce::MouseEvent&) override;
+
+private:
+    juce::Rectangle<float> fieldBounds() const;
+    ArrowButton98 previous { true }, next { false };
+};
+
+// REC button and running time, at the right end of the menu-bar row (standalone app only).
+class RecordControl98 final : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    RecordControl98();
+    std::function<void()> onToggle;
+    void setState(bool recording, double seconds);
+    void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+
+private:
+    juce::Rectangle<float> buttonBounds() const;
+    bool recording = false;
+    int shownSeconds = 0;
 };
 
 // A working Win98 title-bar button: minimise, maximise (fullscreen) or close.
@@ -132,5 +177,52 @@ public:
 
 private:
     Kind kind;
+};
+
+// A Win98 push button with a text label; the default button gets the black outer border.
+class PushButton98 final : public juce::Button
+{
+public:
+    PushButton98(const juce::String& label, bool isDefault);
+    void paintButton(juce::Graphics&, bool over, bool down) override;
+
+private:
+    bool isDefault;
+};
+
+// A Win98 message box drawn inside the editor (so it scales with the UI and works inside a DAW):
+// title bar, optional icon, message lines, optional one-line text field, and buttons. It covers its
+// parent to block clicks underneath. Enter presses the first button, Escape or X closes with -1
+// (unless the box is not closable: then only its buttons end it).
+class Dialog98 final : public juce::Component
+{
+public:
+    struct Spec
+    {
+        juce::String title;
+        juce::StringArray lines;
+        juce::Image icon;                                  // optional, shown at 2 units per pixel
+        juce::String fieldLabel, fieldText;                // a text field when fieldLabel is set
+        juce::StringArray buttons { "OK" };
+        int character = 0;
+        bool closable = true;                              // false: no X, Escape does nothing
+        std::function<void(int button, const juce::String& field)> onClose;
+    };
+
+    explicit Dialog98(Spec);
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    bool keyPressed(const juce::KeyPress&) override;
+    void parentHierarchyChanged() override;
+    juce::Rectangle<float> boxBounds() const;
+
+private:
+    void finish(int button);
+
+    Spec spec;
+    juce::TextEditor field;
+    TitleButton98 closeButton { TitleButton98::Kind::close };
+    std::vector<std::unique_ptr<PushButton98>> buttons;
+    bool finished = false;
 };
 }

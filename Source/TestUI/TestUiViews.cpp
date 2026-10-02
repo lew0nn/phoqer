@@ -227,11 +227,17 @@ juce::Rectangle<float> MenuBar98::itemBounds(int index) const
     float x = 2.0f;
     for (int i = 0; i < itemCount; ++i)
     {
-        const float w = juce::GlyphArrangement::getStringWidth(pixelFont(9.5f), items[i]) + 12.0f;
-        if (i == index) return { x, 0.0f, w, 14.0f };
-        x += w;
+        const float w = std::round(juce::GlyphArrangement::getStringWidth(pixelFont(12.0f), items[i])) + 14.0f;
+        if (i == index) return { x, 0.0f, w, 15.0f };
+        x += w + 2.0f;
     }
     return {};
+}
+
+void MenuBar98::setOpenIndex(int index)
+{
+    openIndex = index;
+    repaint();
 }
 
 void MenuBar98::paint(juce::Graphics& g)
@@ -239,9 +245,14 @@ void MenuBar98::paint(juce::Graphics& g)
     for (int i = 0; i < itemCount; ++i)
     {
         const auto r = itemBounds(i);
-        drawText(g, items[i], r, pixelFont(9.5f), juce::Colours::black, juce::Justification::centred);
+        const bool open = i == openIndex;
+        if (open) bevel(g, r, false);                              // Win98: the open menu's title is pressed in
+        const auto text = r.translated(open ? 1.0f : 0.0f, open ? 1.0f : 0.0f).withTrimmedLeft(7.0f);
+        drawText(g, items[i], text, pixelFont(12.0f), juce::Colours::black);
+        // Mnemonic underline, exactly under the first letter.
+        const float first = std::round(juce::GlyphArrangement::getStringWidth(pixelFont(12.0f), juce::String::charToString(items[i][0])));
         g.setColour(juce::Colours::black);
-        g.fillRect(r.getX() + 6.0f, 11.0f, 5.0f, 1.0f);                  // mnemonic underline
+        g.fillRect(text.getX(), std::round(text.getCentreY() + 5.0f), first - 1.0f, 1.0f);
     }
     g.setColour(win98::shadow);
     g.fillRect(0.0f, 15.0f, static_cast<float>(getWidth()), 1.0f);
@@ -251,48 +262,107 @@ void MenuBar98::paint(juce::Graphics& g)
 
 void MenuBar98::mouseDown(const juce::MouseEvent& e)
 {
-    enum { voiceBase = 1, audioSettings = 10, exitApp = 11 };
     for (int i = 0; i < itemCount; ++i)
-    {
-        const auto r = itemBounds(i);
-        if (! r.contains(e.position)) continue;
-        juce::PopupMenu menu;
-        if (i == 0)
-        {
-            if (onAudioSettings) menu.addItem(audioSettings, "Audio/MIDI Settings...");
-            if (onExit) { menu.addSeparator(); menu.addItem(exitApp, "Exit"); }
-            if (! onAudioSettings && ! onExit) menu.addItem(200, "Audio and MIDI are set up in your DAW", false, false);
-        }
-        else if (i == 1)
-        {
-            const int current = currentVoice ? currentVoice() : 1;
-            menu.addItem(voiceBase + 1, "SQUEAL", true, current == 1);
-            menu.addItem(voiceBase + 0, "BURP", true, current == 0);
-            menu.addItem(voiceBase + 2, "GROAN", true, current == 2);
-        }
-        else
-        {
-            menu.addItem(100, "PHOQER Test UI", false, false);
-            menu.addItem(101, "Experimental editor - not the release UI", false, false);
-        }
-        const auto target = localAreaToGlobal(r.toNearestInt());
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(target),
-                           [safe = juce::Component::SafePointer<MenuBar98>(this)](int result)
-                           {
-                               if (safe == nullptr) return;
-                               if (result >= voiceBase && result < voiceBase + 3 && safe->onVoiceChosen) safe->onVoiceChosen(result - voiceBase);
-                               if (result == audioSettings && safe->onAudioSettings) safe->onAudioSettings();
-                               if (result == exitApp && safe->onExit) safe->onExit();
-                           });
-        return;
-    }
+        if (itemBounds(i).contains(e.position) && onOpen) { onOpen(i); return; }
+}
+
+// --------------------------------------------------------------------------------- ARROW BUTTON
+ArrowButton98::ArrowButton98(bool pointsLeft) : juce::Button({}), left(pointsLeft)
+{
+    setWantsKeyboardFocus(false);
+    setTooltip(pointsLeft ? "PREVIOUS PRESET" : "NEXT PRESET");
+}
+
+void ArrowButton98::paintButton(juce::Graphics& g, bool, bool down)
+{
+    const auto b = getLocalBounds().toFloat();
+    button98(g, b, down);
+    const float cx = std::floor(b.getCentreX()) + (down ? 1.0f : 0.0f), cy = std::floor(b.getCentreY()) + (down ? 1.0f : 0.0f);
+    g.setColour(juce::Colours::black);
+    for (int k = 0; k < 4; ++k)
+        g.fillRect(left ? cx - 2.0f + static_cast<float>(k) : cx + 1.0f - static_cast<float>(k), cy - static_cast<float>(k), 1.0f, 1.0f + 2.0f * static_cast<float>(k));
+}
+
+// ----------------------------------------------------------------------------------- PRESET BOX
+PresetBox98::PresetBox98()
+{
+    setWantsKeyboardFocus(false);
+    previous.onClick = [this] { if (onPrevious) onPrevious(); };
+    next.onClick = [this] { if (onNext) onNext(); };
+    addAndMakeVisible(previous);
+    addAndMakeVisible(next);
+    setTooltip("PRESET  -  CLICK FOR THE LIST");
+}
+
+juce::Rectangle<float> PresetBox98::fieldBounds() const
+{
+    return getLocalBounds().toFloat().withTrimmedRight(38.0f);
+}
+
+void PresetBox98::resized()
+{
+    const auto r = getLocalBounds().toFloat();
+    previous.setBounds(juce::Rectangle<float>(r.getRight() - 36.0f, r.getY(), 17.0f, r.getHeight()).toNearestInt());
+    next.setBounds(juce::Rectangle<float>(r.getRight() - 17.0f, r.getY(), 17.0f, r.getHeight()).toNearestInt());
+}
+
+void PresetBox98::paint(juce::Graphics& g)
+{
+    const auto f = fieldBounds();
+    sunken(g, f);
+    drawText(g, text ? text() : juce::String(), f.reduced(7.0f, 0.0f), pixelFont(12.0f), juce::Colours::black);
+}
+
+void PresetBox98::mouseDown(const juce::MouseEvent& e)
+{
+    if (fieldBounds().contains(e.position) && onOpenList) onOpenList();
+}
+
+// ------------------------------------------------------------------------------- RECORD CONTROL
+RecordControl98::RecordControl98()
+{
+    setWantsKeyboardFocus(false);
+    setTooltip("RECORD TO WAV");
+}
+
+juce::Rectangle<float> RecordControl98::buttonBounds() const
+{
+    return getLocalBounds().toFloat().withWidth(52.0f);
+}
+
+void RecordControl98::setState(bool isRecording, double seconds)
+{
+    const int s = static_cast<int>(seconds);
+    if (isRecording == recording && s == shownSeconds) return;
+    recording = isRecording;
+    shownSeconds = s;
+    repaint();
+}
+
+void RecordControl98::paint(juce::Graphics& g)
+{
+    const auto b = buttonBounds();
+    button98(g, b, recording);                                         // stays pressed in while recording
+    const float o = recording ? 1.0f : 0.0f;
+    g.setColour(recording ? juce::Colour(0xffe61428) : juce::Colour(0xff783240));
+    g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre({ b.getX() + 10.0f + o, b.getCentreY() + o }));
+    drawText(g, "REC", b.withTrimmedLeft(17.0f).translated(o, o), pixelFont(12.0f), juce::Colours::black);
+    const auto lcd = getLocalBounds().toFloat().withTrimmedLeft(56.0f);
+    sunken(g, lcd, juce::Colour(0xff10080c));
+    const auto t = juce::String(shownSeconds / 60).paddedLeft('0', 2) + ":" + juce::String(shownSeconds % 60).paddedLeft('0', 2);
+    drawText(g, t, lcd, logoFont(8.0f), recording ? juce::Colour(0xffff5064) : juce::Colour(0xff6e3c46), juce::Justification::centred);
+}
+
+void RecordControl98::mouseDown(const juce::MouseEvent& e)
+{
+    if (buttonBounds().contains(e.position) && onToggle) onToggle();
 }
 
 // ---------------------------------------------------------------------------------- TITLE BUTTONS
 TitleButton98::TitleButton98(Kind k) : juce::Button({}), kind(k)
 {
     setWantsKeyboardFocus(false);
-    setTooltip(k == Kind::minimise ? "Minimise" : k == Kind::maximise ? "Fullscreen" : "Close");
+    setTooltip(k == Kind::minimise ? "MINIMIZE" : k == Kind::maximise ? "FULL SCREEN" : "CLOSE");
 }
 
 void TitleButton98::paintButton(juce::Graphics& g, bool, bool down)
@@ -399,5 +469,155 @@ void PianoView::drawBlackNote(int note, juce::Graphics& g, juce::Rectangle<float
     if (const auto label = keyLabel(note); label.isNotEmpty())
         drawText(g, label, top.withTop(top.getBottom() - 14.0f), pixelFont(8.0f, true),
                  down ? juce::Colours::black : juce::Colours::white.withAlpha(0.8f), juce::Justification::centred);
+}
+
+// ---------------------------------------------------------------------------------- PUSH BUTTON
+PushButton98::PushButton98(const juce::String& label, bool isDefaultButton) : juce::Button(label), isDefault(isDefaultButton)
+{
+    setWantsKeyboardFocus(false);
+}
+
+void PushButton98::paintButton(juce::Graphics& g, bool, bool down)
+{
+    auto r = getLocalBounds().toFloat();
+    if (isDefault)
+    {
+        g.setColour(juce::Colours::black);
+        g.drawRect(r, 1.0f);
+        r = r.reduced(1.0f);
+    }
+    button98(g, r, down);
+    drawText(g, getButtonText(), r.translated(down ? 1.0f : 0.0f, down ? 1.0f : 0.0f), pixelFont(12.0f, true), juce::Colours::black,
+             juce::Justification::centred);
+}
+
+// --------------------------------------------------------------------------------------- DIALOG
+namespace
+{
+constexpr float dialogWidth = 360.0f, dialogTitle = 20.0f, lineHeight = 16.0f, fieldHeight = 22.0f, buttonW = 76.0f, buttonH = 24.0f;
+}
+
+Dialog98::Dialog98(Spec s) : spec(std::move(s))
+{
+    setWantsKeyboardFocus(true);
+    if (spec.fieldLabel.isNotEmpty())
+    {
+        field.setFont(pixelFont(12.0f));
+        field.setText(spec.fieldText, false);
+        field.setColour(juce::TextEditor::backgroundColourId, juce::Colours::white);
+        field.setColour(juce::TextEditor::textColourId, juce::Colours::black);
+        field.setColour(juce::TextEditor::highlightColourId, paletteFor(spec.character).accent.darker(0.35f));
+        field.setColour(juce::TextEditor::highlightedTextColourId, juce::Colours::white);
+        field.setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+        field.setColour(juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
+        field.setColour(juce::CaretComponent::caretColourId, juce::Colours::black);
+        field.setIndents(4, 4);
+        field.onReturnKey = [this] { finish(0); };
+        field.onEscapeKey = [this] { if (spec.closable) finish(-1); };
+        addAndMakeVisible(field);
+    }
+    for (int i = 0; i < spec.buttons.size(); ++i)
+    {
+        auto b = std::make_unique<PushButton98>(spec.buttons[i], i == 0);
+        b->onClick = [this, i] { finish(i); };
+        addAndMakeVisible(*b);
+        buttons.push_back(std::move(b));
+    }
+    closeButton.onClick = [this] { finish(-1); };
+    addChildComponent(closeButton);
+    closeButton.setVisible(spec.closable);
+}
+
+void Dialog98::parentHierarchyChanged()
+{
+    if (auto* p = getParentComponent())
+    {
+        setBounds(p->getLocalBounds());
+        if (spec.fieldLabel.isNotEmpty()) { field.grabKeyboardFocus(); field.selectAll(); }
+        else grabKeyboardFocus();
+    }
+}
+
+juce::Rectangle<float> Dialog98::boxBounds() const
+{
+    const bool hasField = spec.fieldLabel.isNotEmpty();
+    const float body = std::max(spec.icon.isValid() ? static_cast<float>(spec.icon.getHeight()) * 2.0f : 0.0f,
+                                static_cast<float>(spec.lines.size()) * lineHeight + (hasField ? fieldHeight + 10.0f : 0.0f));
+    const float h = 4.0f + dialogTitle + 16.0f + body + 18.0f + buttonH + 14.0f;
+    return juce::Rectangle<float>(dialogWidth, h).withCentre(getLocalBounds().toFloat().getCentre()).toNearestInt().toFloat();
+}
+
+void Dialog98::resized()
+{
+    const auto box = boxBounds();
+    closeButton.setBounds(juce::Rectangle<float>(box.getRight() - 4.0f - 2.0f - 16.0f, box.getY() + 6.0f, 16.0f, 14.0f).toNearestInt());
+    const float textX = box.getX() + 16.0f + (spec.icon.isValid() ? static_cast<float>(spec.icon.getWidth()) * 2.0f + 16.0f : 0.0f);
+    if (spec.fieldLabel.isNotEmpty())
+    {
+        const float y = box.getY() + 4.0f + dialogTitle + 16.0f + static_cast<float>(spec.lines.size()) * lineHeight;
+        const float labelW = juce::GlyphArrangement::getStringWidth(pixelFont(12.0f), spec.fieldLabel) + 10.0f;
+        field.setBounds(juce::Rectangle<float>(textX + labelW + 2.0f, y + 2.0f, box.getRight() - 18.0f - textX - labelW - 4.0f, fieldHeight - 4.0f).toNearestInt());
+    }
+    const float total = static_cast<float>(buttons.size()) * buttonW + static_cast<float>(buttons.size() - 1) * 8.0f;
+    float bx = std::round(box.getCentreX() - total * 0.5f);
+    for (auto& b : buttons)
+    {
+        b->setBounds(juce::Rectangle<float>(bx, box.getBottom() - 14.0f - buttonH, buttonW, buttonH).toNearestInt());
+        bx += buttonW + 8.0f;
+    }
+}
+
+void Dialog98::paint(juce::Graphics& g)
+{
+    const auto box = boxBounds();
+    g.setColour(juce::Colours::black.withAlpha(0.45f));
+    g.fillRect(box.translated(4.0f, 4.0f));
+    g.setColour(win98::face);
+    g.fillRect(box);
+    bevel(g, box, true);
+    const juce::Rectangle<float> bar { box.getX() + 4.0f, box.getY() + 4.0f, box.getWidth() - 8.0f, dialogTitle };
+    g.setColour(paletteFor(spec.character).accent.darker(0.35f));
+    g.fillRect(bar);
+    drawText(g, spec.title, bar.reduced(5.0f, 0.0f), pixelFont(12.0f, true), juce::Colours::white);
+
+    float x = box.getX() + 16.0f, y = bar.getBottom() + 16.0f;
+    if (spec.icon.isValid())
+    {
+        g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+        g.setOpacity(1.0f);
+        const float iw = static_cast<float>(spec.icon.getWidth()) * 2.0f, ih = static_cast<float>(spec.icon.getHeight()) * 2.0f;
+        g.drawImage(spec.icon, { x, y, iw, ih });
+        x += iw + 16.0f;
+    }
+    for (int i = 0; i < spec.lines.size(); ++i)
+    {
+        const auto& line = spec.lines[i];
+        const bool quiet = line.startsWith("~");               // "~" marks a secondary (grey) line
+        drawText(g, quiet ? line.substring(1) : line, { x, y, box.getRight() - 16.0f - x, lineHeight }, pixelFont(12.0f, i == 0 && ! quiet && spec.icon.isValid()),
+                 quiet ? win98::shadow : juce::Colours::black);
+        y += lineHeight;
+    }
+    if (spec.fieldLabel.isNotEmpty())
+    {
+        drawText(g, spec.fieldLabel, { x, y, 100.0f, fieldHeight }, pixelFont(12.0f), juce::Colours::black);
+        sunken(g, field.getBounds().toFloat().expanded(2.0f));
+    }
+}
+
+bool Dialog98::keyPressed(const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress::returnKey) { finish(0); return true; }
+    if (key == juce::KeyPress::escapeKey) { if (spec.closable) finish(-1); return true; }
+    return true;                                               // a modal box swallows everything else
+}
+
+void Dialog98::finish(int button)
+{
+    if (finished) return;
+    finished = true;
+    auto callback = spec.onClose;
+    const auto text = field.getText().trim();
+    // The owner deletes this dialog in the callback, so run it after this call has returned.
+    juce::MessageManager::callAsync([callback, button, text] { if (callback) callback(button, text); });
 }
 }

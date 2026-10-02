@@ -5,6 +5,10 @@
 #include "Core/MidiEvent.h"
 #include "Core/PhoqerEngine.h"
 
+#if PHOQER_TEST_UI
+ #include "TestUI/TestUiRecorder.h"
+#endif
+
 #include <array>
 #include <atomic>
 
@@ -45,6 +49,8 @@ public:
 #if PHOQER_TEST_UI
     // Notes played from the Test UI's on-screen piano and computer keyboard; merged into each block.
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
+    // Records the output to WAV for the Test UI's REC button.
+    phoqer::testui::Recorder& getRecorder() noexcept { return recorder; }
 #endif
 
 private:
@@ -57,6 +63,7 @@ private:
     int midiEventCount = 0;
 #if PHOQER_TEST_UI
     juce::MidiKeyboardState keyboardState;
+    phoqer::testui::Recorder recorder;
 #endif
 
     juce::AudioProcessorValueTreeState parameters;

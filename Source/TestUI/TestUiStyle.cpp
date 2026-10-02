@@ -174,4 +174,112 @@ float hash(int x, int y) noexcept
     n = (n ^ (n >> 13)) * 1274126177u;
     return static_cast<float>(n & 0xffff) / 65535.0f;
 }
+
+// ------------------------------------------------------------------------------- WIN98 LOOK AND FEEL
+Win98LookAndFeel::Win98LookAndFeel()
+{
+    setColour(juce::PopupMenu::backgroundColourId, win98::face);
+    setColour(juce::PopupMenu::textColourId, juce::Colours::black);
+    setColour(juce::TooltipWindow::backgroundColourId, juce::Colour(0xffffffe1));
+    setColour(juce::TooltipWindow::textColourId, juce::Colours::black);
+    setColour(juce::TooltipWindow::outlineColourId, juce::Colours::black);
+}
+
+juce::Font Win98LookAndFeel::getPopupMenuFont() { return pixelFont(12.0f); }
+
+void Win98LookAndFeel::drawPopupMenuBackgroundWithOptions(juce::Graphics& g, int width, int height, const juce::PopupMenu::Options&)
+{
+    const juce::Rectangle<float> r { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height) };
+    g.fillAll(win98::face);
+    // Win98 raised frame: light grey / white on the top-left, black / grey on the bottom-right.
+    g.setColour(juce::Colour(0xffdfdfdf)); g.fillRect(r.withHeight(1.0f)); g.fillRect(r.withWidth(1.0f));
+    g.setColour(win98::light); g.fillRect(r.reduced(1.0f).withHeight(1.0f)); g.fillRect(r.reduced(1.0f).withWidth(1.0f));
+    g.setColour(juce::Colours::black); g.fillRect(r.withTop(r.getBottom() - 1.0f)); g.fillRect(r.withLeft(r.getRight() - 1.0f));
+    g.setColour(win98::shadow);
+    g.fillRect(r.reduced(1.0f).withTop(r.getBottom() - 2.0f)); g.fillRect(r.reduced(1.0f).withLeft(r.getRight() - 2.0f));
+}
+
+void Win98LookAndFeel::drawPopupMenuItemWithOptions(juce::Graphics& g, const juce::Rectangle<int>& area, bool isHighlighted,
+                                                    const juce::PopupMenu::Item& item, const juce::PopupMenu::Options&)
+{
+    auto r = area.toFloat();
+    if (item.isSeparator)
+    {
+        const float y = std::round(r.getCentreY());
+        g.setColour(win98::shadow); g.fillRect(r.getX() + 2.0f, y - 1.0f, r.getWidth() - 4.0f, 1.0f);
+        g.setColour(win98::light); g.fillRect(r.getX() + 2.0f, y, r.getWidth() - 4.0f, 1.0f);
+        return;
+    }
+    const bool hot = isHighlighted && item.isEnabled;
+    if (hot)
+    {
+        g.setColour(paletteFor(character).accent.darker(0.35f));     // the title-bar colour
+        g.fillRect(r.reduced(1.0f, 0.0f));
+    }
+    const auto ink = hot ? juce::Colours::white : juce::Colours::black;
+    const auto textArea = r.withTrimmedLeft(22.0f).withTrimmedRight(10.0f);
+    const auto font = getPopupMenuFont();
+    if (! item.isEnabled)        // Win98 disabled text: grey with a white emboss
+        drawText(g, item.text, textArea.translated(1.0f, 1.0f), font, win98::light);
+    drawText(g, item.text, textArea, font, item.isEnabled ? ink : win98::shadow);
+    if (item.shortcutKeyDescription.isNotEmpty())
+        drawText(g, item.shortcutKeyDescription, textArea, pixelFont(8.0f), hot ? juce::Colour(0xffdfdfdf) : win98::shadow,
+                 juce::Justification::centredRight);
+
+    if (item.isTicked)
+    {
+        const float cx = r.getX() + 11.0f, cy = std::round(r.getCentreY());
+        g.setColour(item.isEnabled ? ink : win98::shadow);
+        if (item.itemID >= radioIdFirst && item.itemID <= radioIdLast)
+        {
+            g.fillRect(cx - 1.0f, cy - 3.0f, 3.0f, 6.0f);           // pixel radio dot
+            g.fillRect(cx - 2.0f, cy - 2.0f, 5.0f, 4.0f);
+        }
+        else
+        {
+            const float pts[][2] { { -3, 0 }, { -2, 1 }, { -1, 2 }, { 0, 1 }, { 1, 0 }, { 2, -1 }, { 3, -2 } };
+            for (const auto& p : pts) g.fillRect(cx + p[0], cy + p[1] - 1.0f, 1.0f, 3.0f);     // pixel checkmark
+        }
+    }
+}
+
+void Win98LookAndFeel::getIdealPopupMenuItemSizeWithOptions(const juce::String& text, bool isSeparator, int, int& idealWidth,
+                                                            int& idealHeight, const juce::PopupMenu::Options&)
+{
+    idealHeight = isSeparator ? 8 : 20;
+    idealWidth = juce::roundToInt(juce::GlyphArrangement::getStringWidth(getPopupMenuFont(), text)) + 70;
+}
+
+juce::Rectangle<int> Win98LookAndFeel::getTooltipBounds(const juce::String& text, juce::Point<int> screenPos, juce::Rectangle<int> parentArea)
+{
+    const int w = juce::roundToInt(juce::GlyphArrangement::getStringWidth(pixelFont(12.0f), text)) + 14, h = 20;
+    return juce::Rectangle<int>(screenPos.x > parentArea.getCentreX() ? screenPos.x - (w + 12) : screenPos.x + 24,
+                                screenPos.y > parentArea.getCentreY() ? screenPos.y - (h + 6) : screenPos.y + 6, w, h)
+        .constrainedWithin(parentArea);
+}
+
+void Win98LookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, int width, int height)
+{
+    const juce::Rectangle<float> r { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height) };
+    g.fillAll(juce::Colour(0xffffffe1));
+    g.setColour(juce::Colours::black);
+    g.drawRect(r, 1.0f);
+    drawText(g, text, r.reduced(7.0f, 0.0f), pixelFont(12.0f), juce::Colours::black);
+}
+
+void Win98LookAndFeel::drawCornerResizer(juce::Graphics& g, int width, int height, bool, bool)
+{
+    // Win98 size grip: three diagonal ridges, each a white line over a grey one.
+    const float w = static_cast<float>(width), h = static_cast<float>(height);
+    for (int ridge = 0; ridge < 3; ++ridge)
+    {
+        const float off = 3.0f + static_cast<float>(ridge) * 4.0f;
+        for (float t = 0.0f; t < w - off; t += 1.0f)
+        {
+            g.setColour(win98::light);  g.fillRect(off + t, h - 1.0f - t, 1.0f, 1.0f);
+            g.setColour(win98::shadow); g.fillRect(off + t + 1.0f, h - 1.0f - t, 1.0f, 1.0f);
+            g.fillRect(off + t + 2.0f, h - 1.0f - t, 1.0f, 1.0f);
+        }
+    }
+}
 }
