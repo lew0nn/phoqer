@@ -124,6 +124,21 @@ bool PresetLibrary::loadFile(const juce::File& f)
     return true;
 }
 
+juce::String PresetLibrary::loadedName() const
+{
+    return hasLoaded ? loaded.name : juce::String();
+}
+
+void PresetLibrary::select(const juce::String& name)
+{
+    if (hasLoaded && loaded.name == name) return;
+    const int index = find(name);
+    hasLoaded = index >= 0;
+    current = index;
+    if (hasLoaded) loaded = presets[static_cast<size_t>(index)];
+    remember(name);
+}
+
 juce::String PresetLibrary::cleanName(const juce::String& raw)
 {
     return raw.toUpperCase().retainCharacters("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_").trim().substring(0, 24);

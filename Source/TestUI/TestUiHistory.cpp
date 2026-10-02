@@ -2,7 +2,9 @@
 
 namespace phoqer::testui
 {
-ParamHistory::ParamHistory(juce::AudioProcessor& processor) : parameters(processor.getParameters())
+ParamHistory::ParamHistory(juce::AudioProcessor& processor, std::function<juce::String()> save,
+                           std::function<void(const juce::String&)> restoreFn)
+    : parameters(processor.getParameters()), saveExtra(std::move(save)), restoreExtra(std::move(restoreFn))
 {
     for (auto* p : parameters) p->addListener(this);
 }
@@ -15,23 +17,25 @@ ParamHistory::~ParamHistory()
 ParamHistory::Snapshot ParamHistory::capture() const
 {
     Snapshot s;
-    s.reserve(static_cast<size_t>(parameters.size()));
-    for (auto* p : parameters) s.push_back(p->getValue());
+    s.values.reserve(static_cast<size_t>(parameters.size()));
+    for (auto* p : parameters) s.values.push_back(p->getValue());
+    if (saveExtra) s.extra = saveExtra();
     return s;
 }
 
 void ParamHistory::restore(const Snapshot& s)
 {
     const juce::ScopedValueSetter<bool> quiet(busy, true);
-    for (int i = 0; i < parameters.size() && i < static_cast<int>(s.size()); ++i)
+    for (int i = 0; i < parameters.size() && i < static_cast<int>(s.values.size()); ++i)
     {
         auto* p = parameters[i];
-        const float value = s[static_cast<size_t>(i)];
+        const float value = s.values[static_cast<size_t>(i)];
         if (juce::approximatelyEqual(p->getValue(), value)) continue;
         p->beginChangeGesture();
         p->setValueNotifyingHost(value);
         p->endChangeGesture();
     }
+    if (restoreExtra) restoreExtra(s.extra);
 }
 
 void ParamHistory::record(const Snapshot& before)

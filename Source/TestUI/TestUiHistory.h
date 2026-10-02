@@ -13,7 +13,8 @@ namespace phoqer::testui
 class ParamHistory final : private juce::AudioProcessorParameter::Listener
 {
 public:
-    explicit ParamHistory(juce::AudioProcessor&);
+    // 'saveExtra' / 'restoreExtra' carry state beside the parameters (the loaded preset's name).
+    ParamHistory(juce::AudioProcessor&, std::function<juce::String()> saveExtra, std::function<void(const juce::String&)> restoreExtra);
     ~ParamHistory() override;
 
     void performAsOne(const std::function<void()>&);
@@ -23,7 +24,12 @@ public:
     void redo();
 
 private:
-    using Snapshot = std::vector<float>;                   // normalised value of every parameter
+    struct Snapshot
+    {
+        std::vector<float> values;                         // normalised value of every parameter
+        juce::String extra;
+        bool operator==(const Snapshot& o) const { return values == o.values && extra == o.extra; }
+    };
     Snapshot capture() const;
     void restore(const Snapshot&);
     void record(const Snapshot& before);
@@ -32,6 +38,8 @@ private:
 
     static constexpr size_t maxSteps = 100;
     juce::Array<juce::AudioProcessorParameter*> parameters;
+    std::function<juce::String()> saveExtra;
+    std::function<void(const juce::String&)> restoreExtra;
     std::vector<Snapshot> undoSteps, redoSteps;
     Snapshot beforeGesture;
     int openGestures = 0;

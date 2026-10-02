@@ -31,6 +31,8 @@ public:
 
     void load(int index);                      // applies it to the parameters
     bool loadFile(const juce::File&);          // a preset file from anywhere
+    juce::String loadedName() const;           // empty when nothing is loaded
+    void select(const juce::String& name);     // marks a preset as loaded without applying it (undo)
     bool save(const juce::String& name);       // the current sound, into the presets folder
     bool isDirty() const;                      // changed since it was loaded or saved
     juce::String displayName() const;          // "002  HARBOUR BARK" (+ " *" when changed)

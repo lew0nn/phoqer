@@ -77,7 +77,8 @@ TestUiView::TestUiView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
       piano(owner.getKeyboardState()),
       characterAttachment(parameterFor(owner.getParameters(), "character"),
                           [this](float value) { applyCharacter(juce::roundToInt(value)); }, nullptr),
-      presets(owner.getParameters()), history(owner)
+      presets(owner.getParameters()),
+      history(owner, [this] { return presets.loadedName(); }, [this](const juce::String& name) { presets.select(name); })
 {
     setOpaque(true);
     auto& state = processor.getParameters();
