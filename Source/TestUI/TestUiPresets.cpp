@@ -7,17 +7,15 @@ namespace
 constexpr auto fileExtension = ".phqpreset";
 const juce::Identifier presetProperty { "testUiPreset" };
 
-// Placeholder sound design for the built-ins: voice (0 burp, 1 squeal, 2 groan), mode (0 call,
-// 1 honk, 2 bark, 3 wail, 4 murmur) and the seven sound knobs.
+// The factory bank, kept small until the PHOQER voice is redone: INIT plus one sound per voice.
+// Voice (0 burp, 1 squeal, 2 groan), mode (0 call, 1 honk, 2 bark, 3 wail, 4 murmur), then the seven
+// sound knobs. Names start with the voice: BRP, SQL, GRN.
 struct BuiltIn { const char* name; int voice, mode; float boom, air, bark, space, vowel, detune, tide; };
 constexpr BuiltIn builtIns[] {
-    { "INIT",          0, 0, 0.50f, 0.25f, 0.35f, 0.00f, 0.35f, 0.00f, 0.25f },
-    { "HARBOUR BARK",  0, 2, 0.70f, 0.20f, 0.75f, 0.25f, 0.30f, 0.10f, 0.20f },
-    { "BELLY RUMBLE",  0, 4, 0.90f, 0.10f, 0.30f, 0.15f, 0.20f, 0.20f, 0.50f },
-    { "PUP CALL",      1, 0, 0.30f, 0.45f, 0.20f, 0.30f, 0.60f, 0.05f, 0.35f },
-    { "ICE SHRIEK",    1, 1, 0.20f, 0.70f, 0.55f, 0.45f, 0.80f, 0.15f, 0.20f },
-    { "NIGHT GROAN",   2, 3, 0.40f, 0.35f, 0.10f, 0.60f, 0.45f, 0.10f, 0.60f },
-    { "FOG HORN",      2, 3, 0.65f, 0.15f, 0.20f, 0.50f, 0.25f, 0.30f, 0.15f },
+    { "INIT",            0, 0, 0.50f, 0.25f, 0.35f, 0.00f, 0.35f, 0.00f, 0.25f },
+    { "BRP FISH DEMAND", 0, 2, 0.75f, 0.15f, 0.80f, 0.20f, 0.30f, 0.10f, 0.20f },
+    { "SQL BEACH SOLO",  1, 3, 0.25f, 0.50f, 0.20f, 0.40f, 0.70f, 0.12f, 0.45f },
+    { "GRN TAX AUDIT",   2, 4, 0.60f, 0.25f, 0.15f, 0.35f, 0.25f, 0.20f, 0.60f },
 };
 
 bool same(float a, float b) { return std::abs(a - b) < 0.0015f; }

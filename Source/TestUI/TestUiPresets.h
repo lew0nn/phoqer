@@ -35,7 +35,7 @@ public:
     void select(const juce::String& name);     // marks a preset as loaded without applying it (undo)
     bool save(const juce::String& name);       // the current sound, into the presets folder
     bool isDirty() const;                      // changed since it was loaded or saved
-    juce::String displayName() const;          // "002  HARBOUR BARK" (+ " *" when changed)
+    juce::String displayName() const;          // "002  BRP FISH DEMAND" (+ " *" when changed)
     static juce::String numbered(int index, const juce::String& name);
     static juce::String cleanName(const juce::String&);   // upper case, letters, digits, space - _
     int find(const juce::String& name) const;          // -1 when there is none
