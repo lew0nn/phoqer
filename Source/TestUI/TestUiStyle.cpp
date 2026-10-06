@@ -95,7 +95,7 @@ juce::Rectangle<float> windowTitleBar(juce::Rectangle<float> r, float titleHeigh
 }
 
 juce::Rectangle<float> window98(juce::Graphics& g, juce::Rectangle<float> r, const juce::String& title,
-                                juce::Colour titleColour, bool active, float titleHeight)
+                                const Palette& palette, bool active, float titleHeight)
 {
     using namespace win98;
     g.setColour(juce::Colours::black.withAlpha(0.45f));
@@ -104,9 +104,11 @@ juce::Rectangle<float> window98(juce::Graphics& g, juce::Rectangle<float> r, con
     g.fillRect(r);
     bevel(g, r, true);
     const auto bar = windowTitleBar(r, titleHeight);
-    g.setColour(active ? titleColour : shadow);
+    const auto from = active ? palette.accent.darker(0.35f) : palette.accent.darker(1.3f);
+    const auto to = active ? palette.secondary.darker(0.15f) : palette.secondary.darker(1.6f);
+    g.setGradientFill(juce::ColourGradient(from, bar.getX(), 0.0f, to, bar.getRight(), 0.0f, false));
     g.fillRect(bar);
-    drawText(g, title, bar.reduced(4.0f, 0.0f), pixelFont(titleHeight >= 20.0f ? 12.0f : 10.0f, true), active ? juce::Colours::white : juce::Colour(0xffd0d0d0));
+    drawText(g, title, bar.reduced(4.0f, 0.0f), pixelFont(titleHeight >= 20.0f ? 12.0f : 10.0f, true), juce::Colours::white);
     return windowClient(r, titleHeight);
 }
 

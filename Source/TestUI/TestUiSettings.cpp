@@ -22,7 +22,7 @@ UiSettings::~UiSettings()
 UiSettings::UiSettings()
 {
     juce::PropertiesFile::Options options;
-    options.applicationName = "PHOQER Test UI";
+    options.applicationName = "PHOQER";
     options.folderName = "PHOQER";
    #if JUCE_LINUX || JUCE_BSD
     options.folderName = "~/.config/PHOQER";

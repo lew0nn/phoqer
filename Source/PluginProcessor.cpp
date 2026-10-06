@@ -1,9 +1,5 @@
 #include "PluginProcessor.h"
-#if PHOQER_TEST_UI
- #include "TestUI/TestUiEditor.h"
-#else
- #include "PluginEditor.h"
-#endif
+#include "TestUI/TestUiEditor.h"
 
 #include <algorithm>
 #include <cmath>
@@ -62,11 +58,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout PhoqerAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         ParameterId { "output", 1 }, "OUTPUT", makeRange(-24.0f, 18.0f, 0.01f), 0.0f,
         juce::AudioParameterFloatAttributes().withLabel("dB")));
-#if PHOQER_TEST_UI
-    constexpr int defaultCharacter = 0;    // the Test UI opens on BURP
-#else
-    constexpr int defaultCharacter = 1;
-#endif
+    constexpr int defaultCharacter = 0;    // PHOQER opens on BURP
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         ParameterId { "character", 1 }, "CHARACTER",
         juce::StringArray { "BURP", "SQUEAL", "GROAN" }, defaultCharacter));
@@ -145,9 +137,7 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                         juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
-#if PHOQER_TEST_UI
     keyboardState.processNextMidiBuffer(midiMessages, 0, buffer.getNumSamples(), true);
-#endif
     translateMidi(midiMessages);
 
     phoqer::MacroState macros;
@@ -169,9 +159,7 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     engine.process(outputBuffer, midiEvents.data(), midiEventCount, macros,
                    output->load(std::memory_order_relaxed));
     midiEventCount = 0;
-#if PHOQER_TEST_UI
     recorder.process(buffer);
-#endif
 }
 
 void PhoqerAudioProcessor::getStateInformation(juce::MemoryBlock& destinationData)
@@ -189,11 +177,7 @@ void PhoqerAudioProcessor::setStateInformation(const void* data, int sizeInBytes
 
 juce::AudioProcessorEditor* PhoqerAudioProcessor::createEditor()
 {
-#if PHOQER_TEST_UI
-    return new phoqer::testui::TestUiEditor(*this);    // experimental editor, PHOQER Test UI target only
-#else
-    return new PhoqerAudioProcessorEditor(*this);
-#endif
+    return new phoqer::testui::TestUiEditor(*this);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

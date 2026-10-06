@@ -13,17 +13,27 @@ endif()
 
 add_subdirectory(vendor/JUCE)
 
-file(GLOB_RECURSE PHOQER_PRODUCTION_IMAGES CONFIGURE_DEPENDS
-    "Resources/UI/PHOQER/Knobs/*.png" "Resources/UI/PHOQER/Tide/*.png"
-    "Resources/UI/PHOQER/Buttons/*.png" "Resources/UI/PHOQER/SmallParts/*.png"
-    "Resources/UI/PHOQER/Displays/*.png")
 juce_add_binary_data(PHOQER_UIAssets
-    HEADER_NAME PhoqerAssets.h NAMESPACE PhoqerAssets
-    SOURCES ${PHOQER_PRODUCTION_IMAGES}
+    HEADER_NAME PhoqerTestUIAssets.h NAMESPACE PhoqerTestUIAssets
+    SOURCES
+        Resources/UI/TestUI/Silkscreen-Regular.ttf
+        Resources/UI/TestUI/Silkscreen-Bold.ttf
+        Resources/UI/TestUI/PressStart2P-Regular.ttf
         Resources/UI/Shared/Roboto-Regular.ttf
         Resources/UI/Purple/purple_seal.png
         Resources/UI/Ice/ice_seal.png
-        Resources/UI/Red/red_seal.png)
+        Resources/UI/Red/red_seal.png
+        resources/branding/app/phoqer-app-icon-256.png
+        resources/branding/app/phoqer-app-icon-32.png)
+
+# App icon. Windows takes a hand-built multi-size .ico (added below) so every size is drawn for its
+# size; elsewhere JUCE builds the icon from the 32 px and 256 px PNGs.
+set(PHOQER_ICONS)
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(PHOQER_ICONS
+        ICON_BIG resources/branding/app/phoqer-app-icon-256.png
+        ICON_SMALL resources/branding/app/phoqer-app-icon-32.png)
+endif()
 
 juce_add_plugin(PHOQER
     COMPANY_NAME "LWNX DSP"
@@ -33,11 +43,12 @@ juce_add_plugin(PHOQER
     FORMATS VST3 Standalone
     PRODUCT_NAME "PHOQER"
     DESCRIPTION "PHOQER synthetic seal vocal instrument"
+    ${PHOQER_ICONS}
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
-    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS TRUE
     VST3_CATEGORIES Instrument Synth
     COPY_PLUGIN_AFTER_BUILD FALSE)
 
@@ -71,20 +82,33 @@ set(PHOQER_ENGINE_SOURCES
 target_sources(PHOQER PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
-    Source/PluginEditor.cpp
-    Source/PluginEditor.h
     ${PHOQER_ENGINE_SOURCES}
-    Source/UI/PhoqerComponents.cpp
-    Source/UI/PhoqerComponents.h
-    Source/UI/PhoqerLayout.h
-    Source/UI/PhoqerLookAndFeel.cpp
-    Source/UI/PhoqerLookAndFeel.h
-    Source/UI/PhoqerTheme.cpp
-    Source/UI/PhoqerTheme.h)
+    Source/TestUI/TestUiEditor.cpp
+    Source/TestUI/TestUiEditor.h
+    Source/TestUI/TestUiHistory.cpp
+    Source/TestUI/TestUiHistory.h
+    Source/TestUI/TestUiKnob.cpp
+    Source/TestUI/TestUiKnob.h
+    Source/TestUI/TestUiLogo.cpp
+    Source/TestUI/TestUiLogo.h
+    Source/TestUI/TestUiPortrait.cpp
+    Source/TestUI/TestUiPortrait.h
+    Source/TestUI/TestUiPresets.cpp
+    Source/TestUI/TestUiPresets.h
+    Source/TestUI/TestUiRecorder.cpp
+    Source/TestUI/TestUiRecorder.h
+    Source/TestUI/TestUiSettings.cpp
+    Source/TestUI/TestUiSettings.h
+    Source/TestUI/TestUiStandaloneApp.cpp
+    Source/TestUI/TestUiStyle.cpp
+    Source/TestUI/TestUiStyle.h
+    Source/TestUI/TestUiViews.cpp
+    Source/TestUI/TestUiViews.h)
 
 target_include_directories(PHOQER PRIVATE Source)
 
 target_compile_definitions(PHOQER PUBLIC
+    JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
@@ -100,6 +124,9 @@ target_link_libraries(PHOQER PRIVATE
     juce::juce_recommended_warning_flags)
 
 juce_generate_juce_header(PHOQER)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND TARGET PHOQER_Standalone)
+    target_sources(PHOQER_Standalone PRIVATE resources/branding/app/phoqer-app-icon.rc)
+endif()
 
 set(PHOQER_NOTICE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
@@ -107,6 +134,8 @@ set(PHOQER_NOTICE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/Apache-2.0.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/Roboto-NOTICE.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/TestUI/OFL-Silkscreen.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/TestUI/OFL-PressStart2P.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/vendor/JUCE/LICENSE.md")
 
 add_custom_command(TARGET PHOQER_VST3 POST_BUILD
@@ -126,10 +155,10 @@ add_custom_command(TARGET PHOQER_Standalone POST_BUILD
 option(PHOQER_BUILD_SANITY "Build the offline core sanity executable" ON)
 option(PHOQER_BUILD_VISUAL_ACCEPTANCE "Build the window-free UI acceptance renderer" OFF)
 if(PHOQER_BUILD_VISUAL_ACCEPTANCE)
-    juce_add_console_app(PHOQERVisualAcceptance PRODUCT_NAME "PHOQER Visual Acceptance")
-    target_sources(PHOQERVisualAcceptance PRIVATE Source/Diagnostics/VisualAcceptance.cpp)
-    target_include_directories(PHOQERVisualAcceptance PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
-    target_link_libraries(PHOQERVisualAcceptance PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp)
+    juce_add_console_app(PHOQERUIAcceptance PRODUCT_NAME "PHOQER UI Acceptance")
+    target_sources(PHOQERUIAcceptance PRIVATE Source/Diagnostics/TestUiAcceptance.cpp)
+    target_include_directories(PHOQERUIAcceptance PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
+    target_link_libraries(PHOQERUIAcceptance PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp)
 endif()
 if(PHOQER_BUILD_SANITY)
     add_executable(PHOQERCoreSanity
@@ -145,101 +174,5 @@ if(PHOQER_BUILD_SANITY)
         target_compile_options(PHOQERCoreSanity PRIVATE /W4 /permissive-)
     else()
         target_compile_options(PHOQERCoreSanity PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
-endif()
-
-# Experimental "Pure 98" editor, built as a separate plugin ("PHOQER Test UI") so it can be
-# tried side by side with the release editor. Off by default; the release build is unaffected.
-option(PHOQER_BUILD_TEST_UI "Build the experimental PHOQER Test UI plugin (separate target)" OFF)
-if(PHOQER_BUILD_TEST_UI)
-    juce_add_binary_data(PHOQER_TestUIAssets
-        HEADER_NAME PhoqerTestUIAssets.h NAMESPACE PhoqerTestUIAssets
-        SOURCES
-            Resources/UI/TestUI/Silkscreen-Regular.ttf
-            Resources/UI/TestUI/Silkscreen-Bold.ttf
-            Resources/UI/TestUI/PressStart2P-Regular.ttf
-            Resources/UI/Shared/Roboto-Regular.ttf
-            Resources/UI/Purple/purple_seal.png
-            Resources/UI/Ice/ice_seal.png
-            Resources/UI/Red/red_seal.png
-            resources/branding/app/phoqer-app-icon-256.png)
-
-    # App icon. Windows takes a hand-built multi-size .ico (added below) so every size is drawn for its
-    # size; elsewhere JUCE builds the icon from the 32 px and 256 px PNGs.
-    set(PHOQER_TEST_UI_ICONS)
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
-        set(PHOQER_TEST_UI_ICONS
-            ICON_BIG resources/branding/app/phoqer-app-icon-256.png
-            ICON_SMALL resources/branding/app/phoqer-app-icon-32.png)
-    endif()
-
-    juce_add_plugin(PHOQER_TestUI
-        COMPANY_NAME "LWNX DSP"
-        BUNDLE_ID "io.github.lew0nn.phoqer.testui"
-        PLUGIN_MANUFACTURER_CODE Lwnx
-        PLUGIN_CODE Phqt
-        FORMATS VST3 Standalone
-        PRODUCT_NAME "PHOQER Test UI"
-        DESCRIPTION "PHOQER with the experimental Pure 98 editor"
-        ${PHOQER_TEST_UI_ICONS}
-        IS_SYNTH TRUE
-        NEEDS_MIDI_INPUT TRUE
-        NEEDS_MIDI_OUTPUT FALSE
-        IS_MIDI_EFFECT FALSE
-        EDITOR_WANTS_KEYBOARD_FOCUS TRUE
-        VST3_CATEGORIES Instrument Synth
-        COPY_PLUGIN_AFTER_BUILD FALSE)
-
-    target_sources(PHOQER_TestUI PRIVATE
-        Source/PluginProcessor.cpp
-        Source/PluginProcessor.h
-        ${PHOQER_ENGINE_SOURCES}
-        Source/TestUI/TestUiEditor.cpp
-        Source/TestUI/TestUiEditor.h
-        Source/TestUI/TestUiHistory.cpp
-        Source/TestUI/TestUiHistory.h
-        Source/TestUI/TestUiKnob.cpp
-        Source/TestUI/TestUiKnob.h
-        Source/TestUI/TestUiLogo.cpp
-        Source/TestUI/TestUiLogo.h
-        Source/TestUI/TestUiPortrait.cpp
-        Source/TestUI/TestUiPortrait.h
-        Source/TestUI/TestUiPresets.cpp
-        Source/TestUI/TestUiPresets.h
-        Source/TestUI/TestUiRecorder.cpp
-        Source/TestUI/TestUiRecorder.h
-        Source/TestUI/TestUiSettings.cpp
-        Source/TestUI/TestUiSettings.h
-        Source/TestUI/TestUiStandaloneApp.cpp
-        Source/TestUI/TestUiStyle.cpp
-        Source/TestUI/TestUiStyle.h
-        Source/TestUI/TestUiViews.cpp
-        Source/TestUI/TestUiViews.h)
-    target_include_directories(PHOQER_TestUI PRIVATE Source)
-    target_compile_definitions(PHOQER_TestUI PUBLIC
-        PHOQER_TEST_UI=1
-        JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0
-        JUCE_VST3_CAN_REPLACE_VST2=0
-        JUCE_VST3_EMULATE_MIDI_CC_WITH_PARAMETERS=0)
-    target_link_libraries(PHOQER_TestUI PRIVATE
-        PHOQER_TestUIAssets
-        juce::juce_audio_utils
-        juce::juce_dsp
-        PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags)
-    juce_generate_juce_header(PHOQER_TestUI)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND TARGET PHOQER_TestUI_Standalone)
-        target_sources(PHOQER_TestUI_Standalone PRIVATE resources/branding/app/phoqer-app-icon.rc)
-    endif()
-
-    if(PHOQER_BUILD_VISUAL_ACCEPTANCE)
-        juce_add_console_app(PHOQERTestUIAcceptance PRODUCT_NAME "PHOQER Test UI Acceptance")
-        target_sources(PHOQERTestUIAcceptance PRIVATE Source/Diagnostics/TestUiAcceptance.cpp)
-        target_include_directories(PHOQERTestUIAcceptance PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_TestUI_artefacts/JuceLibraryCode")
-        target_link_libraries(PHOQERTestUIAcceptance PRIVATE PHOQER_TestUI PHOQER_TestUIAssets juce::juce_audio_utils juce::juce_dsp)
     endif()
 endif()

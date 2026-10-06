@@ -5,9 +5,7 @@
 #include "Core/MidiEvent.h"
 #include "Core/PhoqerEngine.h"
 
-#if PHOQER_TEST_UI
- #include "TestUI/TestUiRecorder.h"
-#endif
+#include "TestUI/TestUiRecorder.h"
 
 #include <array>
 #include <atomic>
@@ -46,12 +44,10 @@ public:
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
-#if PHOQER_TEST_UI
-    // Notes played from the Test UI's on-screen piano and computer keyboard; merged into each block.
+    // Notes played from the editor's on-screen piano and computer keyboard; merged into each block.
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
-    // Records the output to WAV for the Test UI's REC button.
+    // Records the output to WAV for the editor's REC button.
     phoqer::testui::Recorder& getRecorder() noexcept { return recorder; }
-#endif
 
 private:
     void translateMidi(const juce::MidiBuffer& midiMessages) noexcept;
@@ -61,10 +57,8 @@ private:
     phoqer::PhoqerEngine engine;
     std::array<phoqer::MidiEvent, 256> midiEvents {};
     int midiEventCount = 0;
-#if PHOQER_TEST_UI
     juce::MidiKeyboardState keyboardState;
     phoqer::testui::Recorder recorder;
-#endif
 
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float>* boom = nullptr;

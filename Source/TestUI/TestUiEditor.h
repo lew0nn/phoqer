@@ -115,7 +115,7 @@ private:
 
     int character = 0;
     bool showKeys = true;
-    juce::Image chrome, logoIcon, logoWord;
+    juce::Image chrome, logoWord;
     float chromeScale = 0.0f;
     FaceTelemetry face {};
     float grin = 0.0f;
@@ -131,7 +131,7 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TestUiView)
 };
 
-// Experimental "Pure 98" editor, built only into the PHOQER Test UI target: the view above, scaled
+// PHOQER's "Pure 98" editor: the view above, scaled
 // to the saved zoom, with a Win98 size grip. The zoom is kept in UiSettings for the next launch.
 class TestUiEditor final : public juce::AudioProcessorEditor
 {

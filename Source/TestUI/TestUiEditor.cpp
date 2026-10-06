@@ -21,9 +21,9 @@ const juce::Rectangle<float> keysWindow { 6, 618, 748, 106 };
 constexpr float headTitleHeight = 22.0f;
 constexpr float captionButtonW = 20.0f, captionButtonH = 18.0f;
 
-// Header logo: the app icon at 18 px and the wordmark, both at 2 units per pixel like the rest of the UI.
-constexpr int headerIconPixels = 18;
-constexpr float logoPixel = 2.0f;
+
+// Header: the PHOQER wordmark at 2 units per pixel like the rest of the UI, a little in from the left.
+constexpr float logoWordPixel = 2.0f, logoWordInset = 16.0f;
 
 // MANIC: the first 150 ms of a new call in BARK mode above this face intensity flashes the grin.
 constexpr float manicIntensity = 0.85f;
@@ -290,7 +290,6 @@ void TestUiView::applyCharacter(int c)
 {
     character = juce::jlimit(0, 2, c);
     lookAndFeel.setCharacter(character);
-    logoIcon = renderAppIcon(character, headerIconPixels, false);    // no frame next to the wordmark
     logoWord = renderOutrunWordmark(character, false);
     for (auto& k : knobs) k->setCharacter(character);
     for (auto& b : modeButtons) b->setCharacter(character);
@@ -351,7 +350,6 @@ void TestUiView::rebuildChrome(float scale)
     juce::Graphics g(chrome);
     g.addTransform(juce::AffineTransform::scale(scale));
     const auto& pal = paletteFor(character);
-    const auto title = pal.accent.darker(0.35f);
     const juce::String voice = voiceNames[character];
 
     // Desktop: night sky, stars, neon perspective grid.
@@ -373,31 +371,28 @@ void TestUiView::rebuildChrome(float scale)
         }
     }
 
-    // Header window: app logo (seal sun + Outrun wordmark); the preset box and voice tabs sit on the right.
-    const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, title, true, headTitleHeight);
+    // Header window: the PHOQER wordmark; the preset box and voice tabs sit on the right.
+    const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, pal, true, headTitleHeight);
     const auto row = head.withTrimmedTop(17.0f);
     g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
     g.setOpacity(1.0f);
-    const float iconSize = headerIconPixels * logoPixel;
-    const juce::Rectangle<float> iconArea { row.getX() + 4.0f, std::round(row.getCentreY() - iconSize * 0.5f), iconSize, iconSize };
-    g.drawImage(logoIcon, iconArea);
-    const float wordW = logoWord.getWidth() * logoPixel, wordH = logoWord.getHeight() * logoPixel;
-    g.drawImage(logoWord, { iconArea.getRight() + 8.0f, std::round(row.getCentreY() - wordH * 0.5f), wordW, wordH });
+    const float wordW = logoWord.getWidth() * logoWordPixel, wordH = logoWord.getHeight() * logoWordPixel;
+    g.drawImage(logoWord, { row.getX() + logoWordInset, std::round(row.getCentreY() - wordH * 0.5f), wordW, wordH });
 
-    window98(g, modeWindow, "MODE.EXE", title, false);
-    const auto sealClient = window98(g, sealWindow, voice + ".BMP", title, true);
+    window98(g, modeWindow, "MODE.EXE", pal, false);
+    const auto sealClient = window98(g, sealWindow, voice + ".BMP", pal, false);
     sunken(g, sealClient.withTrimmedBottom(18.0f), juce::Colours::black);
-    const auto scopeClient = window98(g, scopeWindow, "SCOPE.EXE", title, true);
+    const auto scopeClient = window98(g, scopeWindow, "SCOPE.EXE", pal, false);
     sunken(g, scopeClient.withTrimmedBottom(18.0f), juce::Colours::black);
-    window98(g, outputWindow, "LEVEL.EXE", title, false);
-    const auto mix = window98(g, mixerWindow, "MIXER.EXE", title, false);
+    window98(g, outputWindow, "LEVEL.EXE", pal, false);
+    const auto mix = window98(g, mixerWindow, "MIXER.EXE", pal, false);
     g.setColour(win98::shadow);
     g.fillRect(mix.getX() + 541.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
     g.setColour(win98::light);
     g.fillRect(mix.getX() + 542.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
     if (showKeys)
     {
-        window98(g, keysWindow, "KEYS.EXE", title, false);
+        window98(g, keysWindow, "KEYS.EXE", pal, false);
         sunken(g, piano.getBounds().toFloat().expanded(2.0f), win98::dark);
     }
 }
@@ -677,8 +672,8 @@ void TestUiView::showAbout()
 {
     Dialog98::Spec spec;
     spec.title = "ABOUT PHOQER";
-    spec.icon = renderAppIcon(character, 32, true);
-    spec.lines = { "PHOQER TEST UI", "VERSION " JucePlugin_VersionString, "", "~EXPERIMENTAL EDITOR,", "~NOT THE RELEASE UI" };
+    spec.icon = loadAssetImage("phoqer-app-icon-32.png");
+    spec.lines = { "PHOQER", "VERSION " JucePlugin_VersionString, "", "~A SYNTHETIC SEAL VOICE", "~LWNX DSP" };
     showDialog(std::move(spec));
 }
 

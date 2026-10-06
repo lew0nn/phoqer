@@ -2,7 +2,7 @@
 
 #include <JuceHeader.h>
 
-// Experimental "Pure 98" editor (PHOQER Test UI target only).
+// PHOQER's "Pure 98" editor.
 // Shared palette, fonts and Win98 drawing helpers.
 namespace phoqer::testui
 {
@@ -38,8 +38,10 @@ void sunken(juce::Graphics&, juce::Rectangle<float>, juce::Colour fill = juce::C
 // components (TitleButton98), placed by the editor only where they do something.
 inline constexpr float defaultTitleHeight = 16.0f;
 juce::Rectangle<float> windowTitleBar(juce::Rectangle<float> bounds, float titleHeight = defaultTitleHeight) noexcept;
+// The title bar fades between the voice's two colours, as Win98's did: bright on the main window (active),
+// deeper and dimmer on the windows inside it.
 juce::Rectangle<float> window98(juce::Graphics&, juce::Rectangle<float> bounds, const juce::String& title,
-                                juce::Colour titleColour, bool active, float titleHeight = defaultTitleHeight);
+                                const Palette& palette, bool active, float titleHeight = defaultTitleHeight);
 juce::Rectangle<float> windowClient(juce::Rectangle<float> bounds, float titleHeight = defaultTitleHeight) noexcept;
 
 void statusBar(juce::Graphics&, juce::Rectangle<float>, const juce::StringArray& fields);
