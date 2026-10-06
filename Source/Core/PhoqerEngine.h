@@ -5,6 +5,7 @@
 #include "MidiEvent.h"
 #include "PhoqerTypes.h"
 #include "../DSP/CheapSpace.h"
+#include "../DSP/Chorus.h"
 #include "../DSP/OutputStage.h"
 #include "../Voice/SealVoice.h"
 
@@ -35,7 +36,8 @@ private:
     uint64_t ageCounter = 0;
     std::array<SealVoice, voiceCount> voices;
     std::array<int, 16> pitchWheels {};
-    CheapSpace spaceStage;
+    Chorus chorusStage;      // DETUNE
+    CheapSpace spaceStage;   // REVERB
     OutputStage outputStage;
     TelemetryPublisher telemetry;
     SealCharacter activeCharacter = defaultSealCharacter;

@@ -61,6 +61,14 @@ struct CharacterPreset
     float gestureSeconds = 0.25f;        // how long the onset contour takes
     float gestureDepth = 1.0f;           // scales the contour
     PitchContour pitchContour {};
+    float wobbleSemitones = 0.0f;        // depth of the random pitch drift
+    float wobbleRateHz = 12.0f;          // how often the drift picks a new target
+    float flutterSemitones = 0.0f;       // a fast, slightly irregular vibrato (GROAN)
+    float flutterRateHz = 12.5f;
+    float squeakNoise = 0.0f;            // noise above 2.5 kHz that follows the call (SQUEAL)
+    float onsetPunch = 1.0f;             // the bark spike at the start of a call, 0 to 1
+    float thump = 0.0f;                  // a kick-like low hit under the attack, 0 to 1
+    float vowelOffset = 0.0f;            // the seal's own vowel colour, added to VOWEL
 };
 
 // Index order is load-bearing: it matches both the JUCE AudioParameterChoice and
@@ -68,72 +76,91 @@ struct CharacterPreset
 inline constexpr std::array<CharacterPreset,
                             static_cast<std::size_t>(SealCharacter::count)> characterPresets {{
     // ---- 0: BURP (bass, red) ------------------------------------------------
-    // Reference fundamental about 80 Hz. Signature is irregular period doubling
-    // with roughly half the energy as noise (measured HNR +1.2 dB).
+    // Reference fundamental about 82 Hz, calls about half a second long. Energy
+    // sits flat from 600 Hz to 2.5 kHz and falls away above 3 kHz, with a small
+    // lift near 6.4 kHz. Almost all voiced (HNR about +6 dB, spectral flatness
+    // 0.013): the roughness is jitter and period doubling, not breath.
     {
         "burp", "BURP",
-        // Gains follow the measured band split 36 / 50 / 11 percent, converted
-        // from energy to amplitude: sqrt(50/36) = 1.18, sqrt(11/36) = 0.55.
-        {{ {  380.0f, 120.0f, 1.45f, 0.85f },   // source, carries 300-800 Hz
-           { 1082.0f,  68.0f, 1.18f, 0.55f },   // F1, Q 16
-           { 2523.0f,  48.0f, 0.44f, 0.55f },   // F2, Q 53
-           { 6231.0f,  93.0f, 0.08f, 0.30f },
-           { 7995.0f, 461.0f, 0.035f, 0.00f } }},
-        0.0022f,   // skirt
-        0.64f,     // noise: HNR +1.2 dB
-        0.035f,    // jitter, high: this is the growl
-        0.30f,     // shimmer
-        0.060f,    // period doubling, about one flip every 16 periods
-        0.25f,     // sub octave for bass body
-        0.015f, 0.25f, 0.72f, 0.18f,
-        1.00f,
-        0.35f, 1.0f,
-        {{ +0.6f, +0.2f, 0.0f, -0.1f, -0.15f, -0.2f, -0.2f, -0.2f }}
+        {{ {  640.0f, 180.0f, 1.00f, 0.50f },   // source
+           { 1050.0f, 160.0f, 1.00f, 0.30f },   // F1
+           { 1750.0f, 350.0f, 2.70f, 0.00f },   // F2
+           { 2450.0f, 300.0f, 1.60f, 0.00f },   // F3, then the drop above 3 kHz
+           { 6400.0f, 500.0f, 0.20f, 0.00f } }},
+        0.0030f,   // skirt
+        0.06f,     // noise: a trace only
+        0.010f,    // jitter: half the clip's, so it growls but stays a pitched note
+        0.06f,     // shimmer: little period-to-period flicker, a clean tone
+        0.040f,    // period doubling: the growl, a little rarer
+        0.04f,     // a little sub for body
+        0.004f, 0.09f, 0.72f, 0.12f,   // tight: a hit, then hold steady
+        2.75f,     // trim: back to its old loudness now the hiss is gone
+        0.45f, 1.35f,   // depth 1.35 so the default TIDE gives the measured contour
+        {{ +0.3f, 0.0f, +0.5f, +0.2f, 0.0f, -0.4f, -0.2f, 0.0f }},   // ends on the note
+        0.12f, 10.0f,   // wobble: a little life, not a pitch drift
+        0.0f, 12.5f, 0.0f,
+        0.45f,          // a firm bark
+        0.08f,          // and only a trace of kick: more read as a thump
+        0.0f            // vowel: its own rough "ah"
     },
     // ---- 1: SQUEAL (default, purple) ---------------------------------------
-    // Short bright bursts, 0.14 to 0.24 s. The contour is measured: a V-shaped
-    // dip to -1.7 semitones then a rise to +1.9 before falling back.
+    // Short yelps, median 0.18 s, at about 530 Hz. Each starts high, about +7
+    // semitones, drops, then lifts again; the pitch never holds (fast wobble
+    // 1.5 semitones). Harmonics fall steadily, about 4 dB each, above 500 Hz.
     {
         "squeal", "SQUEAL",
-        // Band split 62 / 36 / 1.8 percent: sqrt(36/62) = 0.76, sqrt(1.8/62) = 0.17.
-        {{ {  555.0f, 110.0f, 0.74f, 1.00f },   // source
-           { 1330.0f, 140.0f, 1.05f, 0.70f },   // F1
-           { 3340.0f, 300.0f, 0.35f, 0.40f },   // F2
-           { 6650.0f, 320.0f, 0.09f, 0.00f },
-           { 8990.0f, 400.0f, 0.04f, 0.00f } }},
-        0.0012f,   // tighter skirt: brighter
-        0.21f,     // noise: HNR +17.5 dB
-        0.006f,
-        0.08f,
+        {{ {  560.0f, 150.0f, 0.90f, 1.00f },   // source, on the fundamental
+           { 1050.0f, 250.0f, 1.50f, 0.60f },   // F1
+           { 1650.0f, 450.0f, 2.50f, 0.50f },   // F2
+           { 2700.0f, 250.0f, 0.90f, 0.00f },   // a nasal ring
+           { 6000.0f, 600.0f, 0.15f, 0.00f } }},
+        0.0025f,   // skirt
+        0.04f,     // noise: a trace only
+        0.004f,    // jitter: next to none, so the yelp sits on the played note
+        0.03f,
+        0.0f,      // no period doubling
         0.0f,
-        0.0f,
-        0.015f, 0.12f, 0.55f, 0.14f,
-        1.00f,
-        0.20f, 1.0f,
-        {{ +1.3f, -0.4f, -1.3f, -1.7f, -0.7f, +0.6f, +1.9f, 0.0f }}
+        0.006f, 0.06f, 0.65f, 0.05f,   // tight yelps, a short release so they stay apart
+        1.48f,     // trim: back to its old loudness
+        0.14f, 1.35f,
+        {{ +3.0f, 0.0f, -0.7f, -0.7f, -0.3f, 0.0f, 0.0f, 0.0f }},   // the yelp's dip, landing on the note
+        0.0f, 14.0f,    // no random drift: an exact pitch
+        0.0f, 12.5f,
+        0.020f,         // the noisy squeak above the harmonics in each yelp
+        0.60f,
+        0.25f,
+        0.22f           // vowel: brighter, toward "eh"
     },
     // ---- 2: GROAN (high, ice) ----------------------------------------------
-    // Sustained and very pure (HNR +25 to +31 dB) with a slow 280 ms swell. The
-    // narrow first formant is the entire identity of this sound.
+    // Long calls, about 1.8 s, near 620 Hz, scooping up 3.5 semitones into the
+    // note. Voiced dark and mellow (chosen by ear, 2026-10-06): the measured
+    // singing formant at 1120 Hz with a 34 Hz bandwidth was so narrow it played
+    // as a pure whistle and sounded cheap, so it is lower and wider here, the
+    // top is softer, the onset rounder, and a slow vibrato replaces the clip's
+    // fast 12.5 Hz flutter. A warm "ooh" moan.
     {
         "groan", "GROAN",
-        // Band split 31 / 67 percent: sqrt(67/31) = 1.47. The narrow F1 is the
-        // whole identity of this sound.
-        {{ {  620.0f,  55.0f, 0.70f, 1.00f },   // source
-           { 1120.0f,  34.0f, 1.90f, 0.90f },   // singing formant, Q about 33
-           { 2700.0f, 300.0f, 0.30f, 0.40f },
-           { 6000.0f, 400.0f, 0.04f, 0.00f },
-           { 8600.0f, 500.0f, 0.02f, 0.00f } }},
-        0.0030f,   // wide skirt: soft and rounded
-        0.10f,     // noise: HNR +28 dB
-        0.003f,
-        0.04f,
+        {{ {  620.0f, 100.0f, 1.60f, 1.00f },   // source, on the fundamental
+           { 1050.0f,  95.0f, 1.40f, 0.90f },   // singing formant: lower and wider, a moan not a whistle
+           { 1700.0f, 400.0f, 2.50f, 0.00f },
+           { 2800.0f, 400.0f, 0.60f, 0.00f },
+           { 6400.0f, 600.0f, 0.20f, 0.00f } }},
+        0.0050f,   // a wider skirt still: a soft, rounded onset
+        0.008f,    // noise: a trace only, the clip is clean between harmonics
+        0.002f,
+        0.02f,
         0.0f,
         0.0f,
-        0.280f, 0.40f, 0.85f, 0.35f,
+        0.620f, 0.40f, 0.55f, 0.35f,   // a slow swell to a peak near 460 ms
         1.00f,
-        0.50f, 1.0f,
-        {{ -1.2f, -0.6f, -0.2f, 0.0f, +0.1f, +0.15f, +0.2f, +0.2f }}
+        1.60f, 1.35f,
+        {{ -3.5f, -0.6f, 0.0f, 0.0f, 0.0f, +0.3f, +0.1f, 0.0f }},   // the scoop up, then on the note
+        0.06f, 8.0f,
+        0.22f, 5.0f,    // a gentle slow vibrato (the clip's 12.5 Hz flutter read as a toy whistle)
+        0.0f,
+        0.15f,
+        0.0f,
+        0.0f            // vowel: its own, as measured (a darker colour turned it into a whistle)
     }
 }};
 

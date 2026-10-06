@@ -21,8 +21,10 @@ private:
         std::vector<float> data;
         int index = 0;
     };
+    static constexpr int diffuserCount = 2;
     std::array<DelayLine, lineCount> lines;
-    float dampLeft = 0.0f, dampRight = 0.0f;
+    std::array<DelayLine, diffuserCount> diffusers;
+    std::array<float, lineCount> damp {};
     LinearSmoother wet;
 };
 }

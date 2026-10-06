@@ -55,6 +55,7 @@ set(PHOQER_ENGINE_SOURCES
     Source/DSP/BehaviourEngine.h
     Source/DSP/CheapSpace.cpp
     Source/DSP/CheapSpace.h
+    Source/DSP/Chorus.h
     Source/DSP/FofBank.cpp
     Source/DSP/FofBank.h
     Source/DSP/FofFormant.h

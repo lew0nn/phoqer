@@ -131,13 +131,16 @@ struct CoreSanity
             const auto& burpPreset = characterPreset(SealCharacter::burp);
             const auto& squealPreset = characterPreset(SealCharacter::squeal);
             const auto& groanPreset = characterPreset(SealCharacter::groan);
-            // Band 1 is the formant that defines each character: GROAN's narrow
-            // singing formant, and BURP's very narrow second formant at band 2.
+            // What defines each character: GROAN's singing formant (band 1), still
+            // resonant though no longer whistle-narrow (it is voiced dark and
+            // mellow now), and BURP's growl. BURP's clip spreads its energy evenly from 600 Hz
+            // to 2.5 kHz, so it is the period doubling and jitter, not a narrow
+            // formant, that must survive any edit.
             const auto groanQ = groanPreset.formants[1].frequency
                               / groanPreset.formants[1].bandwidth;
-            const auto burpQ = burpPreset.formants[2].frequency
-                             / burpPreset.formants[2].bandwidth;
-            result.vowelAnchorsDistinct = groanQ > 25.0f && burpQ > 40.0f;
+            const auto burpGrowls = burpPreset.subharmonicChance > 0.02f
+                                 && burpPreset.jitter > squealPreset.jitter;
+            result.vowelAnchorsDistinct = groanQ > 8.0f && burpGrowls;
 
             const CharacterPreset* presets[3] { &burpPreset, &squealPreset, &groanPreset };
             for (int first = 0; first < 3; ++first)

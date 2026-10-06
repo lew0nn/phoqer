@@ -7,6 +7,7 @@
 #include "../Core/CharacterPreset.h"
 #include "../DSP/BehaviourEngine.h"
 #include "../DSP/FofBank.h"
+#include "../DSP/SmoothedRandom.h"
 #include "VoicePersonality.h"
 
 namespace phoqer
@@ -46,6 +47,16 @@ private:
     BehaviourEngine behaviour;
     FofBank fofBank;
     AdsrEnvelope amplitudeEnvelope;
+    SmoothedRandom wobble;   // the unsteady pitch of a real call, per character
+    SmoothedRandom flutterDrift;   // keeps the flutter from sounding like an LFO
+    double flutterPhase = 0.0;
+    double thumpPhase = 0.0;      // the kick under the attack
+    double vibratoPhase = 0.0;    // TIDE's vibrato, above 0.4
+    float barkScale = 1.0f;       // BARK at note-on: how hard the punch and the kick hit
+    float polish = 0.0f;          // one-pole low-pass state: takes the digital fizz off the top
+    float polishCoefficient = 1.0f;
+    SmoothedRandom mutter;        // MURMUR's syllables
+    float muffled = 0.0f, muffleAmount = 0.0f, muffleCoefficient = 1.0f;
     LinearSmoother smoothBoom, smoothAir, smoothBark, smoothVowel, smoothTide, smoothDetune;
     VoiceTelemetry telemetry;
     const CharacterPreset* preset = &characterPreset(defaultSealCharacter);

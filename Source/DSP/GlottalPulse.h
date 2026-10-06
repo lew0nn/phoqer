@@ -33,17 +33,22 @@ public:
     void reset() noexcept
     {
         phase = 1.0;          // fire on the first sample of a note
+        periodScale = 1.0;
         alternate = false;
         doubling = false;
     }
 
-    Tick advance(double frequencyHz, const CharacterPreset& preset, Random& random) noexcept
+    // growl scales the preset's jitter and doubling (BARK); 1 leaves the preset as measured.
+    Tick advance(double frequencyHz, const CharacterPreset& preset, Random& random,
+                 float growl = 1.0f, float extraDoubling = 0.0f) noexcept
     {
         Tick tick;
         const auto safeFrequency = clamp(20.0, sampleRate * 0.45, frequencyHz);
         const auto periodSamples = sampleRate / safeFrequency;
 
-        phase += 1.0 / periodSamples;
+        // The phase runs at this period's own length, so jitter really moves
+        // the pitch from one period to the next instead of only the gain.
+        phase += 1.0 / (periodSamples * periodScale);
         if (phase < 1.0)
             return tick;
 
@@ -51,10 +56,11 @@ public:
         if (phase >= 1.0)       // a very high note should not queue up triggers
             phase = 0.0;
 
-        const auto jitter = 1.0 + static_cast<double>(preset.jitter) * random.bipolar();
-        tick.periodSamples = periodSamples * clamp(0.5, 1.5, jitter);
+        periodScale = clamp(0.5, 1.5, 1.0 + static_cast<double>(preset.jitter * growl) * random.bipolar());
+        tick.periodSamples = periodSamples * periodScale;
 
-        if (preset.subharmonicChance > 0.0f && random.nextFloat() < preset.subharmonicChance)
+        const auto doublingChance = preset.subharmonicChance * growl + extraDoubling;
+        if (doublingChance > 0.0f && random.nextFloat() < doublingChance)
             doubling = ! doubling;
 
         auto amplitude = 1.0f;
@@ -80,6 +86,7 @@ public:
 private:
     double sampleRate = 44100.0;
     double phase = 1.0;
+    double periodScale = 1.0;   // this period's length against the nominal one
     bool alternate = false;
     bool doubling = false;
 };

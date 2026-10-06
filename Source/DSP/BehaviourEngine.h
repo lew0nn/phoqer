@@ -22,9 +22,12 @@ class BehaviourEngine
 public:
     static constexpr BehaviourProfile callProfile() noexcept { return {}; }
 
+    // onsetPunch scales the bark spike at the start of a call: the measured
+    // calls swell in rather than click, so each character sets its own.
     void start(float newVelocity, const MacroState& newMacros,
-               const VoicePersonality& personality) noexcept
+               const VoicePersonality& personality, float onsetPunch = 1.0f) noexcept
     {
+        punch = onsetPunch;
         mode = newMacros.behaviorMode;
         velocity = newVelocity;
         voicePersonality = personality;
@@ -75,7 +78,7 @@ public:
 
         const auto attackGate = smoothStep(0.0f,
             0.0015f + 0.0035f * (1.0f - barkAmount), elapsed);
-        const auto barkTransient = (0.48f + 0.52f * barkAmount)
+        const auto barkTransient = punch * (0.48f + 0.52f * barkAmount)
             * std::exp(-elapsed / (0.032f + 0.030f * (1.0f - barkAmount)));
 
         // Finite chest-driven thrusts, not a continuous LFO. One note is a
@@ -165,6 +168,7 @@ private:
     float callDuration = 1.1f;
     float velocity = 0.0f;
     float barkAmount = 0.0f;
+    float punch = 1.0f;
     BehaviourMode mode = BehaviourMode::call;
     bool release = false;
 };

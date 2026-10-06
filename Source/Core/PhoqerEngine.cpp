@@ -26,6 +26,7 @@ void PhoqerEngine::prepare(double sampleRate, int maximumBlockSize, int)
     for (auto& voice : voices)
         voice.prepare(sampleRate, maximumBlockSize);
 
+    chorusStage.prepare(sampleRate);
     spaceStage.prepare(sampleRate, maximumBlockSize);
     outputStage.prepare(sampleRate);
     telemetry.setSampleRate(sampleRate);
@@ -37,6 +38,7 @@ void PhoqerEngine::reset()
     for (auto& voice : voices)
         voice.hardReset();
     pitchWheels.fill(8192);
+    chorusStage.reset();
     spaceStage.reset();
     outputStage.reset();
     activeCharacter = defaultSealCharacter;
@@ -178,6 +180,7 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
     }
     renderVoices(output, cursor, output.getNumSamples() - cursor);
 
+    chorusStage.process(output, macros.detune);
     spaceStage.process(output, macros.space);
     outputStage.setOutputDb(outputDecibels);
     outputStage.process(output);

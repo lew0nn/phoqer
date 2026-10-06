@@ -22,23 +22,31 @@ class FofBank
 public:
     void prepare(double sampleRate) noexcept;
     void reset() noexcept;
+    // The played note, so locked bands pick their harmonic from it and not from
+    // wherever the onset scoop happens to be.
+    void setNoteFrequency(double hz) noexcept { noteFrequency = hz; }
 
     float process(double frequencyHz, const CharacterPreset& preset,
                   const MacroState& macros, const VocalState& vocal,
                   Random& random) noexcept;
 
 private:
-    static FormantSpec shapeFormant(const FormantSpec& base, size_t index,
-                                    const MacroState& macros, const VocalState& vocal,
-                                    double fundamentalHz) noexcept;
+    FormantSpec shapeFormant(const FormantSpec& base, size_t index,
+                             const MacroState& macros, const VocalState& vocal,
+                             double fundamentalHz) noexcept;
 
     std::array<FofFormant, formantBandCount> formants {};
     GlottalPulse pulse;
+    // The harmonic each locked band sits on, chosen once per note (0: not yet).
+    std::array<double, formantBandCount> lockedHarmonic {};
+    double noteFrequency = 0.0;
 
     double sampleRate = 44100.0;
     double fundamentalPhase = 0.0;
     float noiseLowPass = 0.0f;
     float noiseBody = 0.0f;
     float previousNoise = 0.0f;
+    float noiseHigh = 0.0f;          // low-passed white, subtracted for the squeak
+    float highCoefficient = 0.0f;
 };
 }
