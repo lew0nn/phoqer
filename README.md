@@ -34,7 +34,7 @@ Every control is on screen:
 | BOOM | The seal's size: small, or big with more chest |
 | AIR | Breath, from none at all |
 | BARK | Attack and growl: a soft swell to a hard hit |
-| REVERB | Dry to a big dark cave |
+| SPACE | Reverb: dry to a big dark cave |
 | VOWEL | OO, OH, AH, EH, EE |
 | DETUNE | Width: one voice to a wide double |
 | TIDE | Expression: a straight note to scoops and vibrato |
