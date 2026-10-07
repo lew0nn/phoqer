@@ -103,7 +103,7 @@ inline constexpr std::array<CharacterPreset,
         0.08f,          // and only a trace of kick: more read as a thump
         0.0f            // vowel: its own rough "ah"
     },
-    // ---- 1: SQUEAL (default, purple) ---------------------------------------
+    // ---- 1: SQUEAL (purple) -----------------------------------------------
     // Short yelps, median 0.18 s, at about 530 Hz. Each starts high, about +7
     // semitones, drops, then lifts again; the pitch never holds (fast wobble
     // 1.5 semitones). Harmonics fall steadily, about 4 dB each, above 500 Hz.
