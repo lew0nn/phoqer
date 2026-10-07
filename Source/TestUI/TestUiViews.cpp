@@ -495,6 +495,58 @@ void PushButton98::paintButton(juce::Graphics& g, bool, bool down)
 namespace
 {
 constexpr float dialogWidth = 360.0f, dialogTitle = 20.0f, lineHeight = 16.0f, fieldHeight = 22.0f, buttonW = 76.0f, buttonH = 24.0f;
+constexpr float headingHeight = 26.0f, rowHeight = 21.0f, gapHeight = 8.0f;
+
+float heightOf(const juce::String& line) noexcept
+{
+    if (line.isEmpty()) return gapHeight;
+    if (line.startsWith("#")) return headingHeight;
+    if (line.containsChar('|')) return rowHeight;
+    return lineHeight;
+}
+
+// "[CTRL]+[Z]": each bracketed key a small raised Win98 keycap, anything between them plain text.
+void drawKeys(juce::Graphics& g, const juce::String& keys, float x, float y)
+{
+    const auto capFont = pixelFont(10.0f, true), joinFont = pixelFont(12.0f);
+    for (int i = 0; i < keys.length();)
+    {
+        if (keys[i] == '[')
+        {
+            const int end = keys.indexOfChar(i, ']');
+            if (end < 0) break;
+            const auto label = keys.substring(i + 1, end);
+            const float w = std::max(18.0f, juce::GlyphArrangement::getStringWidth(capFont, label) + 12.0f);
+            const juce::Rectangle<float> cap { x, y + 1.0f, w, rowHeight - 4.0f };
+            g.setColour(win98::face);
+            g.fillRect(cap);
+            bevel(g, cap, true);
+            drawText(g, label, cap.translated(0.0f, -1.0f), capFont, juce::Colours::black, juce::Justification::centred);
+            x += w + 3.0f;
+            i = end + 1;
+        }
+        else
+        {
+            const auto join = juce::String::charToString(keys[i]);
+            if (join != " ")
+            {
+                const float w = juce::GlyphArrangement::getStringWidth(joinFont, join) + 4.0f;
+                drawText(g, join, { x, y, w, rowHeight - 2.0f }, joinFont, juce::Colours::black, juce::Justification::centred);
+                x += w + 2.0f;
+            }
+            else
+                x += 3.0f;
+            ++i;
+        }
+    }
+}
+}
+
+float Dialog98::linesHeight() const
+{
+    float h = 0.0f;
+    for (const auto& line : spec.lines) h += heightOf(line);
+    return h;
 }
 
 Dialog98::Dialog98(Spec s) : spec(std::move(s))
@@ -542,9 +594,9 @@ juce::Rectangle<float> Dialog98::boxBounds() const
 {
     const bool hasField = spec.fieldLabel.isNotEmpty();
     const float body = std::max(spec.icon.isValid() ? static_cast<float>(spec.icon.getHeight()) * 2.0f : 0.0f,
-                                static_cast<float>(spec.lines.size()) * lineHeight + (hasField ? fieldHeight + 10.0f : 0.0f));
+                                linesHeight() + (hasField ? fieldHeight + 10.0f : 0.0f));
     const float h = 4.0f + dialogTitle + 16.0f + body + 18.0f + buttonH + 14.0f;
-    return juce::Rectangle<float>(dialogWidth, h).withCentre(getLocalBounds().toFloat().getCentre()).toNearestInt().toFloat();
+    return juce::Rectangle<float>(std::max(dialogWidth, spec.width), h).withCentre(getLocalBounds().toFloat().getCentre()).toNearestInt().toFloat();
 }
 
 void Dialog98::resized()
@@ -554,7 +606,7 @@ void Dialog98::resized()
     const float textX = box.getX() + 16.0f + (spec.icon.isValid() ? static_cast<float>(spec.icon.getWidth()) * 2.0f + 16.0f : 0.0f);
     if (spec.fieldLabel.isNotEmpty())
     {
-        const float y = box.getY() + 4.0f + dialogTitle + 16.0f + static_cast<float>(spec.lines.size()) * lineHeight;
+        const float y = box.getY() + 4.0f + dialogTitle + 16.0f + linesHeight();
         const float labelW = juce::GlyphArrangement::getStringWidth(pixelFont(12.0f), spec.fieldLabel) + 10.0f;
         field.setBounds(juce::Rectangle<float>(textX + labelW + 2.0f, y + 2.0f, box.getRight() - 18.0f - textX - labelW - 4.0f, fieldHeight - 4.0f).toNearestInt());
     }
@@ -589,13 +641,37 @@ void Dialog98::paint(juce::Graphics& g)
         g.drawImage(spec.icon, { x, y, iw, ih });
         x += iw + 16.0f;
     }
+    const auto ink = paletteFor(spec.character).accent.darker(0.35f);
+    const float right = box.getRight() - 16.0f;
     for (int i = 0; i < spec.lines.size(); ++i)
     {
         const auto& line = spec.lines[i];
-        const bool quiet = line.startsWith("~");               // "~" marks a secondary (grey) line
-        drawText(g, quiet ? line.substring(1) : line, { x, y, box.getRight() - 16.0f - x, lineHeight }, pixelFont(12.0f, i == 0 && ! quiet && spec.icon.isValid()),
-                 quiet ? win98::shadow : juce::Colours::black);
-        y += lineHeight;
+        if (line.startsWith("#"))                               // a section heading, then an etched rule to the edge
+        {
+            const auto text = line.substring(1);
+            const auto font = pixelFont(12.0f, true);
+            const float ty = y + 6.0f, tw = juce::GlyphArrangement::getStringWidth(font, text);
+            drawText(g, text, { x, ty, tw + 2.0f, lineHeight }, font, ink);
+            const float ry = std::round(ty + lineHeight * 0.5f);
+            g.setColour(win98::shadow); g.fillRect(x + tw + 8.0f, ry, right - x - tw - 8.0f, 1.0f);
+            g.setColour(win98::light);  g.fillRect(x + tw + 8.0f, ry + 1.0f, right - x - tw - 8.0f, 1.0f);
+        }
+        else if (line.containsChar('|'))                        // two columns: a name or keys, then what it does
+        {
+            const auto left = line.upToFirstOccurrenceOf("|", false, false), text = line.fromFirstOccurrenceOf("|", false, false);
+            if (left.startsWith("["))
+                drawKeys(g, left, x, y);
+            else
+                drawText(g, left, { x, y + 2.0f, spec.labelWidth - 6.0f, lineHeight }, pixelFont(12.0f, true), ink);
+            drawText(g, text, { x + spec.labelWidth, y + 2.0f, right - x - spec.labelWidth, lineHeight }, pixelFont(12.0f), juce::Colours::black);
+        }
+        else if (line.isNotEmpty())
+        {
+            const bool quiet = line.startsWith("~");            // "~" marks a secondary (grey) line
+            drawText(g, quiet ? line.substring(1) : line, { x, y, right - x, lineHeight }, pixelFont(12.0f, i == 0 && ! quiet && spec.icon.isValid()),
+                     quiet ? win98::shadow : juce::Colours::black);
+        }
+        y += heightOf(line);
     }
     if (spec.fieldLabel.isNotEmpty())
     {

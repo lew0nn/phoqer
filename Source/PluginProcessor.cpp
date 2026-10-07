@@ -139,6 +139,15 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     juce::ScopedNoDenormals noDenormals;
     keyboardState.processNextMidiBuffer(midiMessages, 0, buffer.getNumSamples(), true);
     translateMidi(midiMessages);
+    if (panicRequested.exchange(false, std::memory_order_relaxed))
+        for (int channel = 0; channel < 16 && midiEventCount < static_cast<int>(midiEvents.size()); ++channel)
+        {
+            phoqer::MidiEvent off;
+            off.type = phoqer::MidiEventType::allNotesOff;
+            off.channel = channel;
+            off.sampleOffset = 0;
+            midiEvents[static_cast<size_t>(midiEventCount++)] = off;
+        }
 
     phoqer::MacroState macros;
     macros.boom = boom->load(std::memory_order_relaxed);

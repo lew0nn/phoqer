@@ -4,6 +4,8 @@
 #include "TestUiRecorder.h"
 #include "TestUiSettings.h"
 
+#include <PhoqerTestUIAssets.h>
+
 namespace phoqer::testui
 {
 namespace
@@ -527,6 +529,13 @@ juce::PopupMenu TestUiView::buildMenu(int index)
             m.addSeparator();
             addItem(m, "RESET ALL KNOBS", id++, true, false, {}, [this] { resetKnobs(); });
             addItem(m, "RANDOMIZE KNOBS", id++, true, false, {}, [this] { randomizeKnobs(); });
+            addItem(m, "REVERT TO PRESET", id++, presets.currentIndex() >= 0 && presets.isDirty(), false, {},
+                    [this] { loadPreset(presets.currentIndex()); });
+            m.addSeparator();
+            addItem(m, "COPY SETTINGS", id++, true, false, {}, [this] { copySettings(); });
+            addItem(m, "PASTE SETTINGS", id++, true, false, {}, [this] { pasteSettings(); });
+            m.addSeparator();
+            addItem(m, "PANIC (ALL NOTES OFF)", id++, true, false, {}, [this] { panic(); });
             m.addSeparator();
             addItem(m, "AUDIO/MIDI SETUP...", id++, windowControls.audioSettings != nullptr, false, {},
                     [this] { if (windowControls.audioSettings) windowControls.audioSettings(); });
@@ -559,6 +568,13 @@ juce::PopupMenu TestUiView::buildMenu(int index)
             break;
 
         case 3:    // HELP
+            addItem(m, "KEYBOARD SHORTCUTS...", id++, true, false, {}, [this] { showShortcuts(); });
+            addItem(m, "CONTROLS GUIDE...", id++, true, false, {}, [this] { showGuide(); });
+            m.addSeparator();
+            addItem(m, "VISIT GITHUB...", id++, true, false, {},
+                    [] { juce::URL("https://github.com/lew0nn/phoqer").launchInDefaultBrowser(); });
+            addItem(m, "LICENCES...", id++, true, false, {}, [this] { showLicences(); });
+            m.addSeparator();
             addItem(m, "ABOUT PHOQER...", id++, true, false, {}, [this] { showAbout(); });
             break;
 
@@ -675,6 +691,133 @@ void TestUiView::showAbout()
     spec.icon = loadAssetImage("phoqer-app-icon-32.png");
     spec.lines = { "PHOQER", "VERSION " JucePlugin_VersionString, "", "~A SYNTHETIC SEAL VOICE", "~LWNX DSP" };
     showDialog(std::move(spec));
+}
+
+void TestUiView::showShortcuts()
+{
+    Dialog98::Spec spec;
+    spec.title = "KEYBOARD SHORTCUTS";
+    spec.width = 560.0f;
+    spec.labelWidth = 190.0f;
+    spec.lines = { "#PLAY",
+                   "KEYS.EXE|YOUR KEYBOARD IS A PIANO: PRESS THE LETTER ON A KEY",
+                   "[Z] [X]|ONE OCTAVE DOWN, ONE UP",
+                   "[C] [V]|SOFTER, HARDER",
+                   "#EDIT",
+                   "[CTRL]+[Z]|UNDO",
+                   "[CTRL]+[Y]|REDO",
+                   "[CTRL]+[S]|SAVE A PRESET",
+                   "[CTRL]+[O]|OPEN A PRESET",
+                   "[ALT]+[E] [V] [P] [H]|OPEN A MENU" };
+    showDialog(std::move(spec));
+}
+
+void TestUiView::showGuide()
+{
+    Dialog98::Spec spec;
+    spec.title = "CONTROLS GUIDE";
+    spec.width = 560.0f;
+    spec.labelWidth = 110.0f;
+    spec.lines = { "#KNOBS",
+                   "BOOM|THE SEAL'S SIZE: SMALL, OR BIG WITH MORE CHEST",
+                   "AIR|BREATH, FROM NONE AT ALL",
+                   "BARK|ATTACK AND GROWL: A SOFT SWELL TO A HARD HIT",
+                   "SPACE|REVERB: DRY TO A BIG DARK CAVE",
+                   "VOWEL|OO, OH, AH, EH, EE",
+                   "DETUNE|WIDTH: ONE VOICE TO A WIDE DOUBLE",
+                   "TIDE|EXPRESSION: A STRAIGHT NOTE TO SCOOPS AND VIBRATO",
+                   "OUTPUT|THE LEVEL",
+                   "#MODES",
+                   "CALL|ONE CALL PER NOTE",
+                   "HONK|NASAL HONKS WHILE THE KEY IS HELD",
+                   "BARK|HARD BARKS WHILE THE KEY IS HELD",
+                   "WAIL|A LONG GLIDE UP AND BACK",
+                   "MURMUR|A MUTTERED, CLOSED-MOUTH HUM" };
+    showDialog(std::move(spec));
+}
+
+void TestUiView::showLicences()
+{
+    Dialog98::Spec spec;
+    spec.title = "LICENCES";
+    spec.width = 520.0f;
+    spec.labelWidth = 240.0f;
+    spec.lines = { "#PHOQER IS FREE SOFTWARE",
+                   "PHOQER|GNU AGPL 3.0 ONLY",
+                   "#BUILT WITH",
+                   "JUCE|AGPL 3.0",
+                   "VST3 SDK|GPL 3.0",
+                   "SILKSCREEN, PRESS START 2P|SIL OFL 1.1",
+                   "ROBOTO|APACHE 2.0",
+                   "",
+                   "~OPEN TEXTS SHOWS THE FULL LICENCES" };
+    spec.buttons = { "OPEN TEXTS", "OK" };
+    spec.onClose = [](int button, const juce::String&)
+    {
+        if (button != 0) return;
+        // The texts are built into the plugin, so they open even where no files sit beside it.
+        const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("PHOQER-Licenses");
+        folder.createDirectory();
+        for (const auto* file : { "LICENSE", "NOTICE.md", "THIRD_PARTY_NOTICES.md", "OFL-Silkscreen.txt",
+                                  "OFL-PressStart2P.txt", "Apache-2.0.txt", "Roboto-NOTICE.txt" })
+            for (int i = 0; i < PhoqerTestUIAssets::namedResourceListSize; ++i)
+            {
+                const auto* name = PhoqerTestUIAssets::namedResourceList[i];
+                if (juce::String(PhoqerTestUIAssets::getNamedResourceOriginalFilename(name)) != file) continue;
+                int size = 0;
+                const auto* data = PhoqerTestUIAssets::getNamedResource(name, size);
+                folder.getChildFile(file).replaceWithData(data, static_cast<size_t>(size));
+            }
+        folder.startAsProcess();
+    };
+    showDialog(std::move(spec));
+}
+
+void TestUiView::panic()
+{
+    releaseQwertyNotes();
+    processor.getKeyboardState().allNotesOff(0);
+    processor.panic();
+}
+
+// A sound as one line of text, to paste into a message and back: "PHOQER character=0 behavior=2 boom=0.750 ..."
+void TestUiView::copySettings()
+{
+    juce::String text = "PHOQER";
+    for (const auto& id : PresetLibrary::parameterIds())
+        if (auto* v = processor.getParameters().getRawParameterValue(id))
+            text << " " << id << "=" << juce::String(v->load(), 3);
+    juce::SystemClipboard::copyTextToClipboard(text);
+    showMessage("COPY SETTINGS", { "THE SOUND IS ON THE CLIPBOARD.", "~PASTE IT IN A MESSAGE, OR BACK HERE" });
+}
+
+void TestUiView::pasteSettings()
+{
+    const auto tokens = juce::StringArray::fromTokens(juce::SystemClipboard::getTextFromClipboard().trim(), " \t\r\n", {});
+    const auto ids = PresetLibrary::parameterIds();
+    std::vector<std::pair<juce::String, float>> values;
+    if (tokens.size() > 1 && tokens[0] == "PHOQER")
+        for (int i = 1; i < tokens.size(); ++i)
+        {
+            const auto key = tokens[i].upToFirstOccurrenceOf("=", false, false);
+            if (ids.contains(key) && tokens[i].containsChar('='))
+                values.emplace_back(key, tokens[i].fromFirstOccurrenceOf("=", false, false).getFloatValue());
+        }
+    if (values.empty())
+    {
+        showMessage("PASTE SETTINGS", { "NO PHOQER SOUND ON THE CLIPBOARD.", "~COPY ONE WITH EDIT > COPY SETTINGS" });
+        return;
+    }
+    history.performAsOne([this, &values]
+    {
+        for (const auto& [id, value] : values)
+        {
+            auto& p = parameterFor(processor.getParameters(), id.toRawUTF8());
+            p.beginChangeGesture();
+            p.setValueNotifyingHost(p.convertTo0to1(value));
+            p.endChangeGesture();
+        }
+    });
 }
 
 void TestUiView::showSavePreset()

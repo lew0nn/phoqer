@@ -77,6 +77,12 @@ private:
     void loadPreset(int index);
     void toggleKeys();
     void showAbout();
+    void showShortcuts();
+    void showGuide();
+    void showLicences();
+    void panic();
+    void copySettings();
+    void pasteSettings();
     void showSavePreset();
     void savePresetAs(const juce::String& name);
     void showOpenPreset();

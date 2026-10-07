@@ -24,7 +24,14 @@ juce_add_binary_data(PHOQER_UIAssets
         Resources/UI/Ice/ice_seal.png
         Resources/UI/Red/red_seal.png
         resources/branding/app/phoqer-app-icon-256.png
-        resources/branding/app/phoqer-app-icon-32.png)
+        resources/branding/app/phoqer-app-icon-32.png
+        LICENSE
+        NOTICE.md
+        THIRD_PARTY_NOTICES.md
+        LICENSES/Apache-2.0.txt
+        LICENSES/Roboto-NOTICE.txt
+        resources/ui/TestUI/OFL-Silkscreen.txt
+        resources/ui/TestUI/OFL-PressStart2P.txt)
 
 # App icon. Windows takes a hand-built multi-size .ico (added below) so every size is drawn for its
 # size; elsewhere JUCE builds the icon from the 32 px and 256 px PNGs.

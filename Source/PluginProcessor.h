@@ -46,6 +46,9 @@ public:
 
     // Notes played from the editor's on-screen piano and computer keyboard; merged into each block.
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
+    // EDIT > PANIC: every voice on every channel is released at the start of the next block.
+    void panic() noexcept { panicRequested.store(true, std::memory_order_relaxed); }
+
     // Records the output to WAV for the editor's REC button.
     phoqer::testui::Recorder& getRecorder() noexcept { return recorder; }
 
@@ -58,6 +61,7 @@ private:
     std::array<phoqer::MidiEvent, 256> midiEvents {};
     int midiEventCount = 0;
     juce::MidiKeyboardState keyboardState;
+    std::atomic<bool> panicRequested { false };
     phoqer::testui::Recorder recorder;
 
     juce::AudioProcessorValueTreeState parameters;

@@ -206,9 +206,13 @@ public:
         juce::StringArray buttons { "OK" };
         int character = 0;
         bool closable = true;                              // false: no X, Escape does nothing
+        float width = 360.0f;                              // wider for long lines (guide, shortcuts)
+        float labelWidth = 150.0f;                         // the left column of "NAME|text" lines
         std::function<void(int button, const juce::String& field)> onClose;
     };
 
+    // Lines: plain text; "~text" in grey; "#HEADING" a section heading with an etched rule;
+    // "NAME|text" two columns, the name in the voice colour; "[CTRL]+[Z]|text" the keys as keycaps.
     explicit Dialog98(Spec);
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -218,6 +222,7 @@ public:
 
 private:
     void finish(int button);
+    float linesHeight() const;
 
     Spec spec;
     juce::TextEditor field;
