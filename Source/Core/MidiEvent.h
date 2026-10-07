@@ -2,7 +2,8 @@
 
 namespace phoqer
 {
-enum class MidiEventType { noteOn, noteOff, pitchWheel, allNotesOff };
+// sustainPedal: value 1 down, 0 up (CC 64). modWheel: value 0..1 (CC 1).
+enum class MidiEventType { noteOn, noteOff, pitchWheel, allNotesOff, sustainPedal, modWheel };
 
 struct MidiEvent
 {

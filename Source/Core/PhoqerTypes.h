@@ -37,6 +37,7 @@ struct MacroState
     float detune = 0.0f;
     SealCharacter character = defaultSealCharacter;
     BehaviourMode behaviorMode = BehaviourMode::call;
+    float tempoBpm = 120.0f;     // the host's tempo; HONK, BARK and WAIL keep time with it
 };
 
 struct VocalState

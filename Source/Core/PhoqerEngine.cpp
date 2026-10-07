@@ -38,6 +38,9 @@ void PhoqerEngine::reset()
     for (auto& voice : voices)
         voice.hardReset();
     pitchWheels.fill(8192);
+    sustainDown.fill(false);
+    sustained.fill(false);
+    modWheel = 0.0f;
     chorusStage.reset();
     spaceStage.reset();
     outputStage.reset();
@@ -97,15 +100,14 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
         {
             if (event.value <= 0.0f)
             {
-                for (auto& voice : voices)
-                    if (voice.matchesNote(channel, event.note))
-                        voice.stopNote(true);
+                releaseNote(channel, event.note);
                 break;
             }
 
             telemetry.beginCall();
             if (auto* voice = findVoiceForNoteOn())
             {
+                sustained[static_cast<size_t>(voice - voices.data())] = false;
                 if (voice->isActive())
                     voice->stopNote(false);
                 voice->startNote(channel, clamp(0, 127, event.note),
@@ -114,9 +116,7 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
             break;
         }
         case MidiEventType::noteOff:
-            for (auto& voice : voices)
-                if (voice.matchesNote(channel, event.note))
-                    voice.stopNote(true);
+            releaseNote(channel, event.note);
             break;
         case MidiEventType::pitchWheel:
         {
@@ -129,11 +129,38 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
             break;
         }
         case MidiEventType::allNotesOff:
-            for (auto& voice : voices)
-                if (voice.matchesChannel(channel))
-                    voice.stopNote(true);
+            for (size_t i = 0; i < voices.size(); ++i)
+                if (voices[i].matchesChannel(channel))
+                {
+                    voices[i].stopNote(true);
+                    sustained[i] = false;
+                }
+            break;
+        case MidiEventType::sustainPedal:
+            sustainDown[static_cast<size_t>(channel)] = event.value >= 0.5f;
+            if (! sustainDown[static_cast<size_t>(channel)])      // pedal up: let go of what it was holding
+                for (size_t i = 0; i < voices.size(); ++i)
+                    if (sustained[i] && voices[i].matchesChannel(channel))
+                    {
+                        voices[i].stopNote(true);
+                        sustained[i] = false;
+                    }
+            break;
+        case MidiEventType::modWheel:
+            modWheel = clamp(0.0f, 1.0f, event.value);
             break;
     }
+}
+
+// A key comes up: the voice is released, unless the sustain pedal is down, which holds it.
+void PhoqerEngine::releaseNote(int channel, int note) noexcept
+{
+    for (size_t i = 0; i < voices.size(); ++i)
+        if (voices[i].matchesNote(channel, note))
+        {
+            if (sustainDown[static_cast<size_t>(channel)]) sustained[i] = true;
+            else voices[i].stopNote(true);
+        }
 }
 
 void PhoqerEngine::renderVoices(AudioBuffer& output, int startSample, int numSamples)
@@ -162,10 +189,12 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
         clamp(0.0f, 1.0f, inputMacros.bark),
         clamp(0.0f, 1.0f, inputMacros.vowel),
         clamp(0.0f, 1.0f, inputMacros.space),
-        clamp(0.0f, 1.0f, inputMacros.tide),
+        // the mod wheel adds expression on top of the TIDE knob, all the way to full
+        clamp(0.0f, 1.0f, inputMacros.tide + modWheel * (1.0f - inputMacros.tide)),
         clamp(0.0f, 1.0f, inputMacros.detune),
         activeCharacter,
-        inputMacros.behaviorMode
+        inputMacros.behaviorMode,
+        clamp(20.0f, 400.0f, inputMacros.tempoBpm)
     };
     for (auto& voice : voices)
         voice.setMacros(macros);

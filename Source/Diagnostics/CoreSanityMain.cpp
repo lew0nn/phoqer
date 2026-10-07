@@ -20,6 +20,7 @@ int main()
               << " telemetry=" << result.telemetryNormalized
               << " behaviors=" << result.behaviorModesDistinct
               << " distinct=" << result.charactersDistinct
-              << " sustain=" << result.sustainHolds << std::endl;
+              << " sustain=" << result.sustainHolds
+              << " pedal=" << result.pedalHolds << std::endl;
     return result.passed() ? 0 : 1;
 }

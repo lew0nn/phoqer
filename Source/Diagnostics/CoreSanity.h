@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Core/PhoqerEngine.h"
+#include <algorithm>
 #include "../Voice/VoicePersonality.h"
 
 namespace phoqer
@@ -25,6 +26,7 @@ struct CoreSanity
         bool behaviorModesDistinct = false;
         bool charactersDistinct = false;
         bool sustainHolds = false;
+        bool pedalHolds = false;
 
         bool passed() const noexcept
         {
@@ -32,7 +34,7 @@ struct CoreSanity
                 && extremesBounded && formantSweepFinite
                 && vowelAnchorsDistinct && callEvolutionCoherent && extremeCombinationsDistinct
                 && repeatedNotesVary && reprepareFinite && personalitiesVary && telemetryNormalized
-                && behaviorModesDistinct && charactersDistinct && sustainHolds;
+                && behaviorModesDistinct && charactersDistinct && sustainHolds && pedalHolds;
         }
     };
 
@@ -364,6 +366,35 @@ struct CoreSanity
                 }
             }
             result.sustainHolds = lateMagnitude > 0.01f && tailMagnitude < 1.0e-4f;
+        }
+
+        // The sustain pedal holds a released key until the pedal comes up.
+        {
+            constexpr int pedalBlockSize = 512;
+            constexpr int blocksPerSecond = 48000 / pedalBlockSize;
+            engine.prepare(48000.0, pedalBlockSize, 2);
+            AudioBuffer pedalBuffer(2, pedalBlockSize);
+            const MidiEvent pressed[] { { MidiEventType::sustainPedal, 0, 0, 60, 1.0f },
+                                        { MidiEventType::noteOn, 0, 0, 57, 0.85f } };
+            const MidiEvent keyUp { MidiEventType::noteOff, 0, 0, 57, 0.0f };
+            const MidiEvent pedalUp { MidiEventType::sustainPedal, 0, 0, 60, 0.0f };
+            const auto loudestOf = [&](const MidiEvent* event, int seconds)
+            {
+                float loudest = 0.0f;
+                for (int block = 0; block < blocksPerSecond * seconds; ++block)
+                {
+                    engine.process(pedalBuffer, block == 0 ? event : nullptr, block == 0 && event != nullptr ? 1 : 0,
+                                   MacroState {}, 0.0f);
+                    if (block >= blocksPerSecond * (seconds - 1))     // only the last second counts
+                        loudest = std::max(loudest, pedalBuffer.getMagnitude(0, pedalBlockSize));
+                }
+                return loudest;
+            };
+            engine.process(pedalBuffer, pressed, 2, MacroState {}, 0.0f);
+            loudestOf(nullptr, 1);
+            const auto heldByPedal = loudestOf(&keyUp, 2);       // key up, pedal still down: sounding
+            const auto afterPedal = loudestOf(&pedalUp, 2);      // pedal up: gone
+            result.pedalHolds = heldByPedal > 0.01f && afterPedal < 1.0e-4f;
         }
 
         result.telemetryNormalized = faceIsNormalized(engine.getTelemetry().readFace());

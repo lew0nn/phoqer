@@ -15,15 +15,16 @@ struct ModeMotion
     float muffle = 0.0f;    // 0 open, 1 a closed-mouth hum (MURMUR)
 };
 
-ModeMotion modeMotion(BehaviourMode mode, float t) noexcept
+ModeMotion modeMotion(BehaviourMode mode, float t, float bpm) noexcept
 {
     ModeMotion m;
+    const auto beatHz = bpm / 60.0f;      // the modes keep time with the song
     const auto cycle = [t](float rateHz) { const auto p = t * rateHz; return (p - std::floor(p)) / rateHz; };
     switch (mode)
     {
-        case BehaviourMode::honk:      // separate honks, four a second: a nasal hit that drops away to near silence
+        case BehaviourMode::honk:      // separate honks on 1/8 notes: a nasal hit that drops away to near silence
         {
-            const auto c = cycle(4.0f);
+            const auto c = cycle(beatHz * 2.0f);
             const auto hit = std::exp(-c / 0.07f) * std::min(1.0f, c / 0.006f);
             m.gain = 0.05f + 0.95f * hit;
             m.semitones = 2.5f * std::exp(-c / 0.04f);
@@ -32,9 +33,9 @@ ModeMotion modeMotion(BehaviourMode mode, float t) noexcept
             m.muffle = 0.45f;                                 // half-closed: a nasal honk, not a bark
             break;
         }
-        case BehaviourMode::bark:      // separate hard barks, two and a half a second, silence between
+        case BehaviourMode::bark:      // separate hard barks on 1/4 notes, silence between
         {
-            const auto c = cycle(2.5f);
+            const auto c = cycle(beatHz);
             // a fast rise, a full 60 ms, then the fall: a bark, not a punch
             const auto open = std::min(1.0f, c / 0.006f) * (c < 0.06f ? 1.0f : std::exp(-(c - 0.06f) / 0.08f));
             const auto shut = 1.0f - std::min(1.0f, std::max(0.0f, (c - 0.16f) / 0.04f));
@@ -44,9 +45,9 @@ ModeMotion modeMotion(BehaviourMode mode, float t) noexcept
             m.vowel = 0.15f;                                  // wide open: a bark, not a honk
             break;
         }
-        case BehaviourMode::wail:      // a long glide: up two and a half semitones and back, every 3.2 s
+        case BehaviourMode::wail:      // a long glide: up two and a half semitones and back, over two bars
         {
-            const auto s = std::sin(twoPi<float> * t / 3.2f);
+            const auto s = std::sin(twoPi<float> * t * beatHz / 8.0f);
             m.semitones = 2.4f * s;
             m.vowel = 0.35f * std::max(0.0f, s);              // the mouth opens as it climbs
             m.gain = 0.90f + 0.25f * std::max(0.0f, s);       // and it sings out at the top
@@ -212,7 +213,7 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
         const MacroState sampleMacros {
             smoothBoom.getNextValue(), smoothAir.getNextValue(), smoothBark.getNextValue(),
             smoothVowel.getNextValue(), macros.space, smoothTide.getNextValue(),
-            smoothDetune.getNextValue(), macros.character, macros.behaviorMode
+            smoothDetune.getNextValue(), macros.character, macros.behaviorMode, macros.tempoBpm
         };
 
         const auto envelope = amplitudeEnvelope.getNextSample();
@@ -255,7 +256,7 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
         }
 
         // The behaviour mode keeps moving the held note (see modeMotion).
-        const auto motion = modeMotion(sampleMacros.behaviorMode, noteAgeSeconds);
+        const auto motion = modeMotion(sampleMacros.behaviorMode, noteAgeSeconds, sampleMacros.tempoBpm);
         vocal.vowelMorph = clamp(0.0f, 1.0f, vocal.vowelMorph + motion.vowel + preset->vowelOffset);
         auto modeGain = motion.gain;
         if (motion.muffle > 0.0f)    // MURMUR mutters: random syllables, about seven a second

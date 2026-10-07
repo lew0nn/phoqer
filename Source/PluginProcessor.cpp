@@ -72,6 +72,7 @@ void PhoqerAudioProcessor::prepareToPlay(double sampleRate, int maximumExpectedS
 {
     engine.prepare(sampleRate, maximumExpectedSamplesPerBlock,
                    std::max(1, getTotalNumOutputChannels()));
+    setLatencySamples(engine.getLatencySamples());     // the safety limiter looks 2 ms ahead
 }
 
 void PhoqerAudioProcessor::releaseResources()
@@ -120,6 +121,16 @@ void PhoqerAudioProcessor::translateMidi(const juce::MidiBuffer& midiMessages) n
                                          / 8192.0f,
                                      -1.0f, 1.0f);
         }
+        else if (message.isSustainPedalOn() || message.isSustainPedalOff())
+        {
+            event.type = phoqer::MidiEventType::sustainPedal;
+            event.value = message.isSustainPedalOn() ? 1.0f : 0.0f;
+        }
+        else if (message.isControllerOfType(1))
+        {
+            event.type = phoqer::MidiEventType::modWheel;
+            event.value = static_cast<float>(message.getControllerValue()) / 127.0f;
+        }
         else if (message.isAllNotesOff() || message.isAllSoundOff())
         {
             event.type = phoqer::MidiEventType::allNotesOff;
@@ -161,6 +172,10 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         std::clamp(static_cast<int>(std::lround(character->load(std::memory_order_relaxed))), 0, 2));
     macros.behaviorMode = static_cast<phoqer::BehaviourMode>(
         std::clamp(static_cast<int>(std::lround(behavior->load(std::memory_order_relaxed))), 0, 4));
+    if (auto* head = getPlayHead())                       // the song's tempo; the standalone app has none: 120
+        if (const auto position = head->getPosition())
+            if (const auto bpm = position->getBpm())
+                macros.tempoBpm = static_cast<float>(*bpm);
 
     phoqer::AudioBuffer outputBuffer(const_cast<float**>(buffer.getArrayOfWritePointers()),
                                      buffer.getNumChannels(),
