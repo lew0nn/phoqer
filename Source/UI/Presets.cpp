@@ -12,10 +12,22 @@ const juce::Identifier presetProperty { "testUiPreset" };     // kept: saved son
 // sound knobs. Names start with the voice: BRP, SQL, GRN.
 struct BuiltIn { const char* name; int voice, mode; float boom, air, bark, space, vowel, detune, tide; };
 constexpr BuiltIn builtIns[] {
-    { "INIT",            0, 0, 0.50f, 0.25f, 0.35f, 0.00f, 0.35f, 0.00f, 0.25f },
-    { "BRP FISH DEMAND", 0, 2, 0.75f, 0.15f, 0.80f, 0.20f, 0.30f, 0.10f, 0.20f },
-    { "SQL BEACH SOLO",  1, 3, 0.25f, 0.50f, 0.20f, 0.40f, 0.70f, 0.12f, 0.45f },
-    { "GRN TAX AUDIT",   2, 4, 0.60f, 0.25f, 0.15f, 0.35f, 0.25f, 0.20f, 0.60f },
+    { "INIT",             0, 0, 0.50f, 0.25f, 0.35f, 0.00f, 0.35f, 0.00f, 0.25f },
+    { "BRP FISH DEMAND",  0, 2, 0.75f, 0.15f, 0.80f, 0.20f, 0.30f, 0.10f, 0.20f },
+    { "BRP HARBOUR BASS", 0, 0, 0.80f, 0.05f, 0.45f, 0.15f, 0.20f, 0.00f, 0.15f },
+    { "BRP FOGHORN",      0, 3, 0.90f, 0.10f, 0.20f, 0.50f, 0.15f, 0.25f, 0.30f },
+    { "BRP GRUMBLE",      0, 4, 0.65f, 0.10f, 0.30f, 0.10f, 0.25f, 0.10f, 0.35f },
+    { "BRP PIER RIOT",    0, 1, 0.55f, 0.20f, 0.90f, 0.25f, 0.50f, 0.35f, 0.40f },
+    { "SQL BEACH SOLO",   1, 3, 0.25f, 0.50f, 0.20f, 0.40f, 0.70f, 0.12f, 0.45f },
+    { "SQL PUP",          1, 0, 0.15f, 0.30f, 0.30f, 0.15f, 0.80f, 0.00f, 0.50f },
+    { "SQL KLAXON",       1, 1, 0.35f, 0.10f, 0.70f, 0.10f, 0.60f, 0.15f, 0.20f },
+    { "SQL PUP CHOIR",    1, 0, 0.30f, 0.35f, 0.20f, 0.55f, 0.55f, 0.80f, 0.55f },
+    { "SQL GOSSIP",       1, 4, 0.30f, 0.20f, 0.40f, 0.20f, 0.65f, 0.10f, 0.60f },
+    { "GRN TAX AUDIT",    2, 4, 0.60f, 0.25f, 0.15f, 0.35f, 0.25f, 0.20f, 0.60f },
+    { "GRN NIGHT TIDE",   2, 0, 0.55f, 0.20f, 0.10f, 0.60f, 0.30f, 0.20f, 0.50f },
+    { "GRN SIREN SONG",   2, 3, 0.45f, 0.15f, 0.15f, 0.70f, 0.40f, 0.30f, 0.70f },
+    { "GRN ICE CAVE",     2, 0, 0.70f, 0.30f, 0.05f, 0.90f, 0.20f, 0.45f, 0.35f },
+    { "GRN HONK SHOW",    2, 1, 0.50f, 0.10f, 0.60f, 0.25f, 0.45f, 0.10f, 0.30f },
 };
 
 bool same(float a, float b) { return std::abs(a - b) < 0.0015f; }
