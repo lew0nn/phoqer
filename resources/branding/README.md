@@ -16,7 +16,7 @@ It pairs with the slanted **Outrun** PHOQER wordmark.
 | `phoqer-app-icon-32.png`, `phoqer-app-icon-256.png` | `ICON_SMALL` / `ICON_BIG` for the macOS and Linux builds (see `CMakeLists.txt`). |
 | `phoqer-logo-<voice>.png` | Large icon + wordmark lockup, for docs and README use. |
 
-The Test UI draws the small icon live from `Source/TestUI/TestUiLogo.cpp`, recoloured per voice; next
+The editor draws the small icon live from `Source/UI/Logo.cpp`, recoloured per voice; next
 to the wordmark in the header it is shown without the coloured frame. Keep it in step with the script.
 
 ## Website: `website/`

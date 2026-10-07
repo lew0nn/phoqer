@@ -14,15 +14,15 @@ endif()
 add_subdirectory(vendor/JUCE)
 
 juce_add_binary_data(PHOQER_UIAssets
-    HEADER_NAME PhoqerTestUIAssets.h NAMESPACE PhoqerTestUIAssets
+    HEADER_NAME PhoqerUIAssets.h NAMESPACE PhoqerUIAssets
     SOURCES
-        Resources/UI/TestUI/Silkscreen-Regular.ttf
-        Resources/UI/TestUI/Silkscreen-Bold.ttf
-        Resources/UI/TestUI/PressStart2P-Regular.ttf
-        Resources/UI/Shared/Roboto-Regular.ttf
-        Resources/UI/Purple/purple_seal.png
-        Resources/UI/Ice/ice_seal.png
-        Resources/UI/Red/red_seal.png
+        resources/ui/Fonts/Silkscreen-Regular.ttf
+        resources/ui/Fonts/Silkscreen-Bold.ttf
+        resources/ui/Fonts/PressStart2P-Regular.ttf
+        resources/ui/Shared/Roboto-Regular.ttf
+        resources/ui/Purple/purple_seal.png
+        resources/ui/Ice/ice_seal.png
+        resources/ui/Red/red_seal.png
         resources/branding/app/phoqer-app-icon-256.png
         resources/branding/app/phoqer-app-icon-32.png
         LICENSE
@@ -30,8 +30,8 @@ juce_add_binary_data(PHOQER_UIAssets
         THIRD_PARTY_NOTICES.md
         LICENSES/Apache-2.0.txt
         LICENSES/Roboto-NOTICE.txt
-        resources/ui/TestUI/OFL-Silkscreen.txt
-        resources/ui/TestUI/OFL-PressStart2P.txt)
+        resources/ui/Fonts/OFL-Silkscreen.txt
+        resources/ui/Fonts/OFL-PressStart2P.txt)
 
 # App icon. Windows takes a hand-built multi-size .ico (added below) so every size is drawn for its
 # size; elsewhere JUCE builds the icon from the 32 px and 256 px PNGs.
@@ -90,27 +90,27 @@ target_sources(PHOQER PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
     ${PHOQER_ENGINE_SOURCES}
-    Source/TestUI/TestUiEditor.cpp
-    Source/TestUI/TestUiEditor.h
-    Source/TestUI/TestUiHistory.cpp
-    Source/TestUI/TestUiHistory.h
-    Source/TestUI/TestUiKnob.cpp
-    Source/TestUI/TestUiKnob.h
-    Source/TestUI/TestUiLogo.cpp
-    Source/TestUI/TestUiLogo.h
-    Source/TestUI/TestUiPortrait.cpp
-    Source/TestUI/TestUiPortrait.h
-    Source/TestUI/TestUiPresets.cpp
-    Source/TestUI/TestUiPresets.h
-    Source/TestUI/TestUiRecorder.cpp
-    Source/TestUI/TestUiRecorder.h
-    Source/TestUI/TestUiSettings.cpp
-    Source/TestUI/TestUiSettings.h
-    Source/TestUI/TestUiStandaloneApp.cpp
-    Source/TestUI/TestUiStyle.cpp
-    Source/TestUI/TestUiStyle.h
-    Source/TestUI/TestUiViews.cpp
-    Source/TestUI/TestUiViews.h)
+    Source/UI/Editor.cpp
+    Source/UI/Editor.h
+    Source/UI/History.cpp
+    Source/UI/History.h
+    Source/UI/Knob.cpp
+    Source/UI/Knob.h
+    Source/UI/Logo.cpp
+    Source/UI/Logo.h
+    Source/UI/Portrait.cpp
+    Source/UI/Portrait.h
+    Source/UI/Presets.cpp
+    Source/UI/Presets.h
+    Source/UI/Recorder.cpp
+    Source/UI/Recorder.h
+    Source/UI/Settings.cpp
+    Source/UI/Settings.h
+    Source/UI/StandaloneApp.cpp
+    Source/UI/Style.cpp
+    Source/UI/Style.h
+    Source/UI/Views.cpp
+    Source/UI/Views.h)
 
 target_include_directories(PHOQER PRIVATE Source)
 
@@ -141,8 +141,8 @@ set(PHOQER_NOTICE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/Apache-2.0.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/Roboto-NOTICE.txt"
-    "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/TestUI/OFL-Silkscreen.txt"
-    "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/TestUI/OFL-PressStart2P.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/Fonts/OFL-Silkscreen.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/Fonts/OFL-PressStart2P.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/vendor/JUCE/LICENSE.md")
 
 add_custom_command(TARGET PHOQER_VST3 POST_BUILD
@@ -163,7 +163,7 @@ option(PHOQER_BUILD_SANITY "Build the offline core sanity executable" ON)
 option(PHOQER_BUILD_VISUAL_ACCEPTANCE "Build the window-free UI acceptance renderer" OFF)
 if(PHOQER_BUILD_VISUAL_ACCEPTANCE)
     juce_add_console_app(PHOQERUIAcceptance PRODUCT_NAME "PHOQER UI Acceptance")
-    target_sources(PHOQERUIAcceptance PRIVATE Source/Diagnostics/TestUiAcceptance.cpp)
+    target_sources(PHOQERUIAcceptance PRIVATE Source/Diagnostics/UiAcceptance.cpp)
     target_include_directories(PHOQERUIAcceptance PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
     target_link_libraries(PHOQERUIAcceptance PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp)
 endif()

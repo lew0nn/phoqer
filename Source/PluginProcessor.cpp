@@ -1,5 +1,5 @@
 #include "PluginProcessor.h"
-#include "TestUI/TestUiEditor.h"
+#include "UI/Editor.h"
 
 #include <algorithm>
 #include <cmath>
@@ -201,7 +201,7 @@ void PhoqerAudioProcessor::setStateInformation(const void* data, int sizeInBytes
 
 juce::AudioProcessorEditor* PhoqerAudioProcessor::createEditor()
 {
-    return new phoqer::testui::TestUiEditor(*this);
+    return new phoqer::ui::PhoqerEditor(*this);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

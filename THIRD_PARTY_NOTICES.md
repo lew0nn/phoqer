@@ -34,8 +34,8 @@ license and notice are retained in `LICENSES/Apache-2.0.txt` and
 
 PHOQER's editor embeds the Silkscreen Regular/Bold and Press Start 2P fonts, provided
 under the SIL Open Font License 1.1. Their copyright lines and full license texts are
-retained in `resources/ui/TestUI/OFL-Silkscreen.txt` and
-`resources/ui/TestUI/OFL-PressStart2P.txt`, and copied next to the built plugin.
+retained in `resources/ui/Fonts/OFL-Silkscreen.txt` and
+`resources/ui/Fonts/OFL-PressStart2P.txt`, and copied next to the built plugin.
 
 ## Distribution
 

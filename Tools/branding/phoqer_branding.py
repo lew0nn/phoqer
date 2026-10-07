@@ -4,7 +4,7 @@
   App logo:  framed seal-sun on the sea + Outrun wordmark -> resources/branding/app/
   Website:   "sunset grid" icon + Outrun wordmark -> resources/branding/website/
 
-The Test UI draws the same app logo procedurally (Source/TestUI/TestUiLogo.cpp); keep the two in step.
+The editor draws the same app logo procedurally (Source/UI/Logo.cpp); keep the two in step.
 The Windows .exe icon is app/phoqer-app-icon.ico (16-256 px, each size drawn for that size); the
 macOS/Linux build uses app/phoqer-app-icon-32.png and -256.png (see CMakeLists.txt).
 
@@ -17,7 +17,7 @@ from PIL import Image
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 OUT = os.path.join(ROOT, 'resources', 'branding')
 
-# ------------------------------------------------------------------ palette (matches TestUiStyle.cpp)
+# ------------------------------------------------------------------ palette (matches Source/UI/Style.cpp)
 def hexc(h): return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], float)
 def mix(a, b, t): return a + (b - a) * t
 def darker(c, k): return c / (1.0 + k)              # juce::Colour::darker

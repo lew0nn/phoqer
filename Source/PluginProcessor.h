@@ -5,7 +5,7 @@
 #include "Core/MidiEvent.h"
 #include "Core/PhoqerEngine.h"
 
-#include "TestUI/TestUiRecorder.h"
+#include "UI/Recorder.h"
 
 #include <array>
 #include <atomic>
@@ -50,7 +50,7 @@ public:
     void panic() noexcept { panicRequested.store(true, std::memory_order_relaxed); }
 
     // Records the output to WAV for the editor's REC button.
-    phoqer::testui::Recorder& getRecorder() noexcept { return recorder; }
+    phoqer::ui::Recorder& getRecorder() noexcept { return recorder; }
 
 private:
     void translateMidi(const juce::MidiBuffer& midiMessages) noexcept;
@@ -62,7 +62,7 @@ private:
     int midiEventCount = 0;
     juce::MidiKeyboardState keyboardState;
     std::atomic<bool> panicRequested { false };
-    phoqer::testui::Recorder recorder;
+    phoqer::ui::Recorder recorder;
 
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float>* boom = nullptr;
