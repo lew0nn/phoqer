@@ -21,6 +21,8 @@ int main()
               << " behaviors=" << result.behaviorModesDistinct
               << " distinct=" << result.charactersDistinct
               << " sustain=" << result.sustainHolds
-              << " pedal=" << result.pedalHolds << std::endl;
+              << " pedal=" << result.pedalHolds
+              << " treat=" << result.treatSings
+              << " belch=" << result.belchSings << std::endl;
     return result.passed() ? 0 : 1;
 }

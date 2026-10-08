@@ -15,6 +15,9 @@ struct Expression
 {
     FaceTelemetry face;
     float grin = 0.0f;
+    float smile = 0.0f;       // fed: lip corners lifted, mouth closed (0..1)
+    float happyEyes = 0.0f;   // fed: eyes squeezed into ^ ^ crescents (0..1)
+    float gulp = -1.0f;       // fed: a lump travelling down the throat, 0 at the mouth to 1 low down; < 0 none
 };
 
 // SEAL.BMP: the approved painted portraits, warped live into facial expressions and reduced to

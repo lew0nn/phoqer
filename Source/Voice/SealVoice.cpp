@@ -135,6 +135,8 @@ void SealVoice::startNote(int midiChannel, int midiNoteNumber, float velocity,
                           int currentPitchWheelPosition)
 {
     resetDsp();
+    belch = false;
+    mouthGate = 0.0f;
     currentMidiChannel = midiChannel;
     currentMidiNote = midiNoteNumber;
     currentVelocity = clamp(0.0f, 1.0f, velocity);
@@ -173,6 +175,48 @@ void SealVoice::startNote(int midiChannel, int midiNoteNumber, float velocity,
     telemetry.active = true;
     active = true;
     releasing = false;
+}
+
+// Overfed: a "glk" gulp, then a long rattling belch an octave down that sags as it goes.
+void SealVoice::startBelch(int midiNoteNumber, float velocity)
+{
+    startNote(0, midiNoteNumber - 12, velocity, 8192);
+    belch = true;
+}
+
+namespace
+{
+constexpr float belchSeconds = 1.75f;
+
+float belchPitch(float t) noexcept
+{
+    if (t < 0.3f) return 12.0f - 9.0f * std::min(1.0f, t / 0.12f);           // the gulp, at the fed pitch
+    return -4.0f * (t - 0.3f) / 1.45f;                                          // the belch sags
+}
+
+float belchGain(float t) noexcept
+{
+    if (t < 0.18f) return 0.8f;
+    if (t < 0.3f) return 0.05f;                                                 // a breath before it comes up
+    const auto rattle = 0.55f + 0.45f * std::sin(6.2831853f * 21.0f * t);       // the burp's rattle
+    return 1.4f * std::min(1.0f, (t - 0.3f) / 0.08f) * std::max(0.0f, 1.0f - (t - 0.3f) / 1.45f) * rattle;
+}
+
+float treatPitch(float t) noexcept
+{
+    if (t < 0.12f) return -9.0f * t / 0.12f;                                   // the gulp
+    if (t < 0.18f) return -9.0f;
+    const auto u = clamp(0.0f, 1.0f, (t - 0.18f) / 0.44f);                     // the squeak
+    return 7.0f + 12.0f * std::sqrt(u) - 4.0f * u * u * u
+         + static_cast<float>(std::sin(twoPi<double> * 9.0 * t)) * (0.4f + 0.8f * u);
+}
+
+float treatGain(float t) noexcept
+{
+    if (t < 0.12f) return 0.8f;
+    if (t < 0.18f) return 0.8f - 0.7f * std::sin(3.14159265f * (t - 0.12f) / 0.06f);  // the gap
+    return 1.0f;
+}
 }
 
 void SealVoice::stopNote(bool allowTailOff)
@@ -223,13 +267,15 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
         // holds the contour measured from the reference recordings. It settles
         // to its last value and holds, so a sustained note stays in tune.
         noteAgeSeconds += dt;
+        if (belch && ! releasing && noteAgeSeconds > belchSeconds)
+            stopNote(true);
         // TIDE is expression: 0 plays a dead-straight note, the default 0.25 the
         // measured call, 1 more than twice as much movement plus a vibrato.
         const auto tide = sampleMacros.tide;
         const auto expression = tide < 0.25f ? tide * 4.0f : 1.0f + (tide - 0.25f) * 1.6f;
         const auto gestureLength = preset->gestureSeconds > 0.0f ? preset->gestureSeconds : 0.25f;
-        const auto contourSemitones = pitchContourAt(preset->pitchContour,
-                                                     noteAgeSeconds / gestureLength)
+        const auto contourSemitones = belch ? belchPitch(noteAgeSeconds)
+                                    : pitchContourAt(preset->pitchContour, noteAgeSeconds / gestureLength)
                                     * preset->gestureDepth * 0.74f * expression;
         vocal.pitchLift = clamp(0.0f, 1.0f, (contourSemitones + 2.0f) * 0.25f);
 
@@ -256,9 +302,12 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
         }
 
         // The behaviour mode keeps moving the held note (see modeMotion).
-        const auto motion = modeMotion(sampleMacros.behaviorMode, noteAgeSeconds, sampleMacros.tempoBpm);
+        const auto motion = modeMotion(belch ? BehaviourMode::call : sampleMacros.behaviorMode,
+                                       noteAgeSeconds, sampleMacros.tempoBpm);
         vocal.vowelMorph = clamp(0.0f, 1.0f, vocal.vowelMorph + motion.vowel + preset->vowelOffset);
-        auto modeGain = motion.gain;
+        if (belch)     // a closed "oo" gulp; the belch comes up as a wide "aw"
+            vocal.vowelMorph = noteAgeSeconds < 0.18f ? 0.05f : 0.45f;
+        auto modeGain = motion.gain * (belch ? belchGain(noteAgeSeconds) : 1.0f);
         if (motion.muffle > 0.0f)    // MURMUR mutters: random syllables, about seven a second
             modeGain *= 0.15f + 0.85f * clamp(0.0f, 1.0f, 0.55f + 0.9f * mutter.next());
         vocal.barkTransient += motion.kick * barkScale;
@@ -320,6 +369,10 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
             output.addSample(0, sampleIndex, value);
         }
 
+        // The face follows the mode's rhythm: each hit opens the mouth and it closes over ~180 ms,
+        // long enough for a 30 Hz screen to show a 70 ms honk.
+        mouthGate = std::max(clamp(0.0f, 1.0f, motion.gain), mouthGate - dt / 0.18f);
+        vocal.mouthOpen *= mouthGate;
         telemetry.vocal = vocal;
         telemetry.envelope = envelope;
         telemetry.active = true;

@@ -1,8 +1,11 @@
 #include "Views.h"
 
+#include "../Core/FishSprite.h"
+
 #include "Style.h"
 
 #include <cmath>
+#include <vector>
 
 namespace phoqer::ui
 {
@@ -46,6 +49,7 @@ ScopeView::ScopeView(const TelemetryPublisher& source) : telemetry(source)
 
 void ScopeView::refresh()
 {
+    if (spectrogramFrames > 0) --spectrogramFrames;
     // Same capture behaviour as the main editor's waveform display: a call is captured from its
     // first sample, compacted when it outgrows the display, held, then faded.
     const double rate = juce::jmax(8000.0f, telemetry.getSampleRate());
@@ -113,8 +117,53 @@ void ScopeView::refresh()
     repaint();
 }
 
+void ScopeView::showSpectrogram(double seconds)
+{
+    spectrogramFrames = juce::roundToInt(seconds * 30.0);     // counted in UI frames (30 a second)
+}
+
+// The last ~2.7 s of output as a spectrogram, 0 to 3.4 kHz with the highest at the top, in the
+// voice's colours. Only while a fed seal is singing: it is what makes the fish visible.
+void ScopeView::paintSpectrogram(juce::Graphics& g)
+{
+    constexpr int order = 11, size = 1 << order, columns = 150;
+    const double rate = juce::jmax(8000.0, static_cast<double>(telemetry.getSampleRate()));
+    const int topBin = juce::jmin(size / 2, static_cast<int>(3400.0 / rate * size));
+    telemetry.copyWaveform(capture);
+    static juce::dsp::FFT fft(order);
+    std::vector<float> work(static_cast<size_t>(size) * 2);
+    if (! spectrogram.isValid()) spectrogram = juce::Image(juce::Image::RGB, columns, topBin, false);
+    const auto& pal = paletteFor(character);
+    const juce::Colour ramp[] { juce::Colours::black, pal.accent.darker(1.2f), pal.accent, pal.secondary, juce::Colours::white };
+    const int hop = static_cast<int>((TelemetryPublisher::waveformSize - size) / columns);
+    for (int c = 0; c < columns; ++c)
+    {
+        std::fill(work.begin(), work.end(), 0.0f);
+        for (int i = 0; i < size; ++i)
+        {
+            const float window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * static_cast<float>(i) / size);
+            work[static_cast<size_t>(i)] = capture[static_cast<size_t>(c * hop + i)] * window;
+        }
+        fft.performFrequencyOnlyForwardTransform(work.data());
+        for (int bin = 0; bin < topBin; ++bin)
+        {
+            const float db = juce::Decibels::gainToDecibels(work[static_cast<size_t>(bin)] / (size * 0.25f), -120.0f);
+            const float v = juce::jlimit(0.0f, 0.999f, (db + 52.0f) / 22.0f) * 4.0f;     // the song sits at -33 to -44 dB
+            const int k = static_cast<int>(v);
+            spectrogram.setPixelAt(c, topBin - 1 - bin, ramp[k].interpolatedWith(ramp[juce::jmin(4, k + 1)], v - static_cast<float>(k)));
+        }
+    }
+    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+    g.drawImage(spectrogram, getLocalBounds().toFloat());
+}
+
 void ScopeView::paint(juce::Graphics& g)
 {
+    if (spectrogramFrames > 0)
+    {
+        paintSpectrogram(g);
+        return;
+    }
     const auto& pal = paletteFor(character);
     g.fillAll(juce::Colours::black);
     const auto plot = getLocalBounds().toFloat().reduced(8.0f, 8.0f);
@@ -281,6 +330,144 @@ void ArrowButton98::paintButton(juce::Graphics& g, bool, bool down)
     g.setColour(juce::Colours::black);
     for (int k = 0; k < 4; ++k)
         g.fillRect(left ? cx - 2.0f + static_cast<float>(k) : cx + 1.0f - static_cast<float>(k), cy - static_cast<float>(k), 1.0f, 1.0f + 2.0f * static_cast<float>(k));
+}
+
+// ----------------------------------------------------------------------------------- FISH
+namespace
+{
+juce::Image drawFish(const char* const* rows, int character)
+{
+    const auto& pal = paletteFor(character);
+    juce::Image image(juce::Image::ARGB, Fish98::spriteW, Fish98::spriteH, true);
+    for (int y = 0; y < Fish98::spriteH; ++y)
+        for (int x = 0; x < Fish98::spriteW; ++x)
+        {
+            juce::Colour c;
+            switch (rows[y][x])
+            {
+                case 'X': case 'K': c = juce::Colour(0xff180c14); break;
+                case 'o': c = pal.accent; break;
+                case 's': c = pal.accent.interpolatedWith(juce::Colours::white, 0.45f); break;
+                case 'd': c = pal.accent.darker(0.5f); break;
+                case 'W': c = juce::Colours::white; break;
+                default: continue;
+            }
+            image.setPixelAt(x, y, c);
+        }
+    return image;
+}
+}
+
+Fish98::Fish98()
+{
+    setSize(spriteW * pixel, spriteH * pixel);
+    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+    setCharacter(0);
+}
+
+void Fish98::setCharacter(int character)
+{
+    frames = { drawFish(phoqer::fishStraight, character), drawFish(phoqer::fishFlicked, character) };
+    repaint();
+}
+
+void Fish98::setHome(juce::Point<int> topLeft)
+{
+    home = topLeft;
+    if (! held) setTopLeftPosition(home);
+}
+
+void Fish98::paint(juce::Graphics& g)
+{
+    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+    g.drawImage(frames[static_cast<size_t>(frame)], getLocalBounds().toFloat());
+}
+
+void Fish98::mouseDown(const juce::MouseEvent& e)
+{
+    held = true;
+    returning = false;
+    toFront(false);
+    dragger.startDraggingComponent(this, e);
+}
+
+void Fish98::mouseDrag(const juce::MouseEvent& e)
+{
+    dragger.dragComponent(this, e, nullptr);
+}
+
+void Fish98::mouseUp(const juce::MouseEvent&)
+{
+    held = false;
+    if (onDrop && onDrop(getBounds().getCentre())) { setVisible(false); return; }
+    returning = getPosition() != home;
+}
+
+void Fish98::visibilityChanged()
+{
+    if (isVisible()) startTimerHz(30);
+    else
+    {
+        stopTimer();
+        held = returning = false;
+        setTopLeftPosition(home);
+    }
+}
+
+// The tail flicks slowly at rest and fast in the hand; let go and the fish eases back home.
+void Fish98::timerCallback()
+{
+    if (++ticks >= (held ? 3 : 9))
+    {
+        ticks = 0;
+        frame ^= 1;
+        repaint();
+    }
+    if (returning)
+    {
+        const auto at = getPosition().toFloat(), to = home.toFloat();
+        const auto next = at + (to - at) * 0.225f;
+        if (next.getDistanceFrom(to) < 1.0f) { setTopLeftPosition(home); returning = false; }
+        else setTopLeftPosition(next.roundToInt());
+    }
+}
+
+// ----------------------------------------------------------------------------------- BLUE SCREEN
+BlueScreen98::BlueScreen98()
+{
+    setWantsKeyboardFocus(false);
+    startTimer(530);
+}
+
+void BlueScreen98::paint(juce::Graphics& g)
+{
+    const juce::Colour blue { 0xff0000aa }, grey { 0xffaaaaaa };
+    g.fillAll(blue);
+    const auto font = pixelFont(12.0f);
+    const float lineH = 22.0f, left = 70.0f, width = static_cast<float>(getWidth()) - 2.0f * left;
+    float y = std::round(static_cast<float>(getHeight()) * 0.5f - 6.5f * lineH);
+
+    const juce::String title = " SEAL.SYS ";
+    const float titleW = 120.0f, titleX = std::round((static_cast<float>(getWidth()) - titleW) * 0.5f);
+    g.setColour(grey);
+    g.fillRect(titleX, y - 3.0f, titleW, lineH);
+    drawText(g, title, { titleX, y - 3.0f, titleW, lineH }, font, blue, juce::Justification::centred);
+    y += 2.0f * lineH;
+
+    const char* lines[] { "A FATAL EXCEPTION 0F (FISH) HAS OCCURRED AT 0028:C0FFEE15 IN",
+                          "VXD SEAL(05) + 0000FEED. THE SEAL HAS EATEN TOO MUCH FISH.",
+                          "",
+                          "*  PRESS ANY KEY TO REBOOT THE SEAL.",
+                          "*  FEED IT AGAIN AND IT WILL BURP AGAIN.",
+                          "   YOU WILL LOSE ANY UNDIGESTED FISH." };
+    for (const auto* line : lines)
+    {
+        drawText(g, line, { left, y, width, lineH }, font, juce::Colours::white);
+        y += lineH;
+    }
+    y += lineH;
+    drawText(g, juce::String("PRESS ANY KEY TO CONTINUE ") + (cursorOn ? "_" : " "), { left, y, width, lineH }, font,
+             juce::Colours::white, juce::Justification::centred);
 }
 
 // ----------------------------------------------------------------------------------- PRESET BOX

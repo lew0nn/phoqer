@@ -61,6 +61,7 @@ juce_add_plugin(PHOQER
 
 set(PHOQER_ENGINE_SOURCES
     Source/Core/AudioBuffer.h
+    Source/Core/FishSprite.h
     Source/Core/CharacterPreset.h
     Source/Core/DspPrimitives.h
     Source/Core/FaceTelemetry.h
@@ -74,6 +75,7 @@ set(PHOQER_ENGINE_SOURCES
     Source/DSP/CheapSpace.cpp
     Source/DSP/CheapSpace.h
     Source/DSP/Chorus.h
+    Source/DSP/FishSong.h
     Source/DSP/FofBank.cpp
     Source/DSP/FofBank.h
     Source/DSP/FofFormant.h

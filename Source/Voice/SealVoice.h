@@ -21,6 +21,8 @@ public:
     void hardReset() noexcept;
     void setMacros(const MacroState& newMacros) noexcept;
     void startNote(int midiChannel, int midiNoteNumber, float velocity, int currentPitchWheelPosition);
+    void startTreat(int midiNoteNumber, float velocity);     // the fed seal's gulp; ends itself
+    void startBelch(int midiNoteNumber, float velocity);     // overfed: the gulp, then a long belch
     void stopNote(bool allowTailOff);
     void pitchWheelMoved(int newPitchWheelValue) noexcept;
     void renderNextBlock(AudioBuffer& output, int startSample, int numSamples);
@@ -28,7 +30,7 @@ public:
     bool isActive() const noexcept { return active; }
     bool matchesNote(int midiChannel, int midiNoteNumber) const noexcept
     {
-        return active && currentMidiChannel == midiChannel && currentMidiNote == midiNoteNumber;
+        return active && ! belch && currentMidiChannel == midiChannel && currentMidiNote == midiNoteNumber;
     }
     bool matchesChannel(int midiChannel) const noexcept { return active && currentMidiChannel == midiChannel; }
     const VoiceTelemetry& getTelemetry() const noexcept { return telemetry; }
@@ -75,5 +77,7 @@ private:
     int stolenTailSamples = 0;
     bool active = false;
     bool releasing = false;
+    bool belch = false;
+    float mouthGate = 0.0f;       // the mode's hits, held a moment for the face
 };
 }

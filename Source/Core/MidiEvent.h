@@ -3,7 +3,9 @@
 namespace phoqer
 {
 // sustainPedal: value 1 down, 0 up (CC 64). modWheel: value 0..1 (CC 1).
-enum class MidiEventType { noteOn, noteOff, pitchWheel, allNotesOff, sustainPedal, modWheel };
+// treat: the seal was fed the fish; it sings the fish (the UI secret). belch: overfed; it gulps
+// and belches instead.
+enum class MidiEventType { noteOn, noteOff, pitchWheel, allNotesOff, sustainPedal, modWheel, treat, belch };
 
 struct MidiEvent
 {

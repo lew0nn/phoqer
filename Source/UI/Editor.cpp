@@ -150,6 +150,17 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     };
     recordControl.onToggle = [this] { toggleRecording(); };
 
+    addChildComponent(fish);
+    addChildComponent(blueScreen);
+    blueScreen.onDismiss = [this] { rebootSeal(); };
+    // Dropped on the seal, the fish is eaten: a gulp and a squeak, a grin, and another fish later.
+    fish.onDrop = [this](juce::Point<int> at)
+    {
+        if (! seal.getBounds().contains(at)) return false;
+        feedFish();
+        return true;
+    };
+
     // Key presses always land on the view so the computer keyboard keeps playing after clicks.
     for (auto* child : getChildren())
     {
@@ -188,7 +199,7 @@ void PhoqerView::releaseQwertyNotes()
 bool PhoqerView::keyStateChanged(bool)
 {
     // No notes while a box is open (its text field gets the typing) or while Ctrl / Alt is held for a shortcut.
-    if (dialog != nullptr) { releaseQwertyNotes(); return false; }
+    if (dialog != nullptr || blueScreen.isVisible()) { releaseQwertyNotes(); return false; }
     const bool shortcut = modifierHeld();
     bool used = false;
     for (int i = 0; i < qwertyKeyCount; ++i)
@@ -254,10 +265,57 @@ void PhoqerView::mouseDrag(const juce::MouseEvent& e)
 void PhoqerView::mouseDoubleClick(const juce::MouseEvent& e)
 {
     if (windowControls.toggleFullscreen && onTitleBar(e.position)) windowControls.toggleFullscreen();
+    else if (logoBounds().translated(logoSlide, 0.0f).contains(e.position)) fishOut = ! fishOut;    // the secret
+}
+
+// The seal eats the fish: a gulp, then it sings the fish (watch SCOPE.EXE), grins, and a new fish
+// comes out from behind the wordmark a few seconds later.
+void PhoqerView::feedFish()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+    std::rotate(lastFed.begin(), lastFed.begin() + 1, lastFed.end());
+    lastFed.back() = now;
+    if (lastFed.front() > 0.0 && now - lastFed.front() < 30.0)
+    {
+        // Five fish in 30 seconds: a belch, and SEAL.SYS goes down.
+        processor.feedSeal(true);
+        crashAt = now + 0.5;
+        fishBackAt = now + 1.0e9;
+        return;
+    }
+    processor.feedSeal();
+    scope.showSpectrogram(2.7);     // ends with the whole fish on screen
+    happyFrom = now;
+    happyUntil = now + 3.0;
+    fishBackAt = now + 3.0;
+}
+
+// Any key or click on the blue screen: back to normal, the wordmark closed, the count from zero.
+void PhoqerView::rebootSeal()
+{
+    blueScreen.setVisible(false);
+    lastFed = {};
+    crashAt = 0.0;
+    fishBackAt = 0.0;
+    fishOut = false;
+    grabKeyboardFocus();
+}
+
+juce::Rectangle<float> PhoqerView::logoBounds() const
+{
+    const auto row = windowClient(headWindow, headTitleHeight).withTrimmedTop(17.0f);
+    const float wordW = logoWord.getWidth() * logoWordPixel, wordH = logoWord.getHeight() * logoWordPixel;
+    return { row.getX() + logoWordInset, std::round(row.getCentreY() - wordH * 0.5f), wordW, wordH };
+}
+
+float PhoqerView::fishSlide() const
+{
+    return juce::jmin(static_cast<float>(fish.getWidth() + 10), presetBoxX - 6.0f - logoBounds().getRight());
 }
 
 bool PhoqerView::keyPressed(const juce::KeyPress& key)
 {
+    if (blueScreen.isVisible()) { rebootSeal(); return true; }
     if (dialog != nullptr) return true;
     using KeyPress = juce::KeyPress;
     constexpr int cmd = juce::ModifierKeys::commandModifier, shift = juce::ModifierKeys::shiftModifier;
@@ -293,6 +351,7 @@ void PhoqerView::applyCharacter(int c)
     character = juce::jlimit(0, 2, c);
     lookAndFeel.setCharacter(character);
     logoWord = renderOutrunWordmark(character, false);
+    fish.setCharacter(character);
     for (auto& k : knobs) k->setCharacter(character);
     for (auto& b : modeButtons) b->setCharacter(character);
     scope.setCharacter(character);
@@ -312,6 +371,7 @@ void PhoqerView::resized()
     for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
         voiceTabs[slot]->setBounds(juce::Rectangle<float>(row.getRight() - 4.0f - (3 - slot) * 94.0f + 4.0f, row.getCentreY() - 12.0f, 90.0f, 24.0f).toNearestInt());
     presetBox.setBounds(juce::Rectangle<float>(presetBoxX, std::round(row.getCentreY() - 12.0f), presetBoxW, 24.0f).toNearestInt());
+    fish.setHome({ juce::roundToInt(row.getX() + logoWordInset), juce::roundToInt(row.getCentreY()) - fish.getHeight() / 2 });
 
     const auto tools = client(modeWindow);
     for (size_t m = 0; m < modeButtons.size(); ++m)
@@ -342,6 +402,7 @@ void PhoqerView::resized()
         titleButtons[k]->setBounds(juce::Rectangle<float>(right - captionButtonW, bar.getY() + 2.0f, captionButtonW, captionButtonH).toNearestInt());
     }
     if (dialog != nullptr) dialog->setBounds(getLocalBounds());
+    blueScreen.setBounds(getLocalBounds());
 }
 
 void PhoqerView::rebuildChrome(float scale)
@@ -375,11 +436,7 @@ void PhoqerView::rebuildChrome(float scale)
 
     // Header window: the PHOQER wordmark; the preset box and voice tabs sit on the right.
     const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, pal, true, headTitleHeight);
-    const auto row = head.withTrimmedTop(17.0f);
-    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
-    g.setOpacity(1.0f);
-    const float wordW = logoWord.getWidth() * logoWordPixel, wordH = logoWord.getHeight() * logoWordPixel;
-    g.drawImage(logoWord, { row.getX() + logoWordInset, std::round(row.getCentreY() - wordH * 0.5f), wordW, wordH });
+    juce::ignoreUnused(head);     // the wordmark is drawn live in paint(), so it can slide aside
 
     window98(g, modeWindow, "MODE.EXE", pal, false);
     const auto sealClient = window98(g, sealWindow, voice + ".BMP", pal, false);
@@ -406,6 +463,9 @@ void PhoqerView::paint(juce::Graphics& g)
     if (! chrome.isValid() || ! juce::approximatelyEqual(physical, chromeScale)) rebuildChrome(physical);
     g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
     g.drawImage(chrome, getLocalBounds().toFloat());
+    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+    g.drawImage(logoWord, logoBounds().translated(std::round(logoSlide), 0.0f));
+    g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
     // Live status bars.
     const auto sealClient = windowClient(sealWindow), scopeClient = windowClient(scopeWindow);
     statusBar(g, sealClient.withTrimmedTop(sealClient.getHeight() - 15.0f),
@@ -459,8 +519,90 @@ void PhoqerView::tick(double now)
     // Idle eyes rest half open; telemetry opens them further.
     Expression ex { face, grin };
     ex.face.eyeOpen = 0.45f + 0.55f * face.eyeOpen;
-    if ((frame % 2) == 0 || std::abs(grin - previousGrin) > 0.05f)
+    auto& f = ex.face;
+    switch (mode)
+    {
+        case 1:     // HONK: a small round "o", cheeks puffed, eyes wide
+            f.mouthRound = 0.6f;
+            f.jawWidth = 0.7f;
+            f.mouthOpen = juce::jmin(1.0f, f.mouthOpen * 2.0f);
+            f.throatTension = juce::jmax(f.throatTension, 0.3f + 0.7f * f.mouthOpen);
+            f.eyeOpen = juce::jmin(1.0f, f.eyeOpen + 0.3f);
+            f.eyeSquint = 0.0f;
+            break;
+        case 2:     // BARK: a snapping jaw, kept inside the muzzle, and a squint
+            f.mouthRound = 0.0f;
+            f.jawWidth = 0.6f;
+            f.mouthOpen = juce::jmin(1.0f, f.mouthOpen * 1.2f);
+            f.eyeSquint = juce::jmax(f.eyeSquint, 0.5f * f.mouthOpen);
+            break;
+        case 3:     // WAIL: head tipped back, eyes half shut, a tall singing mouth
+            f.headLift = juce::jmax(f.headLift, 0.25f + 0.75f * f.mouthOpen);
+            f.eyeOpen = 0.0f;
+            f.eyeSquint = 0.45f * juce::jmin(1.0f, f.mouthOpen * 3.0f);
+            f.mouthRound = 0.7f;
+            f.jawWidth = 0.3f;
+            break;
+        case 4:     // MURMUR: mouth shut, the hum puffs the cheeks, sleepy eyes
+            f.throatTension = juce::jmax(f.throatTension, f.mouthOpen);
+            f.mouthOpen = 0.0f;
+            f.eyeOpen = 0.15f;
+            f.eyeSquint = 0.3f;
+            break;
+        default:    // CALL: as the engine reports
+            f.jawWidth = juce::jmin(f.jawWidth, 0.7f);
+            break;
+    }
+
+    // The fish held over the face: wide eyes, looking up, mouth open and panting for it.
+    if (fish.isHeld() && seal.getBounds().contains(fish.getBounds().getCentre()))
+    {
+        const float pant = 0.5f + 0.5f * std::sin(static_cast<float>(now) * juce::MathConstants<float>::twoPi * 4.0f);
+        f.eyeOpen = 1.0f;
+        f.eyeSquint = 0.0f;
+        f.headLift = juce::jmax(f.headLift, 0.7f);
+        f.mouthOpen = juce::jmax(f.mouthOpen, 0.35f + 0.25f * pant);
+        f.mouthRound = 0.5f;
+        f.jawWidth = 0.5f;
+        f.throatTension = juce::jmax(f.throatTension, 0.4f);
+        ex.grin = 0.0f;
+    }
+    // Fed: it munches the fish (three chomps), gulps it down (a lump travels down the throat), then
+    // sits back with a closed smile and one slow, contented blink. The eyes stay ^ ^ throughout.
+    else if (now >= happyFrom && now < happyUntil)
+    {
+        const float age = static_cast<float>(now - happyFrom), span = static_cast<float>(happyUntil - happyFrom);
+        const float in = juce::jmin(1.0f, age / 0.15f), out = juce::jmin(1.0f, (span - age) / 0.3f);
+        ex.happyEyes = in * out;
+        ex.grin = 0.0f;
+        f.eyeSquint = 0.0f;
+        f.eyeOpen = 0.6f;
+        if (age < 1.2f)                                         // munch, munch, munch
+        {
+            f.mouthOpen = 0.6f * juce::jmax(0.0f, std::sin(age * juce::MathConstants<float>::twoPi * 2.5f));
+            f.mouthRound = 0.3f;
+            f.jawWidth = 0.4f;
+            f.throatTension = juce::jmax(f.throatTension, 0.45f);
+        }
+        else
+        {
+            f.mouthOpen = 0.0f;
+            if (age < 1.9f) ex.gulp = (age - 1.2f) / 0.7f;          // down it goes
+            ex.smile = juce::jmin(1.0f, (age - 1.2f) / 0.4f) * out;
+            if (age > 2.3f && age < 2.48f)                          // a slow, contented blink
+            {
+                f.eyeOpen = 0.2f;
+                f.eyeSquint = 0.55f;
+            }
+        }
+    }
+    // Every other frame, or at once when the mouth moves: a 100 ms honk must not fall between redraws.
+    const bool happy = now >= happyFrom && now < happyUntil;     // the happy sequence needs every frame
+    if ((frame % 2) == 0 || happy || std::abs(grin - previousGrin) > 0.05f || std::abs(f.mouthOpen - shownMouth) > 0.08f)
+    {
         seal.update(portrait, character, ex);
+        shownMouth = f.mouthOpen;
+    }
     scope.refresh();
     meter.refresh();
 
@@ -485,6 +627,29 @@ void PhoqerView::tick(double now)
     }
     repaint(windowClient(sealWindow).withTrimmedTop(windowClient(sealWindow).getHeight() - 15.0f).toNearestInt());
     repaint(windowClient(scopeWindow).withTrimmedTop(windowClient(scopeWindow).getHeight() - 15.0f).toNearestInt());
+
+    if (crashAt > 0.0 && now >= crashAt)
+    {
+        crashAt = 0.0;
+        releaseQwertyNotes();
+        fish.setVisible(false);
+        blueScreen.toFront(false);
+        blueScreen.setVisible(true);
+    }
+
+    // The secret: the wordmark eases aside, and the fish shows once it has room (and once a
+    // fish that was just eaten has been replaced).
+    if (fishOut && ! fish.isVisible() && fishBackAt > 0.0 && now >= fishBackAt && logoSlide > fish.getWidth() * 0.6f)
+    {
+        fishBackAt = 0.0;
+        fish.setVisible(true);
+    }
+    if (const float goal = fishOut ? fishSlide() : 0.0f; ! juce::approximatelyEqual(logoSlide, goal))
+    {
+        logoSlide = std::abs(goal - logoSlide) < 0.5f ? goal : logoSlide + (goal - logoSlide) * 0.27f;
+        fish.setVisible(logoSlide > fish.getWidth() * 0.6f && now >= fishBackAt);
+        repaint(logoBounds().getUnion(logoBounds().translated(fishSlide(), 0.0f)).expanded(2.0f).toNearestInt());
+    }
     ++frame;
 }
 

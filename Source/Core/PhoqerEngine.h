@@ -6,6 +6,7 @@
 #include "PhoqerTypes.h"
 #include "../DSP/CheapSpace.h"
 #include "../DSP/Chorus.h"
+#include "../DSP/FishSong.h"
 #include "../DSP/OutputStage.h"
 #include "../Voice/SealVoice.h"
 
@@ -44,6 +45,8 @@ private:
     Chorus chorusStage;      // DETUNE
     CheapSpace spaceStage;   // REVERB
     OutputStage outputStage;
+    FishSong fishSong;       // the fed seal sings the fish
+    int fishSongs = 0;
     TelemetryPublisher telemetry;
     SealCharacter activeCharacter = defaultSealCharacter;
 };

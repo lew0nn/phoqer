@@ -160,6 +160,18 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             midiEvents[static_cast<size_t>(midiEventCount++)] = off;
         }
 
+    // Fed the fish: a gulp and the fish song, or overfed: a gulp and a belch, in the seal's own register.
+    for (auto* request : { &fedRequested, &belchRequested })
+        if (request->exchange(false, std::memory_order_relaxed) && midiEventCount < static_cast<int>(midiEvents.size()))
+        {
+            constexpr int treatNote[] { 48, 72, 69 };     // BURP, SQUEAL, GROAN
+            phoqer::MidiEvent fed;
+            fed.type = request == &fedRequested ? phoqer::MidiEventType::treat : phoqer::MidiEventType::belch;
+            fed.note = treatNote[juce::jlimit(0, 2, static_cast<int>(std::lround(character->load(std::memory_order_relaxed))))];
+            fed.value = 0.9f;
+            midiEvents[static_cast<size_t>(midiEventCount++)] = fed;
+        }
+
     phoqer::MacroState macros;
     macros.boom = boom->load(std::memory_order_relaxed);
     macros.air = air->load(std::memory_order_relaxed);

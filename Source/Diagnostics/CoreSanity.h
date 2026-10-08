@@ -27,6 +27,8 @@ struct CoreSanity
         bool charactersDistinct = false;
         bool sustainHolds = false;
         bool pedalHolds = false;
+        bool treatSings = false;
+        bool belchSings = false;
 
         bool passed() const noexcept
         {
@@ -34,7 +36,7 @@ struct CoreSanity
                 && extremesBounded && formantSweepFinite
                 && vowelAnchorsDistinct && callEvolutionCoherent && extremeCombinationsDistinct
                 && repeatedNotesVary && reprepareFinite && personalitiesVary && telemetryNormalized
-                && behaviorModesDistinct && charactersDistinct && sustainHolds && pedalHolds;
+                && behaviorModesDistinct && charactersDistinct && sustainHolds && pedalHolds && treatSings && belchSings;
         }
     };
 
@@ -395,6 +397,39 @@ struct CoreSanity
             const auto heldByPedal = loudestOf(&keyUp, 2);       // key up, pedal still down: sounding
             const auto afterPedal = loudestOf(&pedalUp, 2);      // pedal up: gone
             result.pedalHolds = heldByPedal > 0.01f && afterPedal < 1.0e-4f;
+        }
+
+        // Fed the fish: the seal gulps and squeaks, then falls silent on its own.
+        {
+            constexpr int treatBlockSize = 512;
+            engine.prepare(48000.0, treatBlockSize, 2);
+            AudioBuffer treatBuffer(2, treatBlockSize);
+            const MidiEvent fed { MidiEventType::treat, 0, 0, 48, 0.9f };
+            float during = 0.0f, after = 0.0f;
+            for (int block = 0; block < 48000 * 4 / treatBlockSize; ++block)
+            {
+                engine.process(treatBuffer, block == 0 ? &fed : nullptr, block == 0 ? 1 : 0, MacroState {}, 0.0f);
+                const auto level = treatBuffer.getMagnitude(0, treatBlockSize);
+                if (block < 48000 * 2 / treatBlockSize) during = std::max(during, level);
+                else if (block > 48000 * 7 / 2 / treatBlockSize) after = std::max(after, level);
+            }
+            result.treatSings = during > 0.01f && after < 1.0e-4f;
+        }
+        // Overfed: the gulp, a belch, then silence.
+        {
+            constexpr int belchBlockSize = 512;
+            engine.prepare(48000.0, belchBlockSize, 2);
+            AudioBuffer belchBuffer(2, belchBlockSize);
+            const MidiEvent overfed { MidiEventType::belch, 0, 0, 48, 0.9f };
+            float during = 0.0f, after = 0.0f;
+            for (int block = 0; block < 48000 * 4 / belchBlockSize; ++block)
+            {
+                engine.process(belchBuffer, block == 0 ? &overfed : nullptr, block == 0 ? 1 : 0, MacroState {}, 0.0f);
+                const auto level = belchBuffer.getMagnitude(0, belchBlockSize);
+                if (block > 48000 / 2 / belchBlockSize && block < 48000 * 3 / 2 / belchBlockSize) during = std::max(during, level);
+                else if (block > 48000 * 3 / belchBlockSize) after = std::max(after, level);
+            }
+            result.belchSings = during > 0.01f && after < 1.0e-4f;
         }
 
         result.telemetryNormalized = faceIsNormalized(engine.getTelemetry().readFace());

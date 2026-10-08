@@ -48,6 +48,11 @@ public:
     juce::MidiKeyboardState& getKeyboardState() noexcept { return keyboardState; }
     // EDIT > PANIC: every voice on every channel is released at the start of the next block.
     void panic() noexcept { panicRequested.store(true, std::memory_order_relaxed); }
+    // The UI secret: fed, the seal sings the fish; overfed, it belches.
+    void feedSeal(bool overfed = false) noexcept
+    {
+        (overfed ? belchRequested : fedRequested).store(true, std::memory_order_relaxed);
+    }
 
     // Records the output to WAV for the editor's REC button.
     phoqer::ui::Recorder& getRecorder() noexcept { return recorder; }
@@ -62,6 +67,7 @@ private:
     int midiEventCount = 0;
     juce::MidiKeyboardState keyboardState;
     std::atomic<bool> panicRequested { false };
+    std::atomic<bool> fedRequested { false }, belchRequested { false };
     phoqer::ui::Recorder recorder;
 
     juce::AudioProcessorValueTreeState parameters;

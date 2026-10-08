@@ -51,6 +51,8 @@ public:
     // and called directly by the offline acceptance renderer.
     void tick(double nowSeconds);
     void forceManicForTest(double nowSeconds) { manicUntil = nowSeconds + 0.5; }
+    void feedFish();
+    void revealFishForTest() { fishOut = true; logoSlide = fishSlide(); fish.setVisible(true); repaint(); }
 
     // VIEW menu actions, carried out by the editor that scales this view.
     std::function<float()> currentZoom;
@@ -64,6 +66,8 @@ private:
     void setChoice(const char* id, int index);
     void releaseQwertyNotes();
     bool onTitleBar(juce::Point<float>) const;
+    juce::Rectangle<float> logoBounds() const;     // the wordmark at rest
+    float fishSlide() const;                       // how far the wordmark moves aside for the fish
     bool isStandalone() const noexcept { return windowControls.audioSettings != nullptr; }
 
     // Menus and the actions behind them.
@@ -100,6 +104,8 @@ private:
     MenuBar98 menuBar;
     PresetBox98 presetBox;
     RecordControl98 recordControl;
+    Fish98 fish;
+    BlueScreen98 blueScreen;
     PianoView piano;
     std::array<std::unique_ptr<ChoiceButton>, 3> voiceTabs;
     std::array<std::unique_ptr<ChoiceButton>, 5> modeButtons;
@@ -125,6 +131,14 @@ private:
     float chromeScale = 0.0f;
     FaceTelemetry face {};
     float grin = 0.0f;
+    float shownMouth = 0.0f;      // the mouth as the portrait last drew it
+    bool fishOut = false;
+    double fishBackAt = 0.0;     // eaten: the next fish comes out from behind the wordmark then
+    std::array<double, 5> lastFed {};     // when the last five fish were eaten; five in 30 s is too many
+    double crashAt = 0.0;                 // overfed: the blue screen comes up then
+    double happyFrom = 0.0, happyUntil = 0.0;     // fed: the seal sways and squints happily
+    void rebootSeal();
+    float logoSlide = 0.0f;
     double manicUntil = 0.0, watchUntil = 0.0;
     uint32_t lastCallSerial = 0;
     int frame = 0;

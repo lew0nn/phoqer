@@ -29,12 +29,14 @@ void PhoqerEngine::prepare(double sampleRate, int maximumBlockSize, int)
     chorusStage.prepare(sampleRate);
     spaceStage.prepare(sampleRate, maximumBlockSize);
     outputStage.prepare(sampleRate);
+    fishSong.prepare(sampleRate);
     telemetry.setSampleRate(sampleRate);
     reset();
 }
 
 void PhoqerEngine::reset()
 {
+    fishSong.reset();
     for (auto& voice : voices)
         voice.hardReset();
     pitchWheels.fill(8192);
@@ -117,6 +119,19 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
         }
         case MidiEventType::noteOff:
             releaseNote(channel, event.note);
+            break;
+        case MidiEventType::treat:
+            fishSong.start(0.05, ++fishSongs);     // a different note each time
+            break;
+        case MidiEventType::belch:
+            telemetry.beginCall();
+            if (auto* voice = findVoiceForNoteOn())
+            {
+                sustained[static_cast<size_t>(voice - voices.data())] = false;
+                if (voice->isActive())
+                    voice->stopNote(false);
+                voice->startBelch(clamp(12, 127, event.note), clamp(0.0f, 1.0f, event.value));
+            }
             break;
         case MidiEventType::pitchWheel:
         {
@@ -211,6 +226,7 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
 
     chorusStage.process(output, macros.detune);
     spaceStage.process(output, macros.space);
+    fishSong.process(output);
     outputStage.setOutputDb(outputDecibels);
     outputStage.process(output);
     publishTelemetry(output);

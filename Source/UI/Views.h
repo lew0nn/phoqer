@@ -32,8 +32,10 @@ public:
     void refresh();
     void paint(juce::Graphics&) override;
     float capturedMilliseconds() const noexcept { return capturedMs; }
+    void showSpectrogram(double seconds);       // the fed seal's song draws a fish; this shows it
 
 private:
+    void paintSpectrogram(juce::Graphics&);
     enum class CaptureState { idle, capturing, holding, decaying };
     const TelemetryPublisher& telemetry;
     static constexpr int bucketCount = 1200;
@@ -45,6 +47,8 @@ private:
     float displayGain = 1.0f, traceOpacity = 0.0f, capturePeak = 0.0f, capturedMs = 0.0f;
     CaptureState captureState = CaptureState::idle;
     int character = 0;
+    int spectrogramFrames = 0;
+    juce::Image spectrogram;
 };
 
 // OUTPUT meter: chunky segment bar with a dB scale.
@@ -165,6 +169,46 @@ private:
     juce::Rectangle<float> buttonBounds() const;
     bool recording = false;
     int shownSeconds = 0;
+};
+
+// The secret behind the header wordmark: double-click the wordmark and it slides aside to show this
+// fish. Pick it up and drag it anywhere; let go and it flops back home.
+class Fish98 final : public juce::Component, private juce::Timer
+{
+public:
+    static constexpr int pixel = 2, spriteW = 20, spriteH = 10;
+    Fish98();
+    void setCharacter(int);
+    void setHome(juce::Point<int> topLeft);
+    void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+    void visibilityChanged() override;
+    std::function<bool(juce::Point<int>)> onDrop;     // where it was let go, in the parent; true if eaten
+    bool isHeld() const noexcept { return held; }
+
+private:
+    void timerCallback() override;
+    std::array<juce::Image, 2> frames;      // tail straight, tail flicked
+    juce::Point<int> home;
+    juce::ComponentDragger dragger;
+    bool held = false, returning = false;
+    int frame = 0, ticks = 0;
+};
+
+// Overfed: SEAL.SYS crashes the whole window, Win98 style. Any key or click reboots the seal.
+class BlueScreen98 final : public juce::Component, private juce::Timer
+{
+public:
+    BlueScreen98();
+    std::function<void()> onDismiss;
+    void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override { if (onDismiss) onDismiss(); }
+
+private:
+    void timerCallback() override { cursorOn = ! cursorOn; repaint(); }
+    bool cursorOn = true;
 };
 
 // A working Win98 title-bar button: minimise, maximise (fullscreen) or close.
