@@ -150,6 +150,7 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
                     voices[i].stopNote(true);
                     sustained[i] = false;
                 }
+            fishSong.reset();     // Panic (and a host's all-notes-off) also silences the fish song
             break;
         case MidiEventType::sustainPedal:
             sustainDown[static_cast<size_t>(channel)] = event.value >= 0.5f;

@@ -145,10 +145,13 @@ juce::Path modeGlyph(int mode, juce::Rectangle<float> r)
                 p.addCentredArc(c.x - s * 0.5f, c.y, s * (0.45f + 0.35f * k), s * (0.45f + 0.35f * k), 0.0f,
                                 juce::MathConstants<float>::pi * 0.30f, juce::MathConstants<float>::pi * 0.70f, true);
             break;
-        case 1:
-            p.addEllipse(r.withSizeKeepingCentre(s * 1.6f, s * 1.6f));
-            p.addEllipse(r.withSizeKeepingCentre(s * 0.8f, s * 0.8f));
+        case 1:     // two rings, sized to the shorter side so the outer one stays round, not clipped
+        {
+            const float d = juce::jmin(r.getWidth(), r.getHeight()) * 0.82f;
+            p.addEllipse(r.withSizeKeepingCentre(d, d));
+            p.addEllipse(r.withSizeKeepingCentre(d * 0.45f, d * 0.45f));
             break;
+        }
         case 2:
             p.startNewSubPath(c.x - s * 0.9f, c.y + s * 0.5f);
             p.lineTo(c.x - s * 0.35f, c.y + s * 0.5f);

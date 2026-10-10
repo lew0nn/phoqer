@@ -284,7 +284,7 @@ void PhoqerView::feedFish()
         return;
     }
     processor.feedSeal();
-    scope.showSpectrogram(2.7);     // ends with the whole fish on screen
+    scope.showSpectrogram(5.3);     // the fish draws in as it sings, then scrolls out to the left
     happyFrom = now;
     happyUntil = now + 3.0;
     fishBackAt = now + 3.0;
@@ -422,16 +422,6 @@ void PhoqerView::rebuildChrome(float scale)
     {
         g.setColour(juce::Colours::white.withAlpha(0.2f + 0.5f * stars.nextFloat()));
         g.fillRect(std::round(stars.nextFloat() * width / 2.0f) * 2.0f, std::round(stars.nextFloat() * height / 2.0f) * 2.0f, 2.0f, 2.0f);
-    }
-    for (const auto& [alpha, thickness] : { std::pair<float, float> { 0.12f, 4.0f }, { 0.5f, 1.0f } })
-    {
-        g.setColour(pal.accent.withAlpha(alpha));
-        for (int k = -18; k <= 18; ++k) g.drawLine(width * 0.5f + k * 8.0f, 300.0f, width * 0.5f + k * 95.0f, static_cast<float>(height), thickness);
-        for (int k = 0; k < 9; ++k)
-        {
-            const float y = 300.0f + (height - 300.0f) * std::pow(k / 8.0f, 2.2f);
-            g.drawLine(0.0f, y, static_cast<float>(width), y, thickness);
-        }
     }
 
     // Header window: the PHOQER wordmark; the preset box and voice tabs sit on the right.

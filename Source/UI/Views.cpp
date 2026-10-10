@@ -5,6 +5,7 @@
 #include "Style.h"
 
 #include <cmath>
+#include <cstring>
 #include <vector>
 
 namespace phoqer::ui
@@ -49,7 +50,20 @@ ScopeView::ScopeView(const TelemetryPublisher& source) : telemetry(source)
 
 void ScopeView::refresh()
 {
-    if (spectrogramFrames > 0) --spectrogramFrames;
+    // While the fish is on screen the waveform is not recorded: the song's loudness follows the
+    // fish's outline, and capturing it would show a second, fish-shaped blob once the picture ends.
+    if (spectrogramFrames > 0)
+    {
+        --spectrogramFrames;
+        updateSpectrogram();
+        lastWriteIndex = telemetry.getWaveformWriteIndex();
+        lastCallSerial = telemetry.getCallSerial();
+        captureState = CaptureState::idle;
+        usedBuckets = 0;
+        traceOpacity = 0.0f;
+        repaint();
+        return;
+    }
     // Same capture behaviour as the main editor's waveform display: a call is captured from its
     // first sample, compacted when it outgrows the display, held, then faded.
     const double rate = juce::jmax(8000.0f, telemetry.getSampleRate());
@@ -120,48 +134,75 @@ void ScopeView::refresh()
 void ScopeView::showSpectrogram(double seconds)
 {
     spectrogramFrames = juce::roundToInt(seconds * 30.0);     // counted in UI frames (30 a second)
+    spectrogram = {};                                          // starts black; columns arrive as it sings
 }
 
 // The last ~2.7 s of output as a spectrogram, 0 to 3.4 kHz with the highest at the top, in the
-// voice's colours. Only while a fed seal is singing: it is what makes the fish visible.
-void ScopeView::paintSpectrogram(juce::Graphics& g)
+// voice's colours. Only while a fed seal is singing: it is what makes the fish visible. Each frame
+// adds just the one or two columns of sound that arrived since the last and slides the picture left,
+// so it costs a couple of FFTs a frame, not 150.
+void ScopeView::updateSpectrogram()
 {
     constexpr int order = 11, size = 1 << order, columns = 150;
+    constexpr uint32_t hop = (TelemetryPublisher::waveformSize - size) / columns;
     const double rate = juce::jmax(8000.0, static_cast<double>(telemetry.getSampleRate()));
     const int topBin = juce::jmin(size / 2, static_cast<int>(3400.0 / rate * size));
-    telemetry.copyWaveform(capture);
     static juce::dsp::FFT fft(order);
-    std::vector<float> work(static_cast<size_t>(size) * 2);
-    if (! spectrogram.isValid()) spectrogram = juce::Image(juce::Image::RGB, columns, topBin, false);
+    if (fftWork.empty())
+    {
+        fftWork.resize(static_cast<size_t>(size) * 2);
+        hann.resize(static_cast<size_t>(size));
+        for (int i = 0; i < size; ++i)
+            hann[static_cast<size_t>(i)] = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * static_cast<float>(i) / size);
+    }
+
+    const uint32_t end = telemetry.copyWaveform(capture);      // capture.back() is sample number `end`
+    const uint32_t newest = (end + 1u - static_cast<uint32_t>(size)) / hop;   // the last column with all its samples
+    if (! spectrogram.isValid() || spectrogram.getHeight() != topBin)
+    {
+        spectrogram = juce::Image(juce::Image::RGB, columns, topBin, true, juce::SoftwareImageType());     // plain memory: shifted by hand
+        lastColumn = newest;
+        return;
+    }
+    const int fresh = static_cast<int>(juce::jmin<uint32_t>(newest - lastColumn, columns));
+    if (fresh <= 0) return;
+    lastColumn = newest;
     const auto& pal = paletteFor(character);
     const juce::Colour ramp[] { juce::Colours::black, pal.accent.darker(1.2f), pal.accent, pal.secondary, juce::Colours::white };
-    const int hop = static_cast<int>((TelemetryPublisher::waveformSize - size) / columns);
-    for (int c = 0; c < columns; ++c)
+    juce::Image::BitmapData pixels(spectrogram, juce::Image::BitmapData::readWrite);
+    for (int y = 0; y < topBin; ++y)     // slide the picture left by the new columns
+        std::memmove(pixels.getLinePointer(y), pixels.getPixelPointer(fresh, y),
+                     static_cast<size_t>((columns - fresh) * pixels.pixelStride));
+    for (int k = 0; k < fresh; ++k)
     {
-        std::fill(work.begin(), work.end(), 0.0f);
-        for (int i = 0; i < size; ++i)
-        {
-            const float window = 0.5f - 0.5f * std::cos(juce::MathConstants<float>::twoPi * static_cast<float>(i) / size);
-            work[static_cast<size_t>(i)] = capture[static_cast<size_t>(c * hop + i)] * window;
-        }
-        fft.performFrequencyOnlyForwardTransform(work.data());
+        const uint32_t column = newest - static_cast<uint32_t>(fresh - 1 - k);
+        const uint32_t first = column * hop;                          // its first sample number
+        const auto offset = static_cast<size_t>(TelemetryPublisher::waveformSize - 1u - (end - first));
+        std::fill(fftWork.begin(), fftWork.end(), 0.0f);
+        for (size_t i = 0; i < static_cast<size_t>(size); ++i)
+            fftWork[i] = capture[offset + i] * hann[i];
+        fft.performFrequencyOnlyForwardTransform(fftWork.data());
+        const int x = columns - fresh + k;
         for (int bin = 0; bin < topBin; ++bin)
         {
-            const float db = juce::Decibels::gainToDecibels(work[static_cast<size_t>(bin)] / (size * 0.25f), -120.0f);
+            const float db = juce::Decibels::gainToDecibels(fftWork[static_cast<size_t>(bin)] / (size * 0.25f), -120.0f);
             const float v = juce::jlimit(0.0f, 0.999f, (db + 52.0f) / 22.0f) * 4.0f;     // the song sits at -33 to -44 dB
-            const int k = static_cast<int>(v);
-            spectrogram.setPixelAt(c, topBin - 1 - bin, ramp[k].interpolatedWith(ramp[juce::jmin(4, k + 1)], v - static_cast<float>(k)));
+            const int step = static_cast<int>(v);
+            pixels.setPixelColour(x, topBin - 1 - bin, ramp[step].interpolatedWith(ramp[juce::jmin(4, step + 1)], v - static_cast<float>(step)));
         }
     }
-    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
-    g.drawImage(spectrogram, getLocalBounds().toFloat());
 }
 
 void ScopeView::paint(juce::Graphics& g)
 {
     if (spectrogramFrames > 0)
     {
-        paintSpectrogram(g);
+        if (spectrogram.isValid())
+        {
+            g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+            g.drawImage(spectrogram, getLocalBounds().toFloat());
+        }
+        else g.fillAll(juce::Colours::black);
         return;
     }
     const auto& pal = paletteFor(character);
@@ -256,16 +297,26 @@ void ChoiceButton::paintButton(juce::Graphics& g, bool, bool down)
         drawText(g, getButtonText(), r.translated(nudge, nudge), pixelFont(11.0f, true), juce::Colours::black, juce::Justification::centred);
         return;
     }
-    // Mode button: pixel glyph (drawn small, scaled up nearest-neighbour) over its name.
-    juce::Image icon(juce::Image::ARGB, 18, 12, true);
+    // Mode button: its glyph as a 36 x 24 pixel image over its name, shown 1:1 without smoothing:
+    // still pixelated, half the softness of the old 18 x 12 one enlarged.
+    constexpr int w = 36, h = 24;
+    const auto ink = selected ? paletteFor(character).accent : juce::Colours::black;
+    juce::Image icon(juce::Image::ARGB, w, h, true);
     {
         juce::Graphics ig(icon);
-        ig.addTransform(juce::AffineTransform::scale(18.0f / 40.0f, 12.0f / 26.0f));
-        ig.setColour(selected ? paletteFor(character).accent : juce::Colours::black);
-        ig.strokePath(modeGlyph(index, { 4.0f, 2.0f, 32.0f, 22.0f }), juce::PathStrokeType(4.5f));
+        ig.addTransform(juce::AffineTransform::scale(static_cast<float>(w) / 40.0f, static_cast<float>(h) / 26.0f));
+        ig.setColour(ink);
+        // centred by what it actually draws: some glyphs (CALL's waves) sit off their layout box
+        auto glyph = modeGlyph(index, { 4.0f, 2.0f, 32.0f, 22.0f });
+        juce::Path outline;
+        juce::PathStrokeType(4.5f).createStrokedPath(outline, glyph);
+        const auto drawn = outline.getBounds();
+        glyph.applyTransform(juce::AffineTransform::translation(20.0f - drawn.getCentreX(), 13.0f - drawn.getCentreY()));
+        ig.strokePath(glyph, juce::PathStrokeType(4.5f));
     }
     g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
-    g.drawImage(icon, juce::Rectangle<float>(36.0f, 24.0f).withCentre(r.getCentre().translated(nudge, -6.0f)));
+    const auto area = juce::Rectangle<float>(36.0f, 24.0f).withCentre(r.getCentre().translated(nudge, -6.0f));
+    g.drawImage(icon, area.withPosition(std::round(area.getX()), std::round(area.getY())));
     drawText(g, getButtonText(), r.withTrimmedTop(r.getHeight() - 15.0f).translated(nudge, -1.0f), pixelFont(9.0f),
              juce::Colours::black, juce::Justification::centred);
 }

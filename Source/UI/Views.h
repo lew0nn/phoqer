@@ -35,7 +35,7 @@ public:
     void showSpectrogram(double seconds);       // the fed seal's song draws a fish; this shows it
 
 private:
-    void paintSpectrogram(juce::Graphics&);
+    void updateSpectrogram();
     enum class CaptureState { idle, capturing, holding, decaying };
     const TelemetryPublisher& telemetry;
     static constexpr int bucketCount = 1200;
@@ -49,6 +49,8 @@ private:
     int character = 0;
     int spectrogramFrames = 0;
     juce::Image spectrogram;
+    uint32_t lastColumn = 0;                  // the newest spectrogram column already drawn
+    std::vector<float> fftWork, hann;
 };
 
 // OUTPUT meter: chunky segment bar with a dB scale.
