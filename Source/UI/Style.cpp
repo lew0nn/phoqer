@@ -27,7 +27,7 @@ const Palette& paletteFor(int character) noexcept
 {
     static const Palette burp { juce::Colour(0xffff2d55), juce::Colour(0xffff9f1c), juce::Colour(0xff12040a) };
     static const Palette squeal { juce::Colour(0xffe04bff), juce::Colour(0xff33e0ff), juce::Colour(0xff07031a) };
-    static const Palette groan { juce::Colour(0xff6f9fbb), juce::Colour(0xffaeb0d4), juce::Colour(0xff060a14) };
+    static const Palette groan { juce::Colour(0xff2388b5), juce::Colour(0xff44c27f), juce::Colour(0xff021014) };     // ocean blue to green
     return character == 0 ? burp : character == 2 ? groan : squeal;
 }
 
