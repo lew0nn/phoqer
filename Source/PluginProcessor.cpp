@@ -26,6 +26,13 @@ PhoqerAudioProcessor::PhoqerAudioProcessor()
     output = requireParameter(parameters, "output");
     character = requireParameter(parameters, "character");
     behavior = requireParameter(parameters, "behavior");
+    standaloneTempo = requireParameter(parameters, "standaloneTempo");
+    metronomeEnabled = requireParameter(parameters, "metronomeEnabled");
+    metronomeVolume = requireParameter(parameters, "metronomeVolume");
+    metronomeBeatsPerBar = requireParameter(parameters, "metronomeBeats");
+    metronomeAccent = requireParameter(parameters, "metronomeAccent");
+    metronomeSound = requireParameter(parameters, "metronomeSound");
+    countIn = requireParameter(parameters, "countIn");
 }
 
 std::atomic<float>* PhoqerAudioProcessor::requireParameter(
@@ -65,6 +72,28 @@ juce::AudioProcessorValueTreeState::ParameterLayout PhoqerAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         ParameterId { "behavior", 1 }, "BEHAVIOR",
         juce::StringArray { "CALL", "HONK", "BARK", "WAIL", "MURMUR" }, 0));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        ParameterId { "standaloneTempo", 1 }, "STANDALONE TEMPO", makeRange(20.0f, 400.0f, 1.0f), 120.0f,
+        juce::AudioParameterFloatAttributes().withLabel("BPM").withAutomatable(false)));
+    // The standalone app's metronome (METRO.EXE). A DAW has its own click, so none of these are
+    // automatable, and presets leave them alone.
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        ParameterId { "metronomeEnabled", 1 }, "STANDALONE METRONOME", false,
+        juce::AudioParameterBoolAttributes().withAutomatable(false)));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        ParameterId { "metronomeVolume", 1 }, "METRONOME VOLUME", makeRange(0.0f, 100.0f, 1.0f), 70.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%").withAutomatable(false)));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        ParameterId { "metronomeBeats", 1 }, "BEATS PER BAR", juce::StringArray { "2/4", "3/4", "4/4", "5/4", "6/4", "7/4" }, 2,
+        juce::AudioParameterChoiceAttributes().withAutomatable(false)));
+    layout.add(std::make_unique<juce::AudioParameterBool>(ParameterId { "metronomeAccent", 1 }, "ACCENT BEAT 1", true,
+        juce::AudioParameterBoolAttributes().withAutomatable(false)));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        ParameterId { "metronomeSound", 1 }, "METRONOME SOUND", juce::StringArray { "BEEP", "WOOD", "SEAL" }, 0,
+        juce::AudioParameterChoiceAttributes().withAutomatable(false)));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        ParameterId { "countIn", 1 }, "COUNT-IN", juce::StringArray { "OFF", "1 BAR", "2 BARS" }, 0,
+        juce::AudioParameterChoiceAttributes().withAutomatable(false)));
     return layout;
 }
 
@@ -73,11 +102,13 @@ void PhoqerAudioProcessor::prepareToPlay(double sampleRate, int maximumExpectedS
     engine.prepare(sampleRate, maximumExpectedSamplesPerBlock,
                    std::max(1, getTotalNumOutputChannels()));
     setLatencySamples(engine.getLatencySamples());     // the safety limiter looks 2 ms ahead
+    metronome.prepare(sampleRate);
 }
 
 void PhoqerAudioProcessor::releaseResources()
 {
     engine.reset();
+    metronome.reset();
     midiEventCount = 0;
 }
 
@@ -193,7 +224,9 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         std::clamp(static_cast<int>(std::lround(character->load(std::memory_order_relaxed))), 0, 2));
     macros.behaviorMode = static_cast<phoqer::BehaviourMode>(
         std::clamp(static_cast<int>(std::lround(behavior->load(std::memory_order_relaxed))), 0, 4));
-    if (auto* head = getPlayHead())                       // the song's tempo; the standalone app has none: 120
+    if (wrapperType == wrapperType_Standalone || wrapperType == wrapperType_Undefined)
+        macros.tempoBpm = standaloneTempo->load(std::memory_order_relaxed);
+    if (auto* head = getPlayHead())                       // hosted tempo takes priority over the standalone BPM field
         if (const auto position = head->getPosition())
             if (const auto bpm = position->getBpm())
                 macros.tempoBpm = static_cast<float>(*bpm);
@@ -204,7 +237,20 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     engine.process(outputBuffer, midiEvents.data(), midiEventCount, macros,
                    output->load(std::memory_order_relaxed));
     midiEventCount = 0;
+    // A count-in starts the click from beat 1 in the same block the recorder starts skipping it.
+    const bool countingIn = recorder.countInRemaining() > 0;
+    if (countingIn && ! wasCountingIn) metronome.restart();
+    wasCountingIn = countingIn;
     recorder.process(buffer);
+    const bool standalone = wrapperType == wrapperType_Standalone || wrapperType == wrapperType_Undefined;
+    phoqer::MetronomeSettings settings;
+    settings.volume = metronomeVolume->load(std::memory_order_relaxed) * 0.01f;
+    settings.beatsPerBar = getMetronomeBeatsPerBar();
+    settings.accent = metronomeAccent->load(std::memory_order_relaxed) >= 0.5f;
+    settings.sound = static_cast<int>(metronomeSound->load(std::memory_order_relaxed));
+    metronome.process(outputBuffer, standalone && (countingIn || metronomeEnabled->load(std::memory_order_relaxed) >= 0.5f),
+                      standaloneTempo->load(std::memory_order_relaxed), settings);
+    metronomeBeats.store(static_cast<float>(metronome.getBeats()), std::memory_order_relaxed);
 }
 
 void PhoqerAudioProcessor::getStateInformation(juce::MemoryBlock& destinationData)
@@ -217,7 +263,22 @@ void PhoqerAudioProcessor::setStateInformation(const void* data, int sizeInBytes
 {
     if (auto xml = getXmlFromBinary(data, sizeInBytes))
         if (xml->hasTagName(parameters.state.getType()))
-            parameters.replaceState(juce::ValueTree::fromXml(*xml));
+        {
+            auto restored = juce::ValueTree::fromXml(*xml);
+            // Older sessions predate these parameters. Restore their compatible defaults,
+            // including when an old state replaces a currently edited new instance.
+            for (const auto* id : { "standaloneTempo", "metronomeEnabled", "metronomeVolume", "metronomeBeats", "metronomeAccent",
+                                  "metronomeSound", "countIn" })
+                if (! restored.getChildWithProperty("id", id).isValid())
+                {
+                    auto* p = parameters.getParameter(id);
+                    juce::ValueTree child("PARAM");
+                    child.setProperty("id", id, nullptr);
+                    child.setProperty("value", p->convertFrom0to1(p->getDefaultValue()), nullptr);
+                    restored.addChild(child, -1, nullptr);
+                }
+            parameters.replaceState(restored);
+        }
 }
 
 juce::AudioProcessorEditor* PhoqerAudioProcessor::createEditor()

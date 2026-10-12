@@ -585,12 +585,13 @@ juce::Rectangle<float> RecordControl98::buttonBounds() const
     return getLocalBounds().toFloat().withWidth(52.0f);
 }
 
-void RecordControl98::setState(bool isRecording, double seconds)
+void RecordControl98::setState(bool isRecording, double seconds, int countInBeats)
 {
     const int s = static_cast<int>(seconds);
-    if (isRecording == recording && s == shownSeconds) return;
+    if (isRecording == recording && s == shownSeconds && countInBeats == shownCount) return;
     recording = isRecording;
     shownSeconds = s;
+    shownCount = countInBeats;
     repaint();
 }
 
@@ -604,7 +605,8 @@ void RecordControl98::paint(juce::Graphics& g)
     drawText(g, "REC", b.withTrimmedLeft(17.0f).translated(o, o), pixelFont(12.0f), juce::Colours::black);
     const auto lcd = getLocalBounds().toFloat().withTrimmedLeft(56.0f);
     sunken(g, lcd, juce::Colour(0xff10080c));
-    const auto t = juce::String(shownSeconds / 60).paddedLeft('0', 2) + ":" + juce::String(shownSeconds % 60).paddedLeft('0', 2);
+    const auto t = shownCount > 0 ? "- " + juce::String(shownCount) + " -"
+                                  : juce::String(shownSeconds / 60).paddedLeft('0', 2) + ":" + juce::String(shownSeconds % 60).paddedLeft('0', 2);
     drawText(g, t, lcd, logoFont(8.0f), recording ? juce::Colour(0xffff5064) : juce::Colour(0xff6e3c46), juce::Justification::centred);
 }
 
@@ -744,6 +746,189 @@ void PushButton98::paintButton(juce::Graphics& g, bool, bool down)
     button98(g, r, down);
     drawText(g, getButtonText(), r.translated(down ? 1.0f : 0.0f, down ? 1.0f : 0.0f), pixelFont(12.0f, true), juce::Colours::black,
              juce::Justification::centred);
+}
+
+NumberField98::NumberField98(juce::RangedAudioParameter& parameter, const juce::String& labelText, int lowest,
+                             int highest, const juce::String& unit, bool asGlass, float size)
+    : label(labelText), suffix(unit), minimum(lowest), maximum(highest), glass(asGlass), textSize(size),
+      attachment(parameter, [this](float v) { show(v); }, nullptr)
+{
+    setTooltip(label + ": CLICK TO TYPE " + juce::String(minimum) + "-" + juce::String(maximum) + suffix);
+    field.setName(label);
+    field.setBorderSize(juce::BorderSize<int>(0));
+    field.setJustificationType(juce::Justification::centred);
+    field.setEditable(true, true, false);
+    setCharacter(0);
+    field.onEditorShow = [this]
+    {
+        if (onBeginEdit) onBeginEdit();
+        if (auto* editor = field.getCurrentTextEditor())
+        {
+            editor->setInputRestrictions(juce::String(maximum).length(), "0123456789");
+            editor->setJustification(juce::Justification::centred);
+            editor->setText(juce::String(juce::roundToInt(value)), false);
+            editor->selectAll();
+        }
+    };
+    field.onTextChange = [this]
+    {
+        const auto text = field.getText().upToFirstOccurrenceOf(" ", false, false).trim();
+        const auto next = text.isEmpty() ? value : static_cast<float>(juce::jlimit(minimum, maximum, text.getIntValue()));
+        attachment.setValueAsCompleteGesture(next);
+        show(next);
+    };
+    addAndMakeVisible(field);
+    attachment.sendInitialUpdate();
+}
+
+void NumberField98::show(float v)
+{
+    value = v;
+    field.setText(juce::String(juce::roundToInt(v)) + suffix, juce::dontSendNotification);
+}
+
+void NumberField98::setCharacter(int c)
+{
+    character = c;
+    const auto& pal = paletteFor(character);
+    const auto ink = glass ? pal.accent : juce::Colours::black, ground = glass ? pal.sky : juce::Colours::white;
+    field.setFont(pixelFont(glass ? textSize : 9.0f, true));
+    for (const auto id : { juce::Label::textColourId, juce::Label::textWhenEditingColourId })
+        field.setColour(id, ink);
+    for (const auto id : { juce::Label::backgroundColourId, juce::Label::backgroundWhenEditingColourId })
+        field.setColour(id, ground);
+    repaint();
+}
+
+juce::Rectangle<int> NumberField98::fieldArea() const
+{
+    return getLocalBounds().withTrimmedLeft(glass ? 28 : 38);
+}
+
+void NumberField98::paint(juce::Graphics& g)
+{
+    const auto r = getLocalBounds().toFloat();
+    if (glass) drawText(g, label, r.withWidth(26.0f), pixelFont(10.0f, true), juce::Colours::black, juce::Justification::centredRight);
+    else drawText(g, label, r.withWidth(36.0f), pixelFont(8.0f, true), juce::Colours::black);
+    sunken(g, fieldArea().toFloat(), glass ? paletteFor(character).sky : juce::Colours::white);
+}
+
+void NumberField98::resized() { field.setBounds(fieldArea().reduced(2)); }
+
+FloatingWindow98::FloatingWindow98(const juce::String& titleText) : title(titleText)
+{
+    close.onClick = [this] { setVisible(false); if (onClose) onClose(); };
+    addAndMakeVisible(close);
+    constrainer.setMinimumOnscreenAmounts(0xffffff, 0xffffff, 0xffffff, 0xffffff);   // stays wholly inside the editor
+}
+
+juce::Rectangle<float> FloatingWindow98::clientArea() const { return windowClient(getLocalBounds().toFloat()); }
+
+void FloatingWindow98::paint(juce::Graphics& g)
+{
+    const auto client = window98(g, getLocalBounds().toFloat(), title, paletteFor(character), true);
+    if (paintContent) paintContent(g, client);
+}
+
+void FloatingWindow98::resized()
+{
+    const auto c = clientArea();
+    close.setBounds(juce::Rectangle<float>(c.getRight() - 14.0f, c.getY() - defaultTitleHeight - 1.0f, 14.0f, 12.0f).toNearestInt());
+}
+
+void FloatingWindow98::mouseDown(const juce::MouseEvent& e)
+{
+    toFront(false);
+    dragging = e.position.y < clientArea().getY();
+    if (dragging) dragger.startDraggingComponent(this, e);
+}
+
+void FloatingWindow98::mouseDrag(const juce::MouseEvent& e) { if (dragging) dragger.dragComponent(this, e, &constrainer); }
+
+void FloatingWindow98::mouseUp(const juce::MouseEvent&)
+{
+    if (dragging && onMoved) onMoved();
+    dragging = false;
+}
+
+MetronomeButton98::MetronomeButton98() : juce::Button("METRONOME")
+{
+    setClickingTogglesState(true);
+    setTooltip("METRONOME CLICK ON / OFF: FOLLOWS BPM; NOT INCLUDED IN WAV TAKES");
+}
+
+void MetronomeButton98::paintButton(juce::Graphics& g, bool, bool down)
+{
+    const auto r = getLocalBounds().toFloat();
+    const bool on = getToggleState();
+    button98(g, r, on || down);
+    const auto& pal = paletteFor(character);
+    const auto glassArea = r.reduced(r.getHeight() < 24.0f ? 2.0f : 3.0f);     // small (header) size: room for the 16-unit icon
+    g.setColour(pal.sky);
+    g.fillRect(glassArea);
+
+    // n x n pixels (16, or fewer in the status bar): the wireframe body in the accent, the arm and its
+    // weight in the second colour, a dim halo round every lit pixel for the neon bleed. Drawn on a
+    // 16-pixel design and scaled to whole pixels, so the small one stays crisp.
+    const int n = juce::jlimit(9, 16, static_cast<int>(glassArea.getHeight()));
+    const float k = (n - 1) / 15.0f;
+    const auto at = [k](float v) { return juce::roundToInt(v * k); };
+    juce::Image icon(juce::Image::ARGB, n, n, true);
+    const auto plot = [&](int x, int y, juce::Colour c) { if (x >= 0 && y >= 0 && x < n && y < n) icon.setPixelAt(x, y, c); };
+    const auto line = [&](int x0, int y0, int x1, int y1, juce::Colour c)
+    {
+        const int dx = std::abs(x1 - x0), dy = -std::abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+        int err = dx + dy;
+        for (;;)
+        {
+            plot(x0, y0, c);
+            if (x0 == x1 && y0 == y1) break;
+            const int e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+    };
+    line(at(6), at(1), at(2), at(13), pal.accent); line(at(9), at(1), at(13), at(13), pal.accent);
+    line(at(6), at(1), at(9), at(1), pal.accent); line(at(1), at(14), at(14), at(14), pal.accent);
+    // At rest the arm stands upright; while clicking it reaches one end of its swing on every beat.
+    const float b = on && beats ? beats() : 0.5f;
+    const float angle = juce::degreesToRadians(34.0f) * std::cos(juce::MathConstants<float>::pi * b);
+    const float px = 7.5f * k, py = 12.5f * k, length = 11.0f * k;
+    line(at(7), at(12), juce::roundToInt(px + length * std::sin(angle)), juce::roundToInt(py - length * std::cos(angle)), pal.secondary);
+    const int wx = juce::roundToInt(px + 0.62f * length * std::sin(angle)), wy = juce::roundToInt(py - 0.62f * length * std::cos(angle));
+    for (int y = wy; y <= wy + 1; ++y) for (int x = wx - 1; x <= wx; ++x) plot(x, y, pal.secondary);
+    // The click: a soft glow that fades out over the first third of the beat.
+    const float sinceClick = on && beats ? beats() - std::floor(beats()) : 1.0f;
+    const float flash = juce::square(juce::jmax(0.0f, 1.0f - sinceClick / 0.3f));
+    plot(at(7), at(12), pal.secondary.interpolatedWith(juce::Colours::white, flash));
+    juce::Image glowing(juce::Image::ARGB, n, n, true);
+    const auto halo = pal.accent.withMultipliedBrightness(0.42f);
+    for (int y = 0; y < n; ++y)
+        for (int x = 0; x < n; ++x)
+        {
+            if (icon.getPixelAt(x, y).getAlpha() > 0) { glowing.setPixelAt(x, y, icon.getPixelAt(x, y)); continue; }
+            for (const auto& [dx, dy] : { std::pair { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } })
+                if (x + dx >= 0 && y + dy >= 0 && x + dx < n && y + dy < n && icon.getPixelAt(x + dx, y + dy).getAlpha() > 0)
+                    { glowing.setPixelAt(x, y, halo); break; }
+        }
+    if (flash > 0.0f)
+    {
+        g.setColour(pal.secondary.withAlpha(0.35f * flash));
+        g.drawRect(glassArea, 1.0f);
+    }
+    g.setOpacity(on || down ? 1.0f : 0.4f);     // off: dimmed. (drawImage takes the current colour's alpha, so set it.)
+    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+    // Whole or half units per icon pixel, so it stays crisp at 2x.
+    const float scale = juce::jmax(1.0f, std::floor(glassArea.getHeight() / static_cast<float>(n) * 2.0f) * 0.5f);
+    g.drawImage(glowing, juce::Rectangle<float>(n * scale, n * scale).withCentre(glassArea.getCentre()));
+}
+
+void Readout98::paintButton(juce::Graphics& g, bool over, bool)
+{
+    const auto& pal = paletteFor(character);
+    const auto r = getLocalBounds().toFloat();
+    sunken(g, r, pal.sky);
+    drawText(g, shown, r, pixelFont(10.0f, true), over ? pal.accent.brighter(0.4f) : pal.accent, juce::Justification::centred);
 }
 
 // --------------------------------------------------------------------------------------- DIALOG

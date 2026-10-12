@@ -192,6 +192,48 @@ Win98LookAndFeel::Win98LookAndFeel()
 
 juce::Font Win98LookAndFeel::getPopupMenuFont() { return pixelFont(12.0f); }
 
+void Win98LookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, float, float,
+                                        juce::Slider::SliderStyle, juce::Slider&)
+{
+    const float cy = std::round(y + height * 0.5f);
+    sunken(g, { static_cast<float>(x), cy - 2.0f, static_cast<float>(width), 4.0f }, win98::light);
+    button98(g, { std::round(sliderPos) - 4.0f, cy - 8.0f, 9.0f, 16.0f }, false);
+}
+
+void Win98LookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool down, int, int, int, int, juce::ComboBox&)
+{
+    const juce::Rectangle<float> r { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height) };
+    sunken(g, r, win98::light);
+    const auto arrow = r.reduced(2.0f).withLeft(r.getRight() - 2.0f - (r.getHeight() - 4.0f));
+    button98(g, arrow, down);
+    const auto c = arrow.getCentre().translated(down ? 1.0f : 0.0f, down ? 1.0f : 0.0f);
+    g.setColour(juce::Colours::black);
+    for (int i = 0; i < 3; ++i) g.fillRect(std::round(c.x) - 3.0f + i, std::round(c.y) - 1.0f + i, 7.0f - 2.0f * i, 1.0f);
+}
+
+juce::Font Win98LookAndFeel::getComboBoxFont(juce::ComboBox&) { return pixelFont(11.0f, true); }
+
+void Win98LookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label)
+{
+    label.setBounds(3, 1, box.getWidth() - box.getHeight() - 3, box.getHeight() - 2);
+    label.setFont(getComboBoxFont(box));
+    label.setColour(juce::Label::textColourId, juce::Colours::black);
+}
+
+void Win98LookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool, bool)
+{
+    const auto r = button.getLocalBounds().toFloat();
+    const auto box = juce::Rectangle<float>(13.0f, 13.0f).withPosition(r.getX(), std::round(r.getCentreY() - 6.5f));
+    sunken(g, box, win98::light);
+    if (button.getToggleState())
+    {
+        g.setColour(juce::Colours::black);
+        const float pts[][2] { { -3, 0 }, { -2, 1 }, { -1, 2 }, { 0, 1 }, { 1, 0 }, { 2, -1 }, { 3, -2 } };
+        for (const auto& p : pts) g.fillRect(box.getCentreX() + p[0] - 0.5f, box.getCentreY() + p[1] - 1.5f, 1.0f, 3.0f);
+    }
+    drawText(g, button.getButtonText(), r.withTrimmedLeft(18.0f), pixelFont(10.0f, true), juce::Colours::black);
+}
+
 void Win98LookAndFeel::drawPopupMenuBackgroundWithOptions(juce::Graphics& g, int width, int height, const juce::PopupMenu::Options&)
 {
     const juce::Rectangle<float> r { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height) };

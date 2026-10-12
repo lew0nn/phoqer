@@ -69,6 +69,8 @@ private:
     juce::Rectangle<float> logoBounds() const;     // the wordmark at rest
     float fishSlide() const;                       // how far the wordmark moves aside for the fish
     bool isStandalone() const noexcept { return windowControls.audioSettings != nullptr; }
+    void setMetroOpen(bool);
+    juce::Rectangle<float> metronomeCell() const;     // the first KEYS.EXE status cell (standalone)
 
     // Menus and the actions behind them.
     void showMenu(int index);
@@ -104,6 +106,21 @@ private:
     MenuBar98 menuBar;
     PresetBox98 presetBox;
     RecordControl98 recordControl;
+    // The metronome (standalone): a cell in the KEYS.EXE status bar switches it and shows the BPM;
+    // the BPM opens METRO.EXE, a floating window with the tempo and the settings.
+    MetronomeButton98 barMetronome;
+    Readout98 barTempo;
+    NumberField98 bpmField;
+    FloatingWindow98 metroWindow { "METRO.EXE" };
+    MetronomeButton98 metronomeButton;
+    bool metronomeWasOn = false;
+    juce::Slider metronomeVolume { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
+    juce::ComboBox beatsBox, soundBox, countInBox;
+    juce::ToggleButton accentBox { "ACCENT BEAT 1" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> metronomeAttachment, barMetronomeAttachment, accentAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> volumeAttachment;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> metroBoxAttachments;
+    int shownBeatLight = -1;
     Fish98 fish;
     BlueScreen98 blueScreen;
     PianoView piano;

@@ -163,14 +163,14 @@ class RecordControl98 final : public juce::Component, public juce::SettableToolt
 public:
     RecordControl98();
     std::function<void()> onToggle;
-    void setState(bool recording, double seconds);
+    void setState(bool recording, double seconds, int countInBeats = 0);     // during a count-in: beats left
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
 
 private:
     juce::Rectangle<float> buttonBounds() const;
     bool recording = false;
-    int shownSeconds = 0;
+    int shownSeconds = 0, shownCount = 0;
 };
 
 // The secret behind the header wordmark: double-click the wordmark and it slides aside to show this
@@ -225,6 +225,45 @@ private:
     Kind kind;
 };
 
+// A Win98 window floating inside the editor: drag it by its title bar, X hides it. Content goes in
+// clientArea() as child components; paintContent draws the rest (labels, lights) under them.
+class FloatingWindow98 final : public juce::Component
+{
+public:
+    explicit FloatingWindow98(const juce::String& title);
+    void setCharacter(int c) { character = c; repaint(); }
+    juce::Rectangle<float> clientArea() const;
+    std::function<void()> onClose, onMoved;
+    std::function<void(juce::Graphics&, juce::Rectangle<float> client)> paintContent;
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+
+private:
+    juce::String title;
+    int character = 0;
+    bool dragging = false;
+    TitleButton98 close { TitleButton98::Kind::close };
+    juce::ComponentDragger dragger;
+    juce::ComponentBoundsConstrainer constrainer;
+};
+
+// A small LCD readout that is also a button: the KEYS.EXE BPM, which opens METRO.EXE.
+class Readout98 final : public juce::Button
+{
+public:
+    Readout98() : juce::Button("READOUT") {}
+    void setCharacter(int c) { character = c; repaint(); }
+    void setText(const juce::String& t) { if (t != shown) { shown = t; repaint(); } }
+    void paintButton(juce::Graphics&, bool over, bool down) override;
+
+private:
+    juce::String shown;
+    int character = 0;
+};
+
 // A Win98 push button with a text label; the default button gets the black outer border.
 class PushButton98 final : public juce::Button
 {
@@ -234,6 +273,45 @@ public:
 
 private:
     bool isDefault;
+};
+
+// A typed number bound to a parameter, its label at the left: BPM as a red glass (LEVEL.EXE), GLIDE as a
+// white Win98 field (KEYS.EXE status bar). Click to type; Enter applies.
+class NumberField98 final : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    NumberField98(juce::RangedAudioParameter&, const juce::String& label, int minimum, int maximum,
+                  const juce::String& suffix, bool glass, float textSize = 12.0f);
+    void setCharacter(int);
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    std::function<void()> onBeginEdit;
+
+private:
+    juce::Rectangle<int> fieldArea() const;
+    void show(float v);
+    juce::Label field;
+    juce::String label, suffix;
+    int minimum, maximum;
+    bool glass;
+    float textSize;
+    int character = 0;
+    float value = 0.0f;
+    juce::ParameterAttachment attachment;
+};
+
+// The metronome switch: a pressed-in button with a wireframe metronome on dark glass, in the voice's
+// colours. While the click is on, its arm swings left and right, reaching an end on every beat.
+class MetronomeButton98 final : public juce::Button
+{
+public:
+    MetronomeButton98();
+    void setCharacter(int c) { character = c; repaint(); }
+    std::function<float()> beats;      // where the metronome is, in beats since it was switched on
+    void paintButton(juce::Graphics&, bool over, bool down) override;
+
+private:
+    int character = 0;
 };
 
 

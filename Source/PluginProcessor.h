@@ -4,6 +4,7 @@
 
 #include "Core/MidiEvent.h"
 #include "Core/PhoqerEngine.h"
+#include "DSP/Metronome.h"
 
 #include "UI/Recorder.h"
 
@@ -56,6 +57,9 @@ public:
 
     // Records the output to WAV for the editor's REC button.
     phoqer::ui::Recorder& getRecorder() noexcept { return recorder; }
+    float getMetronomeBeats() const noexcept { return metronomeBeats.load(std::memory_order_relaxed); }
+    int getMetronomeBeatsPerBar() const noexcept { return 2 + static_cast<int>(metronomeBeatsPerBar->load(std::memory_order_relaxed)); }
+    int getCountInBars() const noexcept { return static_cast<int>(countIn->load(std::memory_order_relaxed)); }
 
 private:
     void translateMidi(const juce::MidiBuffer& midiMessages) noexcept;
@@ -69,6 +73,9 @@ private:
     std::atomic<bool> panicRequested { false };
     std::atomic<bool> fedRequested { false }, belchRequested { false };
     phoqer::ui::Recorder recorder;
+    phoqer::Metronome metronome;
+    std::atomic<float> metronomeBeats { 0.0f };     // for the swinging metronome button
+    bool wasCountingIn = false;                     // audio thread only
 
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float>* boom = nullptr;
@@ -81,6 +88,13 @@ private:
     std::atomic<float>* output = nullptr;
     std::atomic<float>* character = nullptr;
     std::atomic<float>* behavior = nullptr;
+    std::atomic<float>* standaloneTempo = nullptr;
+    std::atomic<float>* metronomeEnabled = nullptr;
+    std::atomic<float>* metronomeVolume = nullptr;
+    std::atomic<float>* metronomeBeatsPerBar = nullptr;
+    std::atomic<float>* metronomeAccent = nullptr;
+    std::atomic<float>* metronomeSound = nullptr;
+    std::atomic<float>* countIn = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PhoqerAudioProcessor)
 };

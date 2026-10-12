@@ -16,12 +16,14 @@ const juce::Rectangle<float> modeWindow { 6, 100, 86, 278 };
 const juce::Rectangle<float> sealWindow { 98, 100, 262, 278 };
 const juce::Rectangle<float> scopeWindow { 366, 100, 388, 194 };
 const juce::Rectangle<float> outputWindow { 366, 300, 388, 78 };
+const juce::Rectangle<float> metroDefault { 465, 125, 173, 168 };    // METRO.EXE's first position: over SCOPE.EXE
 const juce::Rectangle<float> mixerWindow { 6, 384, 748, 228 };
 const juce::Rectangle<float> keysWindow { 6, 618, 748, 106 };
 
 // The main window's title bar is taller than the others' so its real caption buttons are easy to hit.
 constexpr float headTitleHeight = 22.0f;
 constexpr float headerToolsHeight = 24.0f;
+constexpr float metronomeSwitchW = 18.0f;      // the KEYS.EXE metronome switch and its gap, before the status cells
 constexpr float captionButtonW = 20.0f, captionButtonH = 18.0f;
 
 
@@ -77,11 +79,13 @@ juce::String minutesSeconds(double seconds)
 // ===================================================================================== VIEW
 PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     : processor(owner), lookAndFeel(laf), scope(owner.getTelemetry()), meter(owner.getTelemetry()),
+      bpmField(parameterFor(owner.getParameters(), "standaloneTempo"), "BPM", 20, 400, "", true, 15.0f),
       piano(owner.getKeyboardState()),
       characterAttachment(parameterFor(owner.getParameters(), "character"),
                           [this](float value) { applyCharacter(juce::roundToInt(value)); }, nullptr),
       presets(owner.getParameters()),
-      history(owner, [this] { return presets.loadedName(); }, [this](const juce::String& name) { presets.select(name); })
+      history(owner, [this] { return presets.loadedName(); },
+              [this](const juce::String& name) { presets.select(name); })
 {
     setOpaque(true);
     auto& state = processor.getParameters();
@@ -150,6 +154,62 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
         showPopup(m, presetBox.getBounds().toFloat().withTrimmedRight(38.0f), -1);
     };
     recordControl.onToggle = [this] { toggleRecording(); };
+    for (auto* c : std::initializer_list<juce::Component*> { &bpmField, &metronomeButton, &metronomeVolume, &accentBox })
+        metroWindow.addAndMakeVisible(c);
+    metroWindow.setComponentID("metroWindow");
+    addChildComponent(metroWindow);
+    addChildComponent(barMetronome);
+    addChildComponent(barTempo);
+    barMetronome.setComponentID("barMetronome");
+    barTempo.setComponentID("metroOpen");
+    barMetronome.setTooltip("METRONOME ON / OFF (NOT IN WAV TAKES)");
+    barTempo.setTooltip("BPM: CLICK FOR METRO.EXE (TEMPO, VOLUME, BEATS, SOUND, COUNT-IN)");
+    barMetronome.beats = [this] { return processor.getMetronomeBeats(); };
+    barMetronomeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(state, "metronomeEnabled", barMetronome);
+    barTempo.onClick = [this] { setMetroOpen(! metroWindow.isVisible()); };
+    metroWindow.onClose = [this] { setMetroOpen(false); };
+    metroWindow.onMoved = [this]
+    {
+        processor.getParameters().state.setProperty("metroX", metroWindow.getX(), nullptr);
+        processor.getParameters().state.setProperty("metroY", metroWindow.getY(), nullptr);
+    };
+    metroWindow.paintContent = [this](juce::Graphics& g, juce::Rectangle<float> m)
+    {
+        const char* labels[] { "VOLUME", "BEATS", nullptr, "SOUND", "COUNT-IN" };
+        for (int i = 0; i < 5; ++i)
+            if (labels[i] != nullptr)
+                drawText(g, labels[i], { m.getX(), m.getY() + 42.0f + i * 19.0f, 54.0f, 16.0f }, pixelFont(10.0f, true), juce::Colours::black);
+        drawText(g, juce::String(juce::roundToInt(metronomeVolume.getValue())) + "%", { m.getRight() - 24.0f, m.getY() + 42.0f, 24.0f, 16.0f },
+                 pixelFont(10.0f, true), juce::Colours::black, juce::Justification::centredRight);
+        // Beat lights under the BPM glass: the current beat of the bar lights up while the click runs.
+        const int n = processor.getMetronomeBeatsPerBar();
+        const float x0 = m.getX() + 28.0f, w = 76.0f, gap = 3.0f, each = (w - gap * (n - 1)) / n;
+        const auto& pal = paletteFor(character);
+        for (int i = 0; i < n; ++i)
+        {
+            g.setColour(i == shownBeatLight ? pal.accent : pal.accent.withMultipliedBrightness(0.3f));
+            g.fillRect(juce::Rectangle<float>(x0 + i * (each + gap), m.getY() + 31.0f, each, 4.0f).toNearestInt().toFloat());
+        }
+    };
+    volumeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(state, "metronomeVolume", metronomeVolume);
+    accentAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(state, "metronomeAccent", accentBox);
+    metronomeVolume.onValueChange = [this] { metroWindow.repaint(); };
+    for (auto [box, id] : { std::pair { &beatsBox, "metronomeBeats" }, { &soundBox, "metronomeSound" }, { &countInBox, "countIn" } })
+    {
+        box->addItemList(dynamic_cast<juce::AudioParameterChoice&>(*state.getParameter(id)).choices, 1);
+        box->setComponentID(id);
+        metroWindow.addAndMakeVisible(*box);
+        metroBoxAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(state, id, *box));
+    }
+    metronomeVolume.setComponentID("metronomeVolume");
+    accentBox.setComponentID("metronomeAccent");
+    metronomeButton.setTooltip("METRONOME ON / OFF (FOLLOWS BPM; NOT IN WAV TAKES)");
+    countInBox.setTooltip("CLICKS BEFORE REC STARTS RECORDING");
+    bpmField.setComponentID("tempo");
+    metronomeButton.setComponentID("metronome");
+    metronomeButton.beats = [this] { return processor.getMetronomeBeats(); };
+    metronomeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(state, "metronomeEnabled", metronomeButton);
+    bpmField.onBeginEdit = [this] { releaseQwertyNotes(); };
 
     addChildComponent(fish);
     addChildComponent(blueScreen);
@@ -244,6 +304,10 @@ void PhoqerView::setWindowControls(WindowControls controls)
     titleButtons[1]->setVisible(windowControls.toggleFullscreen != nullptr);
     titleButtons[2]->setVisible(windowControls.close != nullptr);
     recordControl.setVisible(isStandalone());
+    barMetronome.setVisible(isStandalone());
+    barTempo.setVisible(isStandalone());
+    setMetroOpen(static_cast<bool>(processor.getParameters().state.getProperty("metroOpen", false)));
+    resized();
 }
 
 bool PhoqerView::onTitleBar(juce::Point<float> p) const
@@ -358,10 +422,29 @@ void PhoqerView::applyCharacter(int c)
     for (auto& k : knobs) k->setCharacter(character);
     for (auto& b : modeButtons) b->setCharacter(character);
     scope.setCharacter(character);
+    bpmField.setCharacter(character);
+    metronomeButton.setCharacter(character);
+    barMetronome.setCharacter(character);
+    barTempo.setCharacter(character);
+    metroWindow.setCharacter(character);
     meter.setCharacter(character);
     piano.setCharacter(character);
     chrome = {};
     repaint();
+}
+
+juce::Rectangle<float> PhoqerView::metronomeCell() const
+{
+    // The switch sits at the start of the bar, outside the cells; the cells share the rest, as statusBar() lays them out.
+    const auto keysClient = windowClient(keysWindow);
+    return { keysClient.getX() + metronomeSwitchW, keysClient.getBottom() - 15.0f, (keysClient.getWidth() - metronomeSwitchW) / 3.0f - 3.0f, 15.0f };
+}
+
+void PhoqerView::setMetroOpen(bool open)
+{
+    metroWindow.setVisible(open && isStandalone());
+    processor.getParameters().state.setProperty("metroOpen", open, nullptr);
+    if (metroWindow.isVisible()) metroWindow.toFront(false);
 }
 
 void PhoqerView::resized()
@@ -369,7 +452,10 @@ void PhoqerView::resized()
     const auto client = [](juce::Rectangle<float> r) { return windowClient(r); };
     const auto head = windowClient(headWindow, headTitleHeight);
     menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, head.getWidth(), headerToolsHeight).toNearestInt());
-    recordControl.setBounds(juce::Rectangle<float>(head.getRight() - 2.0f - recordW, head.getY() - 2.0f, recordW, 20.0f).toNearestInt());
+    const int toolsY = juce::roundToInt(head.getY() - 2.0f);
+    const int toolsRight = juce::roundToInt(head.getRight() - 2.0f);
+    constexpr int toolHeight = 20;
+    recordControl.setBounds(toolsRight - static_cast<int>(recordW), toolsY, static_cast<int>(recordW), toolHeight);
     const auto row = head.withTrimmedTop(headerToolsHeight);
     for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
         voiceTabs[slot]->setBounds(juce::Rectangle<float>(row.getRight() - 4.0f - (3 - slot) * 94.0f + 4.0f, row.getCentreY() - 12.0f, 90.0f, 24.0f).toNearestInt());
@@ -382,6 +468,22 @@ void PhoqerView::resized()
 
     seal.setBounds(client(sealWindow).withTrimmedBottom(18.0f).reduced(3.0f).toNearestInt());
     scope.setBounds(client(scopeWindow).withTrimmedBottom(18.0f).reduced(2.0f).toNearestInt());
+    {
+        // METRO.EXE: BPM glass and the metronome on top, beat lights, five settings rows.
+        metroWindow.setBounds(juce::Rectangle<float>(static_cast<float>(processor.getParameters().state.getProperty("metroX", metroDefault.getX())),
+                                                     static_cast<float>(processor.getParameters().state.getProperty("metroY", metroDefault.getY())),
+                                                     metroDefault.getWidth(), metroDefault.getHeight()).toNearestInt()
+                                  .constrainedWithin(getLocalBounds()));
+        const auto m = metroWindow.clientArea();
+        bpmField.setBounds(juce::Rectangle<float>(m.getX(), m.getY() + 2.0f, 106.0f, 26.0f).toNearestInt());
+        metronomeButton.setBounds(juce::Rectangle<float>(m.getRight() - 30.0f, m.getY(), 30.0f, 30.0f).toNearestInt());
+        const auto row = [&](int i) { return juce::Rectangle<float>(m.getX() + 58.0f, m.getY() + 42.0f + i * 19.0f, m.getWidth() - 58.0f, 16.0f); };
+        metronomeVolume.setBounds(row(0).withTrimmedRight(26.0f).toNearestInt());
+        beatsBox.setBounds(row(1).withWidth(56.0f).toNearestInt());
+        accentBox.setBounds(row(2).withX(m.getX()).withRight(m.getRight()).toNearestInt());
+        soundBox.setBounds(row(3).toNearestInt());
+        countInBox.setBounds(row(4).toNearestInt());
+    }
     const auto out = client(outputWindow);
     meter.setBounds(juce::Rectangle<float>(out.getX() + 2.0f, out.getY() + 4.0f, 236.0f, 40.0f).toNearestInt());
     knobs[7]->setBounds(juce::Rectangle<float>(out.getRight() - 136.0f, out.getY(), 136.0f, out.getHeight()).toNearestInt());
@@ -393,6 +495,12 @@ void PhoqerView::resized()
         const auto cell = big ? juce::Rectangle<float>(mix.getX() + 4.0f + i * 134.0f, mix.getY(), 134.0f, mix.getHeight())
                               : juce::Rectangle<float>(mix.getX() + 544.0f + (i - 4) * 64.0f, mix.getY(), 64.0f, mix.getHeight());
         knobs[static_cast<size_t>(i)]->setBounds(cell.toNearestInt());
+    }
+    {
+        // The metronome cell: the switch, then the BPM readout.
+        const auto cell = metronomeCell();
+        barMetronome.setBounds(juce::Rectangle<float>(cell.getX() - metronomeSwitchW, cell.getY(), 15.0f, 15.0f).toNearestInt());
+        barTempo.setBounds(juce::Rectangle<float>(cell.getX() + 2.0f, cell.getY() + 1.0f, 30.0f, 13.0f).toNearestInt());
     }
     const auto keys = client(keysWindow);
     const float pianoWidth = std::floor((keys.getWidth() - 6.0f) / PianoView::whiteKeysShown) * PianoView::whiteKeysShown;
@@ -418,7 +526,9 @@ void PhoqerView::rebuildChrome(float scale)
     const auto& pal = paletteFor(character);
     const juce::String voice = voiceNames[character];
 
-    // Win98 shell: the space between and around the child windows is face grey.
+    // Pure Win98 shell: exposed space between and around child windows is system face-grey.
+    // Do not wrap the editor in another frame and do not let the old night-sky desktop become a
+    // black outer layer. Dark colour now belongs only to the real display and artwork clients.
     g.fillAll(win98::face);
 
     // Header window: the PHOQER wordmark; the preset box and voice tabs sit on the right.
@@ -464,8 +574,26 @@ void PhoqerView::paint(juce::Graphics& g)
     if (showKeys)
     {
         const auto keysClient = windowClient(keysWindow);
-        statusBar(g, keysClient.withTrimmedTop(keysClient.getHeight() - 15.0f),
-                  { "TYPE A TO ; TO PLAY", "Z/X OCTAVE  A=" + noteName(qwertyBase), "C/V VELOCITY " + juce::String(qwertyVelocity) });
+        const auto bar = keysClient.withTrimmedTop(keysClient.getHeight() - 15.0f);
+        const auto octave = "Z/X OCTAVE  A=" + noteName(qwertyBase), velocity = "C/V VELOCITY " + juce::String(qwertyVelocity);
+        if (! isStandalone())
+            statusBar(g, bar, { octave, velocity });
+        else
+        {
+            // The metronome cell: switch and BPM are components; the bar, its beat lights and ON / OFF are drawn here.
+            statusBar(g, bar.withTrimmedLeft(metronomeSwitchW), { "", octave, velocity });
+            const auto cell = metronomeCell();
+            const auto& pal = paletteFor(character);
+            const int n = processor.getMetronomeBeatsPerBar();
+            drawText(g, "BPM  " + juce::String(n) + "/4", { cell.getX() + 37.0f, cell.getY(), 50.0f, 15.0f }, pixelFont(8.5f), juce::Colours::black);
+            for (int i = 0; i < n; ++i)
+            {
+                g.setColour(i == shownBeatLight ? pal.accent : pal.accent.withMultipliedBrightness(0.3f));
+                g.fillRect(cell.getX() + 89.0f + i * 9.0f, cell.getY() + 5.0f, 6.0f, 5.0f);
+            }
+            drawText(g, barMetronome.getToggleState() ? "CLICK ON" : "CLICK OFF", { cell.getX() + 155.0f, cell.getY(), 64.0f, 15.0f },
+                     pixelFont(8.5f), juce::Colours::black);
+        }
     }
 }
 
@@ -594,7 +722,23 @@ void PhoqerView::tick(double now)
     meter.refresh();
 
     const auto& recorder = processor.getRecorder();
-    recordControl.setState(recorder.isRecording(), recorder.isRecording() ? recorder.seconds() : 0.0);
+    const auto countIn = recorder.countInRemaining();
+    const double beatSamples = 60.0 / juce::jmax(20.0f, processor.getParameters().getRawParameterValue("standaloneTempo")->load())
+                             * juce::jmax(1.0, recorder.sampleRate());
+    recordControl.setState(recorder.isRecording(), recorder.isRecording() ? recorder.seconds() : 0.0,
+                           countIn > 0 ? static_cast<int>(std::ceil(static_cast<double>(countIn) / beatSamples)) : 0);
+    const bool clicking = metronomeButton.getToggleState() || countIn > 0;
+    if (clicking || metronomeWasOn) { metronomeButton.repaint(); barMetronome.repaint(); }     // the arms swing
+    metronomeWasOn = clicking;
+    const int light = clicking ? static_cast<int>(std::floor(processor.getMetronomeBeats())) % processor.getMetronomeBeatsPerBar() : -1;
+    barTempo.setText(juce::String(juce::roundToInt(processor.getParameters().getRawParameterValue("standaloneTempo")->load())));
+    if (light != shownBeatLight && isStandalone())
+    {
+        shownBeatLight = light;
+        const auto m = metroWindow.clientArea();
+        metroWindow.repaint(juce::Rectangle<float>(m.getX() + 28.0f, m.getY() + 31.0f, 76.0f, 4.0f).toNearestInt());
+        if (showKeys) repaint(metronomeCell().toNearestInt());
+    }
     if (const auto text = presets.displayName(); text != shownPreset)
     {
         shownPreset = text;
@@ -884,7 +1028,13 @@ void PhoqerView::showGuide()
                    "HONK|NASAL HONKS WHILE THE KEY IS HELD",
                    "BARK|HARD BARKS WHILE THE KEY IS HELD",
                    "WAIL|A LONG GLIDE UP AND BACK",
-                   "MURMUR|A MUTTERED, CLOSED-MOUTH HUM" };
+                   "MURMUR|A MUTTERED, CLOSED-MOUTH HUM",
+                   "#METRONOME (STANDALONE APP)",
+                   "SWITCH|IN THE KEYS.EXE STATUS BAR: THE CLICK ON / OFF; NEVER IN WAV TAKES",
+                   "BPM|CLICK THE BPM THERE TO OPEN METRO.EXE; CLICK ITS BPM TO TYPE A TEMPO",
+                   "SETTINGS|VOLUME, BEATS PER BAR, ACCENT ON BEAT 1, SOUND",
+                   "COUNT-IN|1 OR 2 BARS OF CLICKS BEFORE REC STARTS",
+                   "REC|RECORD TO WAV; PRESS AGAIN TO STOP AND SAVE" };
     showDialog(std::move(spec));
 }
 
@@ -1032,7 +1182,11 @@ void PhoqerView::toggleRecording()
     {
         if (dialog != nullptr) return;
         recordChannels = juce::jlimit(1, 2, processor.getTotalNumOutputChannels());
-        if (! recorder.start(processor.getSampleRate(), recordChannels))
+        // COUNT-IN: whole bars of clicks first; the take starts on the downbeat after them.
+        const double rate = processor.getSampleRate(), bpm = processor.getParameters().getRawParameterValue("standaloneTempo")->load();
+        const auto countIn = static_cast<juce::int64>(std::llround(processor.getCountInBars() * processor.getMetronomeBeatsPerBar()
+                                                                   * 60.0 / juce::jmax(20.0, bpm) * rate));
+        if (! recorder.start(rate, recordChannels, countIn))
             showMessage("RECORD", { "COULD NOT START RECORDING.", "~CHECK THE AUDIO SETUP." });
         return;
     }

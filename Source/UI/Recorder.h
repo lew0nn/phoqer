@@ -15,11 +15,12 @@ public:
     Recorder();
     ~Recorder();
 
-    bool start(double sampleRate, int numChannels);
+    bool start(double sampleRate, int numChannels, juce::int64 countInSamples = 0);    // count-in: not recorded
     juce::File stop();                                   // the finished temporary file
     bool isRecording() const noexcept { return active.load() != nullptr; }
     double seconds() const noexcept;
     double sampleRate() const noexcept { return rate; }
+    juce::int64 countInRemaining() const noexcept { return isRecording() ? countIn.load() : 0; }
 
     void process(const juce::AudioBuffer<float>&);      // audio thread
 
@@ -32,6 +33,7 @@ private:
     juce::CriticalSection writerLock;
     std::atomic<juce::AudioFormatWriter::ThreadedWriter*> active { nullptr };
     std::atomic<juce::int64> samplesWritten { 0 };
+    std::atomic<juce::int64> countIn { 0 };
     double rate = 48000.0;
     juce::File temp;
 };

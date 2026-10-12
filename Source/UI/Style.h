@@ -73,6 +73,16 @@ public:
 
     void drawCornerResizer(juce::Graphics&, int width, int height, bool isMouseOver, bool isMouseDragging) override;
 
+    // METRO.EXE's controls: a Win98 track slider, drop-down list and check box.
+    void drawLinearSlider(juce::Graphics&, int x, int y, int width, int height, float sliderPos, float minPos, float maxPos,
+                          juce::Slider::SliderStyle, juce::Slider&) override;
+    int getSliderThumbRadius(juce::Slider&) override { return 5; }
+    void drawComboBox(juce::Graphics&, int width, int height, bool isButtonDown, int buttonX, int buttonY, int buttonW, int buttonH,
+                      juce::ComboBox&) override;
+    juce::Font getComboBoxFont(juce::ComboBox&) override;
+    void positionComboBoxText(juce::ComboBox&, juce::Label&) override;
+    void drawToggleButton(juce::Graphics&, juce::ToggleButton&, bool highlighted, bool down) override;
+
 private:
     int character = 0;
 };

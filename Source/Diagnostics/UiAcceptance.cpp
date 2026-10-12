@@ -82,6 +82,32 @@ int main(int argc, char** argv)
         preview.audioSettings = preview.minimise = preview.toggleFullscreen = preview.close = [] {};
         editor->setWindowControls(preview);
         save(editor->getView(), folder.getChildFile(juce::String("ui-") + names[character] + "-standalone.png"));
+        setParameter(processor, "metronomeEnabled", 1);
+        editor->tick(now);
+        save(editor->getView(), folder.getChildFile(juce::String("ui-") + names[character] + "-click-on.png"));
+        // The metronome's swing and click flash: two beats at 120 BPM, 30 frames a second.
+        // METRO.EXE open over the app, the click on.
+        if (auto* opener = dynamic_cast<juce::Button*>(editor->getView().findChildWithID("metroOpen")))
+        {
+            opener->onClick();
+            save(editor->getView(), folder.getChildFile(juce::String("ui-") + names[character] + "-metro.png"));
+        }
+        auto* metroWindow = editor->getView().findChildWithID("metroWindow");
+        if (auto* metronome = metroWindow == nullptr ? nullptr : dynamic_cast<phoqer::ui::MetronomeButton98*>(metroWindow->findChildWithID("metronome")))
+        {
+            const auto previous = metronome->beats;
+            float beat = 0.0f;
+            metronome->beats = [&beat] { return beat; };
+            for (int frame = 0; frame < 30; ++frame)
+            {
+                beat = frame / 15.0f;
+                save(*metronome, folder.getChildFile(juce::String("swing-") + names[character] + "-"
+                                                     + juce::String(frame).paddedLeft('0', 2) + ".png"));
+            }
+            metronome->beats = previous;
+        }
+        setParameter(processor, "metronomeEnabled", 0);
+        editor->tick(now);
         editor->setWindowControls({});
         juce::AudioBuffer<float> buffer(2, block);
         float maxIntensity = 0.0f;

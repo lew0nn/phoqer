@@ -10,7 +10,7 @@ Recorder::~Recorder()
     temp.deleteFile();
 }
 
-bool Recorder::start(double sampleRate, int numChannels)
+bool Recorder::start(double sampleRate, int numChannels, juce::int64 countInSamples)
 {
     stop();
     rate = sampleRate > 0.0 ? sampleRate : 48000.0;
@@ -22,6 +22,7 @@ bool Recorder::start(double sampleRate, int numChannels)
     if (w == nullptr) return false;
     stream.release();                                    // the writer owns the stream now
     samplesWritten = 0;
+    countIn = std::max<juce::int64>(0, countInSamples);
     writer = std::make_unique<juce::AudioFormatWriter::ThreadedWriter>(w.release(), thread, 32768);
     const juce::ScopedLock sl(writerLock);
     active = writer.get();
@@ -46,9 +47,17 @@ double Recorder::seconds() const noexcept
 void Recorder::process(const juce::AudioBuffer<float>& buffer)
 {
     const juce::ScopedLock sl(writerLock);
-    if (auto* w = active.load())
-        if (w->write(buffer.getArrayOfReadPointers(), buffer.getNumSamples()))
-            samplesWritten += buffer.getNumSamples();
+    auto* w = active.load();
+    if (w == nullptr) return;
+    // Skip what is left of the count-in; record from the downbeat on.
+    const auto wait = countIn.load();
+    const int skip = static_cast<int>(std::min<juce::int64>(wait, buffer.getNumSamples())), count = buffer.getNumSamples() - skip;
+    countIn = wait - skip;
+    if (count <= 0) return;
+    std::array<const float*, 8> channels {};
+    for (int c = 0; c < std::min(buffer.getNumChannels(), 8); ++c) channels[static_cast<size_t>(c)] = buffer.getReadPointer(c, skip);
+    if (w->write(channels.data(), count))
+        samplesWritten += count;
 }
 
 juce::File Recorder::folder()

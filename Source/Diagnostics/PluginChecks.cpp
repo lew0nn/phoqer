@@ -21,7 +21,8 @@ void stateAndControls()
     auto& p = *owner;
     phoqer::ui::PresetLibrary presets(p.getParameters());
     presets.load(2);
-    set(p, "output", -7);
+    set(p, "output", -7); set(p, "standaloneTempo", 173);
+    set(p, "metronomeEnabled", 1);
     juce::MemoryBlock saved;
     p.getStateInformation(saved);
     auto restoredOwner = std::make_unique<PhoqerAudioProcessor>();
@@ -34,24 +35,74 @@ void stateAndControls()
         auto* other = restored.getParameters().getParameter(param->paramID);
         check(other && std::abs(other->getValue() - param->getValue()) < 0.0001f, "session parameter recall failed");
     }
-    // The real view opens, reopens, and has no leftover comparison controls.
+    // Exercise the editable tempo field and its parameter history in the real view.
     std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
     auto& view = dynamic_cast<phoqer::ui::PhoqerEditor&>(*editor).getView();
+    auto* metro = view.findChildWithID("metroWindow");
+    check(metro != nullptr, "missing METRO.EXE window");
+    auto* tempo = metro->findChildWithID("tempo");
+    check(tempo != nullptr, "missing tempo field");
+    auto* label = dynamic_cast<juce::Label*>(tempo->getChildComponent(0));
+    check(label != nullptr, "tempo field is not editable");
+    label->setText("173", juce::sendNotificationSync);
+    check(get(p, "standaloneTempo") == 173, "typed tempo did not reach processor");
+    label->setText("999", juce::sendNotificationSync);
+    check(get(p, "standaloneTempo") == 400, "tempo upper bound failed");
+    label->setText("1", juce::sendNotificationSync);
+    check(get(p, "standaloneTempo") == 20, "tempo lower bound failed");
+    check(label->isEditableOnSingleClick(), "tempo requires more than one click");
+    view.keyPressed(juce::KeyPress('z', juce::ModifierKeys::ctrlModifier, 0));
+    check(get(p, "standaloneTempo") == 400, "tempo undo failed");
+    view.keyPressed(juce::KeyPress('y', juce::ModifierKeys::ctrlModifier, 0));
+    check(get(p, "standaloneTempo") == 20, "tempo redo failed");
     check(view.findChildWithID("comparisonA") == nullptr && view.findChildWithID("comparisonB") == nullptr
           && view.findChildWithID("comparisonCopy") == nullptr, "comparison controls remain");
+    set(p, "metronomeEnabled", 0);
+    phoqer::ui::WindowControls preview;
+    preview.audioSettings = [] {};
+    view.setWindowControls(preview);
+    check(tempo->isVisible(), "standalone tempo hidden");
+    auto* opener = dynamic_cast<juce::Button*>(view.findChildWithID("metroOpen"));
+    check(opener != nullptr && opener->isVisible() && ! metro->isVisible(), "METRO.EXE should start closed with the KEYS.EXE BPM shown");
+    auto* barSwitch = dynamic_cast<juce::Button*>(view.findChildWithID("barMetronome"));
+    check(barSwitch != nullptr && barSwitch->isVisible() && ! barSwitch->getBounds().intersects(opener->getBounds()),
+          "missing or overlapping KEYS.EXE metronome switch");
+    opener->onClick();
+    check(metro->isVisible() && view.getLocalBounds().contains(metro->getBounds()), "METRO.EXE did not open inside the editor");
+    auto* click = dynamic_cast<juce::Button*>(metro->findChildWithID("metronome"));
+    check(click != nullptr && click->isVisible(), "missing standalone metronome toggle");
+    check(click->getClickingTogglesState(), "metronome button does not toggle on click");
+    check(! click->getBounds().intersects(tempo->getBounds()), "metronome overlaps tempo");
+    click->setToggleState(true, juce::sendNotificationSync);
+    view.tick(999.0);
+    check(get(p, "metronomeEnabled") == 1, "click toggle did not enable metronome");
+    view.keyPressed(juce::KeyPress('z', juce::ModifierKeys::ctrlModifier, 0));
+    check(get(p, "metronomeEnabled") == 0, "metronome toggle undo failed");
     editor.reset();
     editor.reset(p.createEditor());
+    check(get(p, "standaloneTempo") == 20, "editor reopening reset tempo");
     editor.reset();
 
-    // A preset file sets the sound only: an OUTPUT inside it is ignored.
+    for (const auto* id : { "standaloneTempo", "metronomeEnabled", "metronomeVolume", "metronomeBeats", "metronomeAccent", "metronomeSound", "countIn" })
+        check(! p.getParameters().getParameter(id)->isAutomatable(), "a standalone-only setting is automatable in a DAW");
+    // Strip the new parameters to simulate a pre-feature session loaded over edited state.
+    auto oldState = p.getParameters().copyState();
+    for (const auto* id : { "standaloneTempo", "metronomeEnabled" })
+        oldState.removeChild(oldState.getChildWithProperty("id", id), nullptr);
+    auto xml = oldState.createXml();
+    juce::MemoryBlock legacy;
+    juce::AudioProcessor::copyXmlToBinary(*xml, legacy);
+    p.setStateInformation(legacy.getData(), static_cast<int>(legacy.getSize()));
+    check(get(p, "standaloneTempo") == 120 && get(p, "metronomeEnabled") == 0, "legacy session defaults failed");
     juce::TemporaryFile oldPreset(".phqpreset");
-    check(oldPreset.getFile().replaceWithText("<PHOQERPRESET name=\"LEGACY\"><PARAM id=\"boom\" value=\"0.3\"/>"
-                                              "<PARAM id=\"output\" value=\"12\"/></PHOQERPRESET>"),
+    check(oldPreset.getFile().replaceWithText("<PHOQERPRESET name=\"LEGACY\"><PARAM id=\"boom\" value=\"0.3\"/><PARAM id=\"output\" value=\"12\"/></PHOQERPRESET>"),
           "cannot create legacy preset fixture");
     const float level = get(p, "output");
+    set(p, "metronomeEnabled", 1);
     check(presets.loadFile(oldPreset.getFile()), "legacy preset did not load");
-    check(std::abs(get(p, "boom") - 0.3f) < 0.001f, "preset sound value not applied");
-    check(get(p, "output") == level, "preset changed output");
+    check(get(p, "output") == level && get(p, "standaloneTempo") == 120, "preset changed output or tempo");
+    check(get(p, "metronomeEnabled") == 1, "preset changed metronome toggle");
+    set(p, "metronomeEnabled", 0);
     p.prepareToPlay(48000, 128);
     set(p, "space", 0); set(p, "detune", 0);
     juce::AudioBuffer<float> buffer(2, 128);
@@ -71,6 +122,132 @@ void stateAndControls()
     check(buffer.getMagnitude(0, 128) < 0.00001f, "panic failed with late-block notes");
     p.releaseResources();
     std::cout << "PLUGIN_STATE_CONTROLS_OK\n";
+}
+
+void metronomeAudio()
+{
+    const phoqer::MetronomeSettings flat { 0.7f, 4, false, 0 };     // timing is measured on unaccented clicks
+    // Verify sample-accurate beat intervals across supported rates, block sizes and tempo bounds.
+    for (double rate : { 44100.0, 48000.0, 88200.0, 96000.0 })
+        for (int size : { 32, 64, 128, 512, 1024 })
+            for (float bpm : { 20.0f, 120.0f, 400.0f })
+            {
+                phoqer::Metronome click;
+                click.prepare(rate);
+                phoqer::AudioBuffer buffer(2, size);
+                const double interval = rate * 60.0 / bpm;
+                const int total = static_cast<int>(std::ceil(interval * 2.2));
+                std::vector<int> starts;
+                int lastSound = -static_cast<int>(rate);
+                for (int offset = 0; offset < total; offset += size)
+                {
+                    buffer.clear();
+                    click.process(buffer, true, bpm, flat);
+                    for (int i = 0; i < size; ++i)
+                        if (std::abs(buffer.getSample(0, i)) > 0.001f)
+                        {
+                            const int sample = offset + i;
+                            if (sample - lastSound > static_cast<int>(0.05 * rate)) starts.push_back(sample);
+                            lastSound = sample;
+                            check(buffer.getSample(0, i) == buffer.getSample(1, i), "metronome stereo mismatch");
+                        }
+                }
+                check(starts.size() == 3, "incorrect number of metronome beats");
+                for (size_t i = 1; i < starts.size(); ++i)
+                    check(std::abs((starts[i] - starts[i - 1]) - interval) <= 2.0, "metronome beat timing drift");
+                for (int i = 0; i < 1500 / size + 2; ++i) { buffer.clear(); click.process(buffer, false, bpm, flat); }
+                check(buffer.getMagnitude(0, size) == 0, "disabled metronome kept clicking");
+            }
+
+    phoqer::Metronome click;
+    click.prepare(48000);
+    phoqer::AudioBuffer sample(2, 1);
+    std::vector<int> starts;
+    int lastSound = -48000;
+    for (int i = 0; i < 36000; ++i)
+    {
+        sample.clear(); click.process(sample, true, i < 12000 ? 120.0f : 240.0f, flat);
+        if (std::abs(sample.getSample(0, 0)) > 0.001f)
+        {
+            if (i - lastSound > 2400) starts.push_back(i);
+            lastSound = i;
+        }
+    }
+    check(starts.size() == 3 && std::abs((starts[1] - starts[0]) - 18000) <= 2
+          && std::abs((starts[2] - starts[1]) - 12000) <= 2, "tempo change lost metronome beat phase");
+    click.reset();
+    for (int i = 0; i < 1000; ++i)
+    {
+        sample.setSample(0, 0, 0.9661f); sample.setSample(1, 0, -0.9661f);
+        click.process(sample, true, 400, flat);
+        check(sample.getMagnitude(0, 1) <= 0.96611f, "metronome mix exceeded output ceiling");
+    }
+
+    // Check the real processor routing: audible monitor click, silent no-note WAV take.
+    auto p = std::make_unique<PhoqerAudioProcessor>();
+    p->prepareToPlay(48000, 128);
+    set(*p, "metronomeEnabled", 1);
+    check(p->getRecorder().start(48000, 2), "cannot start metronome recorder check");
+    juce::AudioBuffer<float> monitor(2, 128);
+    juce::MidiBuffer midi;
+    float peak = 0;
+    for (int i = 0; i < 40; ++i) { p->processBlock(monitor, midi); peak = std::max(peak, monitor.getMagnitude(0, 128)); }
+    check(peak > 0.05f, "metronome did not reach standalone output");
+    const auto take = p->getRecorder().stop();
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatReader> reader(wav.createReaderFor(take.createInputStream().release(), true));
+    check(reader != nullptr && reader->lengthInSamples > 0, "metronome recorder check produced no take");
+    juce::AudioBuffer<float> recorded(2, static_cast<int>(reader->lengthInSamples));
+    check(reader->read(&recorded, 0, recorded.getNumSamples(), 0, true, true), "cannot read metronome recorder check");
+    check(recorded.getMagnitude(0, recorded.getNumSamples()) == 0, "metronome leaked into WAV take");
+    set(*p, "metronomeEnabled", 0);
+    for (int i = 0; i < 10; ++i) p->processBlock(monitor, midi);
+    check(monitor.getMagnitude(0, 128) == 0, "processor kept clicking after disable");
+    p->releaseResources();
+    // METRO.EXE settings: volume 0 is silent, every sound clicks, beat 1 is accented, the count-in is not recorded.
+    {
+        const auto peaks = [](phoqer::MetronomeSettings settings)
+        {
+            phoqer::Metronome m;
+            m.prepare(48000);
+            phoqer::AudioBuffer block(2, 12000);      // one beat at 240 BPM
+            std::array<float, 2> result {};
+            for (auto& r : result) { block.clear(); m.process(block, true, 240, settings); r = block.getMagnitude(0, 12000); }
+            return result;
+        };
+        phoqer::MetronomeSettings quiet;
+        quiet.volume = 0;
+        check(peaks(quiet)[0] == 0, "metronome volume 0 still clicks");
+        for (int sound = 0; sound < 3; ++sound)
+        {
+            phoqer::MetronomeSettings settings;
+            settings.sound = sound;
+            const auto beat = peaks(settings);
+            check(beat[1] > 0.02f && beat[0] > beat[1] * 1.1f, "metronome sound silent or beat 1 not accented");
+            settings.accent = false;
+            const auto flat = peaks(settings);
+            check(std::abs(flat[0] - flat[1]) < flat[1] * 0.05f, "accent off still accents");
+        }
+    }
+    {
+        auto q = std::make_unique<PhoqerAudioProcessor>();
+        q->prepareToPlay(48000, 128);
+        set(*q, "metronomeEnabled", 0);
+        set(*q, "countIn", 1);                       // 1 bar of 4/4 at 120 BPM = 96000 samples
+        check(q->getCountInBars() == 1 && q->getMetronomeBeatsPerBar() == 4, "count-in settings not read");
+        check(q->getRecorder().start(48000, 2, 96000), "cannot start count-in recorder check");
+        juce::AudioBuffer<float> block(2, 128);
+        juce::MidiBuffer none;
+        float countPeak = 0;
+        for (int i = 0; i < 800; ++i) { q->processBlock(block, none); if (i < 20) countPeak = std::max(countPeak, block.getMagnitude(0, 128)); }
+        check(countPeak > 0.05f, "count-in did not click with the metronome off");
+        check(block.getMagnitude(0, 128) == 0, "click continued after the count-in with the metronome off");
+        check(std::llround(q->getRecorder().seconds() * 48000) == 800 * 128 - 96000, "count-in was recorded or cut short");
+        q->getRecorder().stop().deleteFile();
+        q->releaseResources();
+    }
+    std::cout << "METRONOME_AUDIO_OK: timing matrix, tempo change, stop, ceiling, monitor and recording routing, "
+                 "volume, sounds, accent, count-in\n";
 }
 
 struct Metrics
@@ -188,6 +365,7 @@ int main(int argc, char** argv)
     try
     {
         stateAndControls();
+        metronomeAudio();
         if (argc == 2) audit(juce::File(juce::String::fromUTF8(argv[1])));
         return 0;
     }
