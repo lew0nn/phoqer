@@ -49,7 +49,10 @@ meter atomics, and normalized face telemetry. The audio callback never calls UI,
 filesystem, or message-thread code.
 
 Stable parameter IDs are `boom`, `air`, `bark`, `vowel`, `space`, `tide`, `detune`,
-`output`, `character`, and `behavior`. The `space` ID is displayed as REVERB. CHARACTER
+`output`, `character`, `behavior` and `glide`. The standalone app adds `standaloneTempo`,
+`metronomeEnabled`, `metronomeVolume`, `metronomeBeats`, `metronomeAccent`, `metronomeSound` and
+`countIn`; these are not automatable and presets never touch them. Sessions saved before a
+parameter existed load it at its default. The `space` ID is displayed as REVERB. CHARACTER
 0 is BURP, the default. Visual
 identity is derived from `character` and is not stored as an independent parameter.
 
@@ -60,13 +63,15 @@ things, that all three characters are audible and sonically distinct, that the f
 that a held note still sounds after nine seconds and stops after release, and that the
 sustain pedal holds a released key until the pedal comes up.
 
-`PHOQERPerformanceSanity` checks chords and ALL NOTES OFF, the pitch-bend endpoints, smoothing
+`PHOQERPerformanceSanity` checks chords and ALL NOTES OFF, GLIDE (timing, and that chords don't glide), the pitch-bend endpoints, smoothing
 completion, and the limiter's stereo ceiling and reported latency across the sample-rate and
 block-size matrix. The lookahead limiter keeps its smoothed attack but bounds the gain by the
 outgoing delayed sample, so an abrupt transient cannot overshoot the ceiling.
 
 With `PHOQER_BUILD_VISUAL_ACCEPTANCE=ON`, `PHOQERPluginChecks` checks session recall, editor
-reopening, that preset files cannot change OUTPUT, MIDI overflow and PANIC; given an output
+reopening, that preset files cannot change OUTPUT, GLIDE in presets and old sessions, that the
+standalone-only settings are not automatable, MIDI overflow, PANIC, and the metronome (timing across
+rates and block sizes, tempo changes, volume, sounds, accent, and a count-in that REC does not record); given an output
 folder it also runs the 160-case preset audit and exports WAV excerpts. With
 `PHOQER_BUILD_HOST_CHECKS=ON`, `PHOQERVst3HostChecks <bundle> <report.json>` loads the built
 VST3 in a JUCE host and checks recall, instance isolation, editor recreation, host tempo and

@@ -275,13 +275,12 @@ private:
     bool isDefault;
 };
 
-// A typed number bound to a parameter, its label at the left: BPM as a red glass (LEVEL.EXE), GLIDE as a
-// white Win98 field (KEYS.EXE status bar). Click to type; Enter applies.
+// A typed number on a glass in the voice's colours, bound to a parameter, its label at the left: the BPM in
+// METRO.EXE. Click to type; Enter applies.
 class NumberField98 final : public juce::Component, public juce::SettableTooltipClient
 {
 public:
-    NumberField98(juce::RangedAudioParameter&, const juce::String& label, int minimum, int maximum,
-                  const juce::String& suffix, bool glass, float textSize = 12.0f);
+    NumberField98(juce::RangedAudioParameter&, const juce::String& label, int minimum, int maximum, float textSize);
     void setCharacter(int);
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -291,9 +290,8 @@ private:
     juce::Rectangle<int> fieldArea() const;
     void show(float v);
     juce::Label field;
-    juce::String label, suffix;
+    juce::String label;
     int minimum, maximum;
-    bool glass;
     float textSize;
     int character = 0;
     float value = 0.0f;

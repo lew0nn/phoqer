@@ -70,6 +70,7 @@ private:
     float fishSlide() const;                       // how far the wordmark moves aside for the fish
     bool isStandalone() const noexcept { return windowControls.audioSettings != nullptr; }
     void setMetroOpen(bool);
+    juce::Rectangle<float> transportArea() const;     // [switch | BPM]  [REC | 00:00] above the small knobs (standalone)
 
     // Menus and the actions behind them.
     void showMenu(int index);

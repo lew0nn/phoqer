@@ -749,11 +749,11 @@ void PushButton98::paintButton(juce::Graphics& g, bool, bool down)
 }
 
 NumberField98::NumberField98(juce::RangedAudioParameter& parameter, const juce::String& labelText, int lowest,
-                             int highest, const juce::String& unit, bool asGlass, float size)
-    : label(labelText), suffix(unit), minimum(lowest), maximum(highest), glass(asGlass), textSize(size),
+                             int highest, float size)
+    : label(labelText), minimum(lowest), maximum(highest), textSize(size),
       attachment(parameter, [this](float v) { show(v); }, nullptr)
 {
-    setTooltip(label + ": CLICK TO TYPE " + juce::String(minimum) + "-" + juce::String(maximum) + suffix);
+    setTooltip(label + ": CLICK TO TYPE " + juce::String(minimum) + "-" + juce::String(maximum));
     field.setName(label);
     field.setBorderSize(juce::BorderSize<int>(0));
     field.setJustificationType(juce::Justification::centred);
@@ -772,7 +772,7 @@ NumberField98::NumberField98(juce::RangedAudioParameter& parameter, const juce::
     };
     field.onTextChange = [this]
     {
-        const auto text = field.getText().upToFirstOccurrenceOf(" ", false, false).trim();
+        const auto text = field.getText().trim();
         const auto next = text.isEmpty() ? value : static_cast<float>(juce::jlimit(minimum, maximum, text.getIntValue()));
         attachment.setValueAsCompleteGesture(next);
         show(next);
@@ -784,33 +784,31 @@ NumberField98::NumberField98(juce::RangedAudioParameter& parameter, const juce::
 void NumberField98::show(float v)
 {
     value = v;
-    field.setText(juce::String(juce::roundToInt(v)) + suffix, juce::dontSendNotification);
+    field.setText(juce::String(juce::roundToInt(v)), juce::dontSendNotification);
 }
 
 void NumberField98::setCharacter(int c)
 {
     character = c;
     const auto& pal = paletteFor(character);
-    const auto ink = glass ? pal.accent : juce::Colours::black, ground = glass ? pal.sky : juce::Colours::white;
-    field.setFont(pixelFont(glass ? textSize : 9.0f, true));
+    field.setFont(pixelFont(textSize, true));
     for (const auto id : { juce::Label::textColourId, juce::Label::textWhenEditingColourId })
-        field.setColour(id, ink);
+        field.setColour(id, pal.accent);
     for (const auto id : { juce::Label::backgroundColourId, juce::Label::backgroundWhenEditingColourId })
-        field.setColour(id, ground);
+        field.setColour(id, pal.sky);
     repaint();
 }
 
 juce::Rectangle<int> NumberField98::fieldArea() const
 {
-    return getLocalBounds().withTrimmedLeft(glass ? 28 : 38);
+    return getLocalBounds().withTrimmedLeft(28);
 }
 
 void NumberField98::paint(juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
-    if (glass) drawText(g, label, r.withWidth(26.0f), pixelFont(10.0f, true), juce::Colours::black, juce::Justification::centredRight);
-    else drawText(g, label, r.withWidth(36.0f), pixelFont(8.0f, true), juce::Colours::black);
-    sunken(g, fieldArea().toFloat(), glass ? paletteFor(character).sky : juce::Colours::white);
+    drawText(g, label, r.withWidth(26.0f), pixelFont(10.0f, true), juce::Colours::black, juce::Justification::centredRight);
+    sunken(g, fieldArea().toFloat(), paletteFor(character).sky);
 }
 
 void NumberField98::resized() { field.setBounds(fieldArea().reduced(2)); }

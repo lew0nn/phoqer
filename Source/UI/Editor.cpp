@@ -78,7 +78,7 @@ juce::String minutesSeconds(double seconds)
 // ===================================================================================== VIEW
 PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     : processor(owner), lookAndFeel(laf), scope(owner.getTelemetry()), meter(owner.getTelemetry()),
-      bpmField(parameterFor(owner.getParameters(), "standaloneTempo"), "BPM", 20, 400, "", true, 15.0f),
+      bpmField(parameterFor(owner.getParameters(), "standaloneTempo"), "BPM", 20, 400, 15.0f),
       piano(owner.getKeyboardState()),
       characterAttachment(parameterFor(owner.getParameters(), "character"),
                           [this](float value) { applyCharacter(juce::roundToInt(value)); }, nullptr),
@@ -306,6 +306,7 @@ void PhoqerView::setWindowControls(WindowControls controls)
     barMetronome.setVisible(isStandalone());
     barTempo.setVisible(isStandalone());
     setMetroOpen(static_cast<bool>(processor.getParameters().state.getProperty("metroOpen", false)));
+    chrome = {};                                    // the transport's group box is standalone only
     resized();
 }
 
@@ -432,6 +433,12 @@ void PhoqerView::applyCharacter(int c)
     repaint();
 }
 
+juce::Rectangle<float> PhoqerView::transportArea() const
+{
+    const auto mix = windowClient(mixerWindow);
+    return { mix.getX() + 522.0f, mix.getY() + 14.0f, 196.0f, 24.0f };     // centred over VOWEL..GLIDE
+}
+
 void PhoqerView::setMetroOpen(bool open)
 {
     metroWindow.setVisible(open && isStandalone());
@@ -486,12 +493,12 @@ void PhoqerView::resized()
         knobs[static_cast<size_t>(i)]->setBounds(cell.toNearestInt());
     }
     {
-        // Standalone transport, above the small knobs: [switch | BPM]  [REC | 00:00]; the BPM opens METRO.EXE.
-        constexpr float h = 24.0f, bpmW = 46.0f, recW = 114.0f;
-        const float x = mix.getX() + 522.0f, y = mix.getY() + 12.0f;
-        barMetronome.setBounds(juce::Rectangle<float>(x, y, h, h).toNearestInt());
-        barTempo.setBounds(juce::Rectangle<float>(x + h + 4.0f, y, bpmW, h).toNearestInt());
-        recordControl.setBounds(juce::Rectangle<float>(x + h + 4.0f + bpmW + 8.0f, y, recW, h).toNearestInt());
+        // Standalone transport: [switch | BPM]  [REC | 00:00]; the BPM opens METRO.EXE.
+        const auto t = transportArea();
+        const float h = t.getHeight(), bpmW = 46.0f;
+        barMetronome.setBounds(t.withWidth(h).toNearestInt());
+        barTempo.setBounds(t.withX(t.getX() + h + 4.0f).withWidth(bpmW).toNearestInt());
+        recordControl.setBounds(t.withTrimmedLeft(h + 4.0f + bpmW + 8.0f).toNearestInt());
     }
     const auto keys = client(keysWindow);
     const float pianoWidth = std::floor((keys.getWidth() - 6.0f) / PianoView::whiteKeysShown) * PianoView::whiteKeysShown;
@@ -537,6 +544,24 @@ void PhoqerView::rebuildChrome(float scale)
     g.fillRect(mix.getX() + 501.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
     g.setColour(win98::light);
     g.fillRect(mix.getX() + 502.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
+    if (isStandalone())
+    {
+        // A Win98 group box round the transport: an etched frame with its caption set into the top line.
+        const auto box = transportArea().expanded(10.0f, 8.0f);
+        g.setColour(win98::shadow);
+        g.drawRect(box.withTrimmedRight(1.0f).withTrimmedBottom(1.0f), 1.0f);
+        g.setColour(win98::light);
+        g.drawRect(box.withTrimmedLeft(1.0f).withTrimmedTop(1.0f), 1.0f);
+        g.setColour(win98::shadow);
+        g.drawRect(box.withTrimmedRight(1.0f).withTrimmedBottom(1.0f), 1.0f);
+        const juce::String caption = "METRONOME + REC";
+        const auto font = pixelFont(8.0f, true);
+        const auto label = juce::Rectangle<float>(box.getX() + 8.0f, box.getY() - 5.0f,
+                                                  juce::GlyphArrangement::getStringWidth(font, caption) + 6.0f, 10.0f);
+        g.setColour(win98::face);
+        g.fillRect(label);
+        drawText(g, caption, label, font, juce::Colours::black, juce::Justification::centred);
+    }
     if (showKeys)
     {
         window98(g, keysWindow, "KEYS.EXE", pal, false);
