@@ -228,8 +228,8 @@ void metronomeAudio()
             const auto beat = peaks(settings);
             check(beat[1] > 0.02f && beat[0] > beat[1] * 1.1f, "metronome sound silent or beat 1 not accented");
             settings.accent = false;
-            const auto flat = peaks(settings);
-            check(std::abs(flat[0] - flat[1]) < flat[1] * 0.05f, "accent off still accents");
+            const auto even = peaks(settings);
+            check(std::abs(even[0] - even[1]) < even[1] * 0.05f, "accent off still accents");
         }
     }
     {

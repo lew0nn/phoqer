@@ -928,7 +928,7 @@ void Readout98::paintButton(juce::Graphics& g, bool over, bool)
     const auto& pal = paletteFor(character);
     const auto r = getLocalBounds().toFloat();
     sunken(g, r, pal.sky);
-    drawText(g, shown, r, pixelFont(getHeight() >= 18 ? 12.0f : 10.0f, true), over ? pal.accent.brighter(0.4f) : pal.accent, juce::Justification::centred);
+    drawText(g, shown, r, pixelFont(getHeight() >= 22 ? 14.0f : getHeight() >= 18 ? 12.0f : 10.0f, true), over ? pal.accent.brighter(0.4f) : pal.accent, juce::Justification::centred);
 }
 
 // --------------------------------------------------------------------------------------- DIALOG

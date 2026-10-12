@@ -53,7 +53,6 @@ constexpr int lowestBase = 24, highestBase = 96, velocityStep = 10;
 
 // Header row: the preset box sits between the logo and the voice tabs; REC at the menu row's end.
 constexpr float presetBoxX = 224.0f, presetBoxW = 224.0f;
-constexpr float recordW = 112.0f;
 
 // Menu item IDs. Radio items (one of several) live in Win98LookAndFeel's radio range.
 constexpr float zoomSteps[] { 1.0f, 1.25f, 1.5f, 2.0f };
@@ -445,13 +444,6 @@ void PhoqerView::resized()
     const auto client = [](juce::Rectangle<float> r) { return windowClient(r); };
     const auto head = windowClient(headWindow, headTitleHeight);
     menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, head.getWidth(), headerToolsHeight).toNearestInt());
-    const int toolsY = juce::roundToInt(head.getY() - 2.0f);
-    const int toolsRight = juce::roundToInt(head.getRight() - 2.0f);
-    constexpr int toolHeight = 20;
-    recordControl.setBounds(toolsRight - static_cast<int>(recordW), toolsY, static_cast<int>(recordW), toolHeight);
-    // The metronome (standalone): [switch | BPM] beside [REC | 00:00]; the BPM opens METRO.EXE.
-    barTempo.setBounds(recordControl.getX() - 8 - 40, toolsY, 40, toolHeight);
-    barMetronome.setBounds(barTempo.getX() - 4 - toolHeight, toolsY, toolHeight, toolHeight);
     const auto row = head.withTrimmedTop(headerToolsHeight);
     for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
         voiceTabs[slot]->setBounds(juce::Rectangle<float>(row.getRight() - 4.0f - (3 - slot) * 94.0f + 4.0f, row.getCentreY() - 12.0f, 90.0f, 24.0f).toNearestInt());
@@ -473,12 +465,12 @@ void PhoqerView::resized()
         const auto m = metroWindow.clientArea();
         bpmField.setBounds(juce::Rectangle<float>(m.getX(), m.getY() + 2.0f, 106.0f, 26.0f).toNearestInt());
         metronomeButton.setBounds(juce::Rectangle<float>(m.getRight() - 30.0f, m.getY(), 30.0f, 30.0f).toNearestInt());
-        const auto row = [&](int i) { return juce::Rectangle<float>(m.getX() + 58.0f, m.getY() + 42.0f + i * 19.0f, m.getWidth() - 58.0f, 16.0f); };
-        metronomeVolume.setBounds(row(0).withTrimmedRight(26.0f).toNearestInt());
-        beatsBox.setBounds(row(1).withWidth(56.0f).toNearestInt());
-        accentBox.setBounds(row(2).withX(m.getX()).withRight(m.getRight()).toNearestInt());
-        soundBox.setBounds(row(3).toNearestInt());
-        countInBox.setBounds(row(4).toNearestInt());
+        const auto settingsRow = [&](int i) { return juce::Rectangle<float>(m.getX() + 58.0f, m.getY() + 42.0f + i * 19.0f, m.getWidth() - 58.0f, 16.0f); };
+        metronomeVolume.setBounds(settingsRow(0).withTrimmedRight(26.0f).toNearestInt());
+        beatsBox.setBounds(settingsRow(1).withWidth(56.0f).toNearestInt());
+        accentBox.setBounds(settingsRow(2).withX(m.getX()).withRight(m.getRight()).toNearestInt());
+        soundBox.setBounds(settingsRow(3).toNearestInt());
+        countInBox.setBounds(settingsRow(4).toNearestInt());
     }
     const auto out = client(outputWindow);
     meter.setBounds(juce::Rectangle<float>(out.getX() + 2.0f, out.getY() + 4.0f, 236.0f, 40.0f).toNearestInt());
@@ -492,6 +484,14 @@ void PhoqerView::resized()
         const auto cell = big ? juce::Rectangle<float>(mix.getX() + 4.0f + i * 124.0f, mix.getY(), 124.0f, mix.getHeight())
                               : juce::Rectangle<float>(mix.getX() + 504.0f + (i - 4) * 58.0f, mix.getY(), 58.0f, mix.getHeight());
         knobs[static_cast<size_t>(i)]->setBounds(cell.toNearestInt());
+    }
+    {
+        // Standalone transport, above the small knobs: [switch | BPM]  [REC | 00:00]; the BPM opens METRO.EXE.
+        constexpr float h = 24.0f, bpmW = 46.0f, recW = 114.0f;
+        const float x = mix.getX() + 522.0f, y = mix.getY() + 12.0f;
+        barMetronome.setBounds(juce::Rectangle<float>(x, y, h, h).toNearestInt());
+        barTempo.setBounds(juce::Rectangle<float>(x + h + 4.0f, y, bpmW, h).toNearestInt());
+        recordControl.setBounds(juce::Rectangle<float>(x + h + 4.0f + bpmW + 8.0f, y, recW, h).toNearestInt());
     }
     const auto keys = client(keysWindow);
     const float pianoWidth = std::floor((keys.getWidth() - 6.0f) / PianoView::whiteKeysShown) * PianoView::whiteKeysShown;
@@ -1003,7 +1003,7 @@ void PhoqerView::showGuide()
                    "WAIL|A LONG GLIDE UP AND BACK",
                    "MURMUR|A MUTTERED, CLOSED-MOUTH HUM",
                    "#METRONOME (STANDALONE APP)",
-                   "SWITCH|BESIDE REC: THE CLICK ON / OFF; NEVER IN WAV TAKES",
+                   "SWITCH|ABOVE THE SMALL KNOBS, BESIDE REC: THE CLICK ON / OFF; NEVER IN WAV TAKES",
                    "BPM|CLICK IT TO OPEN METRO.EXE; CLICK THE BPM THERE TO TYPE A TEMPO",
                    "SETTINGS|VOLUME, BEATS PER BAR, ACCENT ON BEAT 1, SOUND",
                    "COUNT-IN|1 OR 2 BARS OF CLICKS BEFORE REC STARTS",
