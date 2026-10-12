@@ -27,6 +27,7 @@ PhoqerAudioProcessor::PhoqerAudioProcessor()
     character = requireParameter(parameters, "character");
     behavior = requireParameter(parameters, "behavior");
     standaloneTempo = requireParameter(parameters, "standaloneTempo");
+    glide = requireParameter(parameters, "glide");
     metronomeEnabled = requireParameter(parameters, "metronomeEnabled");
     metronomeVolume = requireParameter(parameters, "metronomeVolume");
     metronomeBeatsPerBar = requireParameter(parameters, "metronomeBeats");
@@ -75,6 +76,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout PhoqerAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         ParameterId { "standaloneTempo", 1 }, "STANDALONE TEMPO", makeRange(20.0f, 400.0f, 1.0f), 120.0f,
         juce::AudioParameterFloatAttributes().withLabel("BPM").withAutomatable(false)));
+    {
+        // GLIDE: a note played over a held one slides in from its pitch. Half a turn is 250 ms.
+        juce::NormalisableRange<float> range(0.0f, 2000.0f, 1.0f);
+        range.setSkewForCentre(250.0f);
+        layout.add(std::make_unique<juce::AudioParameterFloat>(ParameterId { "glide", 1 }, "GLIDE", range, 0.0f,
+                                                               juce::AudioParameterFloatAttributes().withLabel("ms")));
+    }
     // The standalone app's metronome (METRO.EXE). A DAW has its own click, so none of these are
     // automatable, and presets leave them alone.
     layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -224,6 +232,7 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         std::clamp(static_cast<int>(std::lround(character->load(std::memory_order_relaxed))), 0, 2));
     macros.behaviorMode = static_cast<phoqer::BehaviourMode>(
         std::clamp(static_cast<int>(std::lround(behavior->load(std::memory_order_relaxed))), 0, 4));
+    macros.glideMs = glide->load(std::memory_order_relaxed);
     if (wrapperType == wrapperType_Standalone || wrapperType == wrapperType_Undefined)
         macros.tempoBpm = standaloneTempo->load(std::memory_order_relaxed);
     if (auto* head = getPlayHead())                       // hosted tempo takes priority over the standalone BPM field
@@ -267,7 +276,7 @@ void PhoqerAudioProcessor::setStateInformation(const void* data, int sizeInBytes
             auto restored = juce::ValueTree::fromXml(*xml);
             // Older sessions predate these parameters. Restore their compatible defaults,
             // including when an old state replaces a currently edited new instance.
-            for (const auto* id : { "standaloneTempo", "metronomeEnabled", "metronomeVolume", "metronomeBeats", "metronomeAccent",
+            for (const auto* id : { "standaloneTempo", "glide", "metronomeEnabled", "metronomeVolume", "metronomeBeats", "metronomeAccent",
                                   "metronomeSound", "countIn" })
                 if (! restored.getChildWithProperty("id", id).isValid())
                 {

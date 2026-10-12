@@ -99,6 +99,7 @@ void SealVoice::prepare(double newSampleRate, int)
     smoothDetune.setCurrentAndTargetValue(macros.detune);
     smoothBend.reset(sampleRate, 0.005);
     smoothBend.setCurrentAndTargetValue(0.0f);
+    smoothNote.reset(sampleRate, 0.0);
     hardReset();
 }
 
@@ -162,6 +163,8 @@ void SealVoice::startNote(int midiChannel, int midiNoteNumber, float velocity,
     behaviour.start(currentVelocity, macros, personality, preset->onsetPunch * barkScale);
 
     baseFrequency = midiNoteToHz(static_cast<float>(currentMidiNote));
+    renderedPitchNote = static_cast<float>(currentMidiNote);
+    smoothNote.setCurrentAndTargetValue(static_cast<float>(currentMidiNote));
     fofBank.setNoteFrequency(baseFrequency);
     noteAgeSeconds = 0.0f;
     noteBeats = 0.0;
@@ -184,6 +187,14 @@ void SealVoice::startNote(int midiChannel, int midiNoteNumber, float velocity,
     telemetry.active = true;
     active = true;
     releasing = false;
+}
+
+void SealVoice::glideFrom(float fromNote) noexcept
+{
+    if (macros.glideMs <= 0.0f) return;
+    smoothNote.reset(sampleRate, macros.glideMs * 0.001);
+    smoothNote.setCurrentAndTargetValue(fromNote);
+    smoothNote.setTargetValue(static_cast<float>(currentMidiNote));
 }
 
 // Overfed: a "glk" gulp, then a long rattling belch an octave down that sags as it goes.
@@ -325,6 +336,12 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
             modeGain *= 0.15f + 0.85f * clamp(0.0f, 1.0f, 0.55f + 0.9f * mutter.next());
         vocal.barkTransient += motion.kick * barkScale;
         drift += motion.semitones;
+        const auto pitchNote = smoothNote.getNextValue();
+        if (pitchNote != renderedPitchNote)
+        {
+            renderedPitchNote = pitchNote;
+            baseFrequency = midiNoteToHz(pitchNote);
+        }
         const auto frequency = static_cast<double>(baseFrequency)
             * std::pow(2.0f, (contourSemitones + smoothBend.getNextValue() + detune + drift) / 12.0f);
 

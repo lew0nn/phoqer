@@ -21,6 +21,7 @@ public:
     void hardReset() noexcept;
     void setMacros(const MacroState& newMacros) noexcept;
     void startNote(int midiChannel, int midiNoteNumber, float velocity, int currentPitchWheelPosition);
+    void glideFrom(float fromNote) noexcept;     // slide in from another note's pitch over the GLIDE time
     void startTreat(int midiNoteNumber, float velocity);     // the fed seal's gulp; ends itself
     void startBelch(int midiNoteNumber, float velocity);     // overfed: the gulp, then a long belch
     void stopNote(bool allowTailOff);
@@ -37,7 +38,9 @@ public:
     float getEnvelopeLevel() const noexcept { return telemetry.envelope; }
     bool isReleasing() const noexcept { return releasing; }
     uint64_t getAge() const noexcept { return telemetry.age; }
+    float getPitchNote() const noexcept { return smoothNote.getCurrentValue(); }
     float getPitchBend() const noexcept { return smoothBend.getCurrentValue(); }
+    float getNoteAge() const noexcept { return noteAgeSeconds; }
 
 private:
     void resetDsp() noexcept;
@@ -61,11 +64,12 @@ private:
     SmoothedRandom mutter;        // MURMUR's syllables
     float muffled = 0.0f, muffleAmount = 0.0f, muffleCoefficient = 1.0f;
     LinearSmoother smoothBoom, smoothAir, smoothBark, smoothVowel, smoothTide, smoothDetune;
-    LinearSmoother smoothBend;     // pitch bend, over 5 ms
+    LinearSmoother smoothNote, smoothBend;     // GLIDE, and pitch bend over 5 ms
     VoiceTelemetry telemetry;
     const CharacterPreset* preset = &characterPreset(defaultSealCharacter);
     double sampleRate = 44100.0;
     float baseFrequency = 261.63f;
+    float renderedPitchNote = 60.0f;
     float noteAgeSeconds = 0.0f;
     double noteBeats = 0.0;
     float detuneOffsetSemitones = 0.0f;

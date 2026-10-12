@@ -28,14 +28,40 @@ int main()
             MacroState macros;
             macros.space = 0;
             engine.prepare(48000, 128, 2);
-            // Chords play, and ALL NOTES OFF stops them.
+            // No glide: a note over a held one starts on its own pitch, and chords still play.
             event(engine, buffer, macros, MidiEventType::noteOn, 48, 1);
             event(engine, buffer, macros, MidiEventType::noteOn, 60, 1);
             check(engine.getActiveVoiceCount() == 2, "poly no longer supports chords");
+            check(engine.getNewestPitchNote() == 60, "glide off still slid");
             event(engine, buffer, macros, MidiEventType::allNotesOff, 0, 0);
             settle(engine, buffer, macros);
             check(engine.getActiveVoiceCount() == 0, "all notes off failed");
 
+            // GLIDE 100 ms: the new note slides in from the held note, and the held note keeps sounding.
+            macros.glideMs = 100;
+            // A chord (struck together) does not glide, even with GLIDE up.
+            {
+                MidiEvent chord[] { { MidiEventType::noteOn, 0, 0, 52, 1 }, { MidiEventType::noteOn, 0, 0, 64, 1 } };
+                engine.process(buffer, chord, 2, macros, 0);
+                check(engine.getActiveVoiceCount() == 2 && engine.getNewestPitchNote() == 64, "a chord glided");
+                event(engine, buffer, macros, MidiEventType::allNotesOff, 0, 0);
+                settle(engine, buffer, macros);
+            }
+            event(engine, buffer, macros, MidiEventType::noteOn, 48, 1);
+            settle(engine, buffer, macros, 12);         // 32 ms later: a note played over a held one
+            event(engine, buffer, macros, MidiEventType::noteOn, 60, 1);
+            check(engine.getActiveVoiceCount() == 2, "glide stole the held note");
+            check(engine.getNewestPitchNote() > 48 && engine.getNewestPitchNote() < 49, "glide jumped to destination");
+            settle(engine, buffer, macros, 18);
+            check(engine.getNewestPitchNote() > 53 && engine.getNewestPitchNote() < 55, "glide timing is wrong");
+            settle(engine, buffer, macros, 20);
+            check(std::abs(engine.getNewestPitchNote() - 60) < 0.001f, "glide did not land");
+
+            // Released first: a separate note does not glide.
+            event(engine, buffer, macros, MidiEventType::allNotesOff, 0, 0);
+            settle(engine, buffer, macros);
+            event(engine, buffer, macros, MidiEventType::noteOn, 72, 1);
+            check(engine.getNewestPitchNote() == 72, "a note after release glided");
         }
 
         uint64_t age = 0;
@@ -86,7 +112,7 @@ int main()
                     check(std::abs(impulse.getSample(0, i) - (i == limiter.getLatencySamples() ? 0.5f : 0.0f)) < 0.00001f,
                           "limiter impulse latency differs from reported latency");
             }
-        std::cout << "PERFORMANCE_SANITY_OK: chords, all notes off, bend, smoothing, limiter\n";
+        std::cout << "PERFORMANCE_SANITY_OK: poly glide, chords, bend, smoothing, limiter\n";
         return 0;
     }
     catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

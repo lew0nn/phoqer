@@ -22,7 +22,7 @@ void stateAndControls()
     phoqer::ui::PresetLibrary presets(p.getParameters());
     presets.load(2);
     set(p, "output", -7); set(p, "standaloneTempo", 173);
-    set(p, "metronomeEnabled", 1);
+    set(p, "metronomeEnabled", 1); set(p, "glide", 125);
     juce::MemoryBlock saved;
     p.getStateInformation(saved);
     auto restoredOwner = std::make_unique<PhoqerAudioProcessor>();
@@ -87,19 +87,22 @@ void stateAndControls()
         check(! p.getParameters().getParameter(id)->isAutomatable(), "a standalone-only setting is automatable in a DAW");
     // Strip the new parameters to simulate a pre-feature session loaded over edited state.
     auto oldState = p.getParameters().copyState();
-    for (const auto* id : { "standaloneTempo", "metronomeEnabled" })
+    for (const auto* id : { "standaloneTempo", "glide", "metronomeEnabled" })
         oldState.removeChild(oldState.getChildWithProperty("id", id), nullptr);
     auto xml = oldState.createXml();
     juce::MemoryBlock legacy;
     juce::AudioProcessor::copyXmlToBinary(*xml, legacy);
     p.setStateInformation(legacy.getData(), static_cast<int>(legacy.getSize()));
-    check(get(p, "standaloneTempo") == 120 && get(p, "metronomeEnabled") == 0, "legacy session defaults failed");
+    check(get(p, "glide") == 0 && get(p, "standaloneTempo") == 120 && get(p, "metronomeEnabled") == 0, "legacy session defaults failed");
     juce::TemporaryFile oldPreset(".phqpreset");
     check(oldPreset.getFile().replaceWithText("<PHOQERPRESET name=\"LEGACY\"><PARAM id=\"boom\" value=\"0.3\"/><PARAM id=\"output\" value=\"12\"/></PHOQERPRESET>"),
           "cannot create legacy preset fixture");
     const float level = get(p, "output");
+    set(p, "glide", 500);
     set(p, "metronomeEnabled", 1);
     check(presets.loadFile(oldPreset.getFile()), "legacy preset did not load");
+    check(get(p, "glide") == 0, "an old preset kept the last GLIDE");
+    check(p.getParameters().getParameter("glide")->isAutomatable(), "GLIDE must be automatable");
     check(get(p, "output") == level && get(p, "standaloneTempo") == 120, "preset changed output or tempo");
     check(get(p, "metronomeEnabled") == 1, "preset changed metronome toggle");
     set(p, "metronomeEnabled", 0);

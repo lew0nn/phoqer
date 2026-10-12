@@ -46,6 +46,7 @@ juce::RangedAudioParameter& parameterFor(juce::AudioProcessorValueTreeState& sta
 
 juce::String percent(double v) { return juce::String(juce::roundToInt(v * 100.0)) + "%"; }
 juce::String decibels(double v) { return (v > 0.0 ? "+" : "") + juce::String(v, 1) + " dB"; }
+juce::String milliseconds(double v) { return v < 1000.0 ? juce::String(juce::roundToInt(v)) + " MS" : juce::String(v / 1000.0, 1) + " S"; }
 juce::String noteName(int note) { return juce::MidiMessage::getMidiNoteName(note, true, true, 4); }
 
 constexpr char controlKeys[] { 'z', 'x', 'c', 'v' };    // octave down/up, velocity down/up
@@ -109,7 +110,7 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     struct KnobDef { const char* id; const char* name; const char* description; bool big; };
     const KnobDef defs[] { { "boom", "BOOM", "LOW BODY", true }, { "air", "AIR", "BREATH", true }, { "bark", "BARK", "GROWL", true },
                            { "space", "SPACE", "ROOM", true }, { "vowel", "VOWEL", "FORMANT", false }, { "detune", "DETUNE", "SPREAD", false },
-                           { "tide", "TIDE", "MOTION", false }, { "output", "OUTPUT", "LEVEL", false } };
+                           { "tide", "TIDE", "MOTION", false }, { "glide", "GLIDE", "SLIDE", false }, { "output", "OUTPUT", "LEVEL", false } };
     for (const auto& def : defs)
     {
         PixelKnob::Spec spec;
@@ -120,7 +121,7 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
         spec.centreY = 82.0f;
         spec.big = def.big;
         spec.layout = isOutput ? PixelKnob::Layout::output : PixelKnob::Layout::mixer;
-        spec.format = isOutput ? decibels : percent;
+        spec.format = isOutput ? decibels : juce::String(def.id) == "glide" ? milliseconds : percent;
         auto knob = std::make_unique<PixelKnob>(spec);
         addAndMakeVisible(*knob);
         sliderAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(state, def.id, *knob));
@@ -486,14 +487,15 @@ void PhoqerView::resized()
     }
     const auto out = client(outputWindow);
     meter.setBounds(juce::Rectangle<float>(out.getX() + 2.0f, out.getY() + 4.0f, 236.0f, 40.0f).toNearestInt());
-    knobs[7]->setBounds(juce::Rectangle<float>(out.getRight() - 136.0f, out.getY(), 136.0f, out.getHeight()).toNearestInt());
+    knobs[8]->setBounds(juce::Rectangle<float>(out.getRight() - 136.0f, out.getY(), 136.0f, out.getHeight()).toNearestInt());
 
     const auto mix = client(mixerWindow);
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < 8; ++i)
     {
         const bool big = i < 4;
-        const auto cell = big ? juce::Rectangle<float>(mix.getX() + 4.0f + i * 134.0f, mix.getY(), 134.0f, mix.getHeight())
-                              : juce::Rectangle<float>(mix.getX() + 544.0f + (i - 4) * 64.0f, mix.getY(), 64.0f, mix.getHeight());
+        // Four big knobs, the divider, then VOWEL, DETUNE, TIDE and GLIDE.
+        const auto cell = big ? juce::Rectangle<float>(mix.getX() + 4.0f + i * 124.0f, mix.getY(), 124.0f, mix.getHeight())
+                              : juce::Rectangle<float>(mix.getX() + 504.0f + (i - 4) * 58.0f, mix.getY(), 58.0f, mix.getHeight());
         knobs[static_cast<size_t>(i)]->setBounds(cell.toNearestInt());
     }
     {
@@ -543,9 +545,9 @@ void PhoqerView::rebuildChrome(float scale)
     window98(g, outputWindow, "LEVEL.EXE", pal, false);
     const auto mix = window98(g, mixerWindow, "MIXER.EXE", pal, false);
     g.setColour(win98::shadow);
-    g.fillRect(mix.getX() + 541.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
+    g.fillRect(mix.getX() + 501.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
     g.setColour(win98::light);
-    g.fillRect(mix.getX() + 542.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
+    g.fillRect(mix.getX() + 502.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
     if (showKeys)
     {
         window98(g, keysWindow, "KEYS.EXE", pal, false);
@@ -907,7 +909,7 @@ void PhoqerView::resetKnobs()
 {
     history.performAsOne([this]
     {
-        for (const auto* id : { "boom", "air", "bark", "space", "vowel", "detune", "tide", "output" })
+        for (const auto* id : { "boom", "air", "bark", "space", "vowel", "detune", "tide", "glide", "output" })
         {
             auto& p = parameterFor(processor.getParameters(), id);
             p.beginChangeGesture();

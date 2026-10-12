@@ -29,6 +29,7 @@ public:
     SealCharacter getActiveCharacter() const noexcept { return activeCharacter; }
     int getLatencySamples() const noexcept { return outputStage.getLatencySamples(); }
     int getActiveVoiceCount() const noexcept;
+    float getNewestPitchNote() const noexcept;     // the pitch of the most recently started note, mid-glide included
 
 private:
     SealVoice* findVoiceForNoteOn() noexcept;
@@ -43,6 +44,7 @@ private:
     std::array<bool, 16> sustainDown {};                 // the sustain pedal, per MIDI channel
     std::array<bool, voiceCount> sustained {};           // a voice whose key is up but the pedal holds it
     float modWheel = 0.0f;                               // 0..1, adds to TIDE
+    const SealVoice* newestVoice = nullptr;           // the last note started: where a glide starts from
     Chorus chorusStage;      // DETUNE
     CheapSpace spaceStage;   // REVERB
     OutputStage outputStage;

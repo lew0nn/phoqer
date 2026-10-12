@@ -102,7 +102,7 @@ void PixelKnob::paint(juce::Graphics& g)
             drawText(g, spec.name, { 0.0f, 10.0f, w, 16.0f }, pixelFont(16.0f, true), juce::Colours::black, juce::Justification::centred);
         else
             drawText(g, spec.name, { 0.0f, 111.0f, w, 10.0f }, pixelFont(8.0f, true), juce::Colours::black, juce::Justification::centred);
-        const float boxW = spec.big ? 68.0f : 58.0f;
+        const float boxW = spec.big ? 68.0f : juce::jmin(58.0f, w - 4.0f);     // small boxes keep a gap between them
         const juce::Rectangle<float> box { std::round((w - boxW) * 0.5f), 134.0f, boxW, 26.0f };
         sunken(g, box);
         drawText(g, valueText, box, pixelFont(16.0f, true), valueInk, juce::Justification::centred);

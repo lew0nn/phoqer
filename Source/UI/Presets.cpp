@@ -49,7 +49,7 @@ juce::File PresetLibrary::folder()
 
 juce::StringArray PresetLibrary::parameterIds()
 {
-    return { "character", "behavior", "boom", "air", "bark", "space", "vowel", "detune", "tide" };
+    return { "character", "behavior", "boom", "air", "bark", "space", "vowel", "detune", "tide", "glide" };
 }
 
 void PresetLibrary::refresh()
@@ -93,6 +93,13 @@ Preset PresetLibrary::capture(const juce::String& name) const
 
 void PresetLibrary::apply(const Preset& p)
 {
+    if (p.values.find("glide") == p.values.end())          // older presets predate GLIDE: no glide, not the last one
+        if (auto* param = state.getParameter("glide"))
+        {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(param->getDefaultValue());
+            param->endChangeGesture();
+        }
     for (const auto& [id, value] : p.values)     // a preset file can only set the sound, never OUTPUT
         if (auto* param = state.getParameter(id); param != nullptr && parameterIds().contains(id))
         {

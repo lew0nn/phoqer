@@ -43,6 +43,7 @@ void PhoqerEngine::reset()
     sustainDown.fill(false);
     sustained.fill(false);
     modWheel = 0.0f;
+    newestVoice = nullptr;
     chorusStage.reset();
     spaceStage.reset();
     outputStage.reset();
@@ -93,6 +94,11 @@ SealVoice* PhoqerEngine::findVoiceForNoteOn() noexcept
     return bestReleased != nullptr ? bestReleased : bestActive;
 }
 
+float PhoqerEngine::getNewestPitchNote() const noexcept
+{
+    return newestVoice != nullptr ? newestVoice->getPitchNote() : -1.0f;
+}
+
 int PhoqerEngine::getActiveVoiceCount() const noexcept
 {
     int count = 0;
@@ -119,8 +125,17 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
                 sustained[static_cast<size_t>(voice - voices.data())] = false;
                 if (voice->isActive())
                     voice->stopNote(false);
+                // GLIDE: a note played while the previous one is still held slides in from its pitch.
+                // Notes struck within 30 ms of each other are a chord and start on their own pitches.
+                constexpr float chordWindowSeconds = 0.030f;
+                const bool overlapping = newestVoice != nullptr && newestVoice != voice
+                                      && newestVoice->isActive() && ! newestVoice->isReleasing()
+                                      && newestVoice->getNoteAge() >= chordWindowSeconds;
+                const float from = overlapping ? newestVoice->getPitchNote() : -1.0f;
                 voice->startNote(channel, clamp(0, 127, event.note),
                                  clamp(0.0f, 1.0f, event.value), pitchWheels[static_cast<size_t>(channel)]);
+                if (from >= 0.0f) voice->glideFrom(from);
+                newestVoice = voice;
             }
             break;
         }
@@ -218,7 +233,8 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
         clamp(0.0f, 1.0f, inputMacros.detune),
         activeCharacter,
         inputMacros.behaviorMode,
-        clamp(20.0f, 400.0f, inputMacros.tempoBpm)
+        clamp(20.0f, 400.0f, inputMacros.tempoBpm),
+        clamp(0.0f, 2000.0f, inputMacros.glideMs)
     };
     for (auto& voice : voices)
         voice.setMacros(macros);

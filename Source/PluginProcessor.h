@@ -89,6 +89,7 @@ private:
     std::atomic<float>* character = nullptr;
     std::atomic<float>* behavior = nullptr;
     std::atomic<float>* standaloneTempo = nullptr;
+    std::atomic<float>* glide = nullptr;
     std::atomic<float>* metronomeEnabled = nullptr;
     std::atomic<float>* metronomeVolume = nullptr;
     std::atomic<float>* metronomeBeatsPerBar = nullptr;
