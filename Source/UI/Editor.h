@@ -70,7 +70,6 @@ private:
     float fishSlide() const;                       // how far the wordmark moves aside for the fish
     bool isStandalone() const noexcept { return windowControls.audioSettings != nullptr; }
     void setMetroOpen(bool);
-    juce::Rectangle<float> metronomeCell() const;     // the first KEYS.EXE status cell (standalone)
 
     // Menus and the actions behind them.
     void showMenu(int index);
@@ -106,7 +105,7 @@ private:
     MenuBar98 menuBar;
     PresetBox98 presetBox;
     RecordControl98 recordControl;
-    // The metronome (standalone): a cell in the KEYS.EXE status bar switches it and shows the BPM;
+    // The metronome (standalone): beside REC in the header, a switch and the BPM;
     // the BPM opens METRO.EXE, a floating window with the tempo and the settings.
     MetronomeButton98 barMetronome;
     Readout98 barTempo;

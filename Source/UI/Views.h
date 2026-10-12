@@ -250,7 +250,7 @@ private:
     juce::ComponentBoundsConstrainer constrainer;
 };
 
-// A small LCD readout that is also a button: the KEYS.EXE BPM, which opens METRO.EXE.
+// A small LCD readout that is also a button: the header BPM, which opens METRO.EXE.
 class Readout98 final : public juce::Button
 {
 public:
