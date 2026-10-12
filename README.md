@@ -7,10 +7,13 @@ the instrument does not play back seal samples.
 
 Built with C++17 and JUCE 8.0.8. Current targets are VST3 and Standalone for Windows x64.
 
-## Development status
+## Install
 
-PHOQER is in beta: everything works, the sound and the interface are still being tuned
-before the first official release.
+Version 1.0.0, Windows x64 (VST3 and standalone). Download `PHOQER-1.0.0-Windows-x64-Setup.exe`
+from [Releases](https://github.com/lew0nn/phoqer/releases) and run it: the VST3 goes to
+`C:\Program Files\Common Files\VST3`, where every DAW looks, and the standalone app to
+`Program Files\LWNX DSP\PHOQER`. The VST3 and standalone are also on the release page as zips.
+The installer is not code-signed, so Windows SmartScreen may ask you to confirm: More info, Run anyway.
 
 Three seals, each with its own voice and colours:
 
