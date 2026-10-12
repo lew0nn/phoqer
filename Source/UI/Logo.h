@@ -13,4 +13,9 @@ juce::Image loadAssetImage(const char* originalFilename);
 
 // Slanted "Outrun" PHOQER wordmark with flat chrome bands and speed lines, cropped to its pixels.
 juce::Image renderOutrunWordmark(int character, bool onDarkBackground);
+
+// Standalone-only startup artwork. Kept as a drawing function so the acceptance renderer can
+// capture the exact pixels shown by PHOQER.exe without launching an audio device.
+inline constexpr int bootSplashWidth = 440, bootSplashHeight = 320;
+void paintStandaloneBootSplash(juce::Graphics&, juce::Rectangle<float> bounds, float progress);
 }

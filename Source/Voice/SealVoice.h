@@ -37,6 +37,7 @@ public:
     float getEnvelopeLevel() const noexcept { return telemetry.envelope; }
     bool isReleasing() const noexcept { return releasing; }
     uint64_t getAge() const noexcept { return telemetry.age; }
+    float getPitchBend() const noexcept { return smoothBend.getCurrentValue(); }
 
 private:
     void resetDsp() noexcept;
@@ -60,11 +61,13 @@ private:
     SmoothedRandom mutter;        // MURMUR's syllables
     float muffled = 0.0f, muffleAmount = 0.0f, muffleCoefficient = 1.0f;
     LinearSmoother smoothBoom, smoothAir, smoothBark, smoothVowel, smoothTide, smoothDetune;
+    LinearSmoother smoothBend;     // pitch bend, over 5 ms
     VoiceTelemetry telemetry;
     const CharacterPreset* preset = &characterPreset(defaultSealCharacter);
     double sampleRate = 44100.0;
     float baseFrequency = 261.63f;
     float noteAgeSeconds = 0.0f;
+    double noteBeats = 0.0;
     float detuneOffsetSemitones = 0.0f;
     float panLeft = 0.70710678f;
     float panRight = 0.70710678f;
@@ -72,6 +75,7 @@ private:
     int currentMidiNote = 60;
     float currentVelocity = 0.0f;
     float pitchWheelSemitones = 0.0f;
+    int pitchWheelPosition = 8192;
     float previousOutput = 0.0f;
     float stolenTail = 0.0f;
     int stolenTailSamples = 0;

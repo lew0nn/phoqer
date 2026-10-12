@@ -52,10 +52,13 @@ public:
 
     void setTargetValue(float value) noexcept
     {
+        if (value == target) return;
         target = value;
         remaining = rampLength;
         step = (target - current) / static_cast<float>(remaining);
     }
+
+    float getCurrentValue() const noexcept { return current; }
 
     float getNextValue() noexcept
     {

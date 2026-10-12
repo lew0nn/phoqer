@@ -60,6 +60,18 @@ things, that all three characters are audible and sonically distinct, that the f
 that a held note still sounds after nine seconds and stops after release, and that the
 sustain pedal holds a released key until the pedal comes up.
 
+`PHOQERPerformanceSanity` checks chords and ALL NOTES OFF, the pitch-bend endpoints, smoothing
+completion, and the limiter's stereo ceiling and reported latency across the sample-rate and
+block-size matrix. The lookahead limiter keeps its smoothed attack but bounds the gain by the
+outgoing delayed sample, so an abrupt transient cannot overshoot the ceiling.
+
+With `PHOQER_BUILD_VISUAL_ACCEPTANCE=ON`, `PHOQERPluginChecks` checks session recall, editor
+reopening, that preset files cannot change OUTPUT, MIDI overflow and PANIC; given an output
+folder it also runs the 160-case preset audit and exports WAV excerpts. With
+`PHOQER_BUILD_HOST_CHECKS=ON`, `PHOQERVst3HostChecks <bundle> <report.json>` loads the built
+VST3 in a JUCE host and checks recall, instance isolation, editor recreation, host tempo and
+a 300-case character/mode/rate/block matrix. Neither replaces listening in a real DAW.
+
 Validate the complete VST3 bundle with Steinberg's validator before distributing it. Test
 VST3 and Standalone at 44.1, 48, 88.2, and 96 kHz with block sizes including 32, 64, 128,
 512, and 1024.

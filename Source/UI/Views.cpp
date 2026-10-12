@@ -297,15 +297,32 @@ void ChoiceButton::paintButton(juce::Graphics& g, bool, bool down)
         drawText(g, getButtonText(), r.translated(nudge, nudge), pixelFont(11.0f, true), juce::Colours::black, juce::Justification::centred);
         return;
     }
-    // Mode button: its glyph as a 36 x 24 pixel image over its name, shown 1:1 without smoothing:
-    // still pixelated, half the softness of the old 18 x 12 one enlarged.
+    // Mode button: keep the glyph black and readable while a narrow signal rail carries the
+    // character colour.  Every rail is faintly alive; the selected mode drives it at full LED
+    // brightness and stays physically depressed in the Win98 chassis.
+    const auto& pal = paletteFor(character);
+    const auto dimSignal = pal.accent.darker(1.75f).withMultipliedSaturation(0.72f);
+    const auto signal = selected ? pal.accent : dimSignal;
+    const auto rail = juce::Rectangle<float> { r.getX() + 5.0f + nudge,
+                                               r.getY() + 7.0f + nudge,
+                                               3.0f,
+                                               r.getHeight() - 14.0f };
+    if (selected)
+    {
+        g.setColour(pal.accent.withAlpha(0.18f));
+        g.fillRect(rail.expanded(1.0f, 1.0f));
+    }
+    g.setColour(signal);
+    g.fillRect(rail);
+
+    // The glyph remains a 36 x 24 pixel image, shown 1:1 without smoothing: still pixelated,
+    // half the softness of the old 18 x 12 one enlarged.
     constexpr int w = 36, h = 24;
-    const auto ink = selected ? paletteFor(character).accent : juce::Colours::black;
     juce::Image icon(juce::Image::ARGB, w, h, true);
     {
         juce::Graphics ig(icon);
         ig.addTransform(juce::AffineTransform::scale(static_cast<float>(w) / 40.0f, static_cast<float>(h) / 26.0f));
-        ig.setColour(ink);
+        ig.setColour(juce::Colours::black);
         // centred by what it actually draws: some glyphs (CALL's waves) sit off their layout box
         auto glyph = modeGlyph(index, { 4.0f, 2.0f, 32.0f, 22.0f });
         juce::Path outline;
@@ -328,7 +345,7 @@ juce::Rectangle<float> MenuBar98::itemBounds(int index) const
     for (int i = 0; i < itemCount; ++i)
     {
         const float w = std::round(juce::GlyphArrangement::getStringWidth(pixelFont(12.0f), items[i])) + 14.0f;
-        if (i == index) return { x, 0.0f, w, 15.0f };
+        if (i == index) return { x, 0.0f, w, static_cast<float>(getHeight() - 4) };
         x += w + 2.0f;
     }
     return {};
@@ -355,9 +372,9 @@ void MenuBar98::paint(juce::Graphics& g)
         g.fillRect(text.getX(), std::round(text.getCentreY() + 5.0f), first - 1.0f, 1.0f);
     }
     g.setColour(win98::shadow);
-    g.fillRect(0.0f, 15.0f, static_cast<float>(getWidth()), 1.0f);
+    g.fillRect(0.0f, static_cast<float>(getHeight() - 2), static_cast<float>(getWidth()), 1.0f);
     g.setColour(win98::light);
-    g.fillRect(0.0f, 16.0f, static_cast<float>(getWidth()), 1.0f);
+    g.fillRect(0.0f, static_cast<float>(getHeight() - 1), static_cast<float>(getWidth()), 1.0f);
 }
 
 void MenuBar98::mouseDown(const juce::MouseEvent& e)

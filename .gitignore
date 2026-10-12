@@ -9,3 +9,8 @@
 *.VC.opendb
 *.log
 __pycache__/
+
+# Local renders and measurements
+/visual-acceptance*/
+/verification/
+/build-*/

@@ -93,6 +93,13 @@ SealVoice* PhoqerEngine::findVoiceForNoteOn() noexcept
     return bestReleased != nullptr ? bestReleased : bestActive;
 }
 
+int PhoqerEngine::getActiveVoiceCount() const noexcept
+{
+    int count = 0;
+    for (const auto& voice : voices) if (voice.isActive()) ++count;
+    return count;
+}
+
 void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
 {
     const auto channel = clamp(0, 15, event.channel);
@@ -144,6 +151,7 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
             break;
         }
         case MidiEventType::allNotesOff:
+            sustainDown[static_cast<size_t>(channel)] = false;
             for (size_t i = 0; i < voices.size(); ++i)
                 if (voices[i].matchesChannel(channel))
                 {

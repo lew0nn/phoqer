@@ -21,6 +21,7 @@ const juce::Rectangle<float> keysWindow { 6, 618, 748, 106 };
 
 // The main window's title bar is taller than the others' so its real caption buttons are easy to hit.
 constexpr float headTitleHeight = 22.0f;
+constexpr float headerToolsHeight = 24.0f;
 constexpr float captionButtonW = 20.0f, captionButtonH = 18.0f;
 
 
@@ -303,9 +304,11 @@ void PhoqerView::rebootSeal()
 
 juce::Rectangle<float> PhoqerView::logoBounds() const
 {
-    const auto row = windowClient(headWindow, headTitleHeight).withTrimmedTop(17.0f);
+    const auto row = windowClient(headWindow, headTitleHeight).withTrimmedTop(headerToolsHeight);
     const float wordW = logoWord.getWidth() * logoWordPixel, wordH = logoWord.getHeight() * logoWordPixel;
-    return { row.getX() + logoWordInset, std::round(row.getCentreY() - wordH * 0.5f), wordW, wordH };
+    // The 3D extrusion hangs below the letters, so centre the letters, not the whole image.
+    constexpr float extrusionDrop = 2.0f;
+    return { row.getX() + logoWordInset, std::round(row.getCentreY() - wordH * 0.5f + extrusionDrop), wordW, wordH };
 }
 
 float PhoqerView::fishSlide() const
@@ -365,9 +368,9 @@ void PhoqerView::resized()
 {
     const auto client = [](juce::Rectangle<float> r) { return windowClient(r); };
     const auto head = windowClient(headWindow, headTitleHeight);
-    menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, head.getWidth(), 17.0f).toNearestInt());
-    recordControl.setBounds(juce::Rectangle<float>(head.getRight() - 2.0f - recordW, head.getY() - 2.0f, recordW, 15.0f).toNearestInt());
-    const auto row = head.withTrimmedTop(17.0f);
+    menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, head.getWidth(), headerToolsHeight).toNearestInt());
+    recordControl.setBounds(juce::Rectangle<float>(head.getRight() - 2.0f - recordW, head.getY() - 2.0f, recordW, 20.0f).toNearestInt());
+    const auto row = head.withTrimmedTop(headerToolsHeight);
     for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
         voiceTabs[slot]->setBounds(juce::Rectangle<float>(row.getRight() - 4.0f - (3 - slot) * 94.0f + 4.0f, row.getCentreY() - 12.0f, 90.0f, 24.0f).toNearestInt());
     presetBox.setBounds(juce::Rectangle<float>(presetBoxX, std::round(row.getCentreY() - 12.0f), presetBoxW, 24.0f).toNearestInt());
@@ -415,14 +418,8 @@ void PhoqerView::rebuildChrome(float scale)
     const auto& pal = paletteFor(character);
     const juce::String voice = voiceNames[character];
 
-    // Desktop: night sky, stars, neon perspective grid.
-    g.fillAll(pal.sky);
-    juce::Random stars(5);
-    for (int k = 0; k < 120; ++k)
-    {
-        g.setColour(juce::Colours::white.withAlpha(0.2f + 0.5f * stars.nextFloat()));
-        g.fillRect(std::round(stars.nextFloat() * width / 2.0f) * 2.0f, std::round(stars.nextFloat() * height / 2.0f) * 2.0f, 2.0f, 2.0f);
-    }
+    // Win98 shell: the space between and around the child windows is face grey.
+    g.fillAll(win98::face);
 
     // Header window: the PHOQER wordmark; the preset box and voice tabs sit on the right.
     const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, pal, true, headTitleHeight);

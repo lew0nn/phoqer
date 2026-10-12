@@ -12,9 +12,9 @@ namespace phoqer
 // Lookahead safety limiter.
 //
 // The gain reduction is computed from the loudest sample in the next two
-// milliseconds and applied to the delayed signal, so it is fully in place before
-// the peak arrives and the ceiling is never overshot. A one-pole envelope
-// follower cannot make that guarantee.
+// milliseconds and applied to the delayed signal. The attack is smoothed, then
+// bounded by the gain required by the outgoing sample, so the ceiling cannot be
+// overshot even by an abrupt transient. Smoothing alone cannot guarantee this.
 //
 // The sliding maximum uses a monotonic wedge: a fixed-capacity ring that holds
 // only the samples which could still become the window maximum. Every sample is
@@ -80,14 +80,18 @@ public:
             const auto windowMaximum = wedgeValue[static_cast<size_t>(head)];
             const auto target = windowMaximum > ceiling ? ceiling / windowMaximum : 1.0f;
             gain += (target - gain) * (target < gain ? attackCoefficient : releaseCoefficient);
-            minimumGain = std::min(minimumGain, gain);
 
             delayLeft[static_cast<size_t>(writeIndex)] = left;
             delayRight[static_cast<size_t>(writeIndex)] = right;
             writeIndex = writeIndex + 1 < delaySize ? writeIndex + 1 : 0;
 
-            const auto delayedLeft = delayLeft[static_cast<size_t>(writeIndex)] * gain;
-            const auto delayedRight = delayRight[static_cast<size_t>(writeIndex)] * gain;
+            const auto outgoingLeft = delayLeft[static_cast<size_t>(writeIndex)];
+            const auto outgoingRight = delayRight[static_cast<size_t>(writeIndex)];
+            const auto outgoingPeak = std::max(std::abs(outgoingLeft), std::abs(outgoingRight));
+            gain = std::min(gain, ceiling / std::max(ceiling, outgoingPeak));
+            minimumGain = std::min(minimumGain, gain);
+            const auto delayedLeft = outgoingLeft * gain;
+            const auto delayedRight = outgoingRight * gain;
 
             buffer.setSample(0, sample, delayedLeft);
             if (stereo)

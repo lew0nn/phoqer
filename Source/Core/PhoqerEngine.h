@@ -28,6 +28,7 @@ public:
     const TelemetryPublisher& getTelemetry() const noexcept { return telemetry; }
     SealCharacter getActiveCharacter() const noexcept { return activeCharacter; }
     int getLatencySamples() const noexcept { return outputStage.getLatencySamples(); }
+    int getActiveVoiceCount() const noexcept;
 
 private:
     SealVoice* findVoiceForNoteOn() noexcept;

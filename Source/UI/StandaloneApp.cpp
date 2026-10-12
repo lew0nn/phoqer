@@ -15,12 +15,43 @@
 #include "Settings.h"
 #include "Style.h"
 
-#include <PhoqerUIAssets.h>
+#if JUCE_WINDOWS
+#include <windows.h>
+#endif
 
 namespace phoqer::ui
 {
 namespace
 {
+#if JUCE_WINDOWS
+// Windows 11 rounds frameless top-level windows and supplies its own dark perimeter unless asked
+// otherwise.  Keep the native peer square and neutral so PHOQER's drawn Win98 bevel is the frame.
+void applyNativeWin98Frame(juce::Component& component)
+{
+    auto* peer = component.getPeer();
+    if (peer == nullptr) return;
+    auto* window = static_cast<HWND>(peer->getNativeHandle());
+    if (window == nullptr) return;
+
+    using SetAttribute = HRESULT (WINAPI*) (HWND, DWORD, LPCVOID, DWORD);
+    if (auto* library = ::LoadLibraryW(L"dwmapi.dll"))
+    {
+        if (auto* setAttribute = reinterpret_cast<SetAttribute>(::GetProcAddress(library, "DwmSetWindowAttribute")))
+        {
+            constexpr DWORD cornerPreferenceAttribute = 33;
+            constexpr DWORD borderColourAttribute = 34;
+            constexpr int doNotRound = 1;
+            const COLORREF borderColour = RGB(192, 192, 192);
+            setAttribute(window, cornerPreferenceAttribute, &doNotRound, sizeof(doNotRound));
+            setAttribute(window, borderColourAttribute, &borderColour, sizeof(borderColour));
+        }
+        ::FreeLibrary(library);
+    }
+}
+#else
+void applyNativeWin98Frame(juce::Component&) {}
+#endif
+
 class FramelessWindow final : public juce::Component, private juce::ComponentListener
 {
 public:
@@ -48,6 +79,7 @@ public:
         setSize(editor->getWidth(), editor->getHeight());
         addToDesktop(juce::ComponentPeer::windowAppearsOnTaskbar | juce::ComponentPeer::windowHasDropShadow
                      | juce::ComponentPeer::windowHasMinimiseButton);
+        applyNativeWin98Frame(*this);
         centreWithSize(getWidth(), getHeight());
         editor->addComponentListener(this);
         setVisible(true);
@@ -115,8 +147,7 @@ private:
     bool fullscreen = false;
 };
 
-// Boot splash (an experiment): the big app icon, the wordmark and a Win98 loading bar for a moment
-// while audio starts.
+// Standalone-only startup: a compact Win98 installer wakes each voice while audio starts.
 class BootSplash final : public juce::Component, private juce::Timer
 {
 public:
@@ -125,19 +156,9 @@ public:
     BootSplash()
     {
         setOpaque(true);
-        for (int i = 0; i < PhoqerUIAssets::namedResourceListSize; ++i)
-        {
-            const auto* name = PhoqerUIAssets::namedResourceList[i];
-            if (juce::String(PhoqerUIAssets::getNamedResourceOriginalFilename(name)) == "phoqer-app-icon-256.png")
-            {
-                int size = 0;
-                const auto* data = PhoqerUIAssets::getNamedResource(name, size);
-                icon = juce::ImageFileFormat::loadFrom(data, static_cast<size_t>(size));
-            }
-        }
-        word = renderOutrunWordmark(0, true);
-        setSize(440, 320);
+        setSize(bootSplashWidth, bootSplashHeight);
         addToDesktop(juce::ComponentPeer::windowHasDropShadow);
+        applyNativeWin98Frame(*this);
         centreWithSize(getWidth(), getHeight());
         setVisible(true);
         started = juce::Time::getMillisecondCounterHiRes();
@@ -146,46 +167,14 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        const auto& pal = paletteFor(0);
-        const auto r = getLocalBounds().toFloat();
-        g.fillAll(win98::face);
-        bevel(g, r, true);
-        const auto art = r.reduced(4.0f).withTrimmedBottom(58.0f);
-        g.setColour(pal.sky);
-        g.fillRect(art);
-        juce::Random stars(7);
-        for (int k = 0; k < 40; ++k)
-        {
-            g.setColour(juce::Colours::white.withAlpha(0.2f + 0.5f * stars.nextFloat()));
-            g.fillRect(art.getX() + std::round(stars.nextFloat() * art.getWidth() / 2.0f) * 2.0f,
-                       art.getY() + std::round(stars.nextFloat() * art.getHeight() / 2.0f) * 2.0f, 2.0f, 2.0f);
-        }
-        g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
-        g.setOpacity(1.0f);
-        const juce::Rectangle<float> iconArea { art.getX() + 24.0f, art.getCentreY() - 64.0f, 128.0f, 128.0f };
-        if (icon.isValid()) g.drawImage(icon, iconArea);
-        const float wordW = static_cast<float>(word.getWidth()) * 2.0f, wordH = static_cast<float>(word.getHeight()) * 2.0f;
-        const float textX = iconArea.getRight() + 20.0f;
-        g.drawImage(word, { textX, art.getCentreY() - wordH - 4.0f, wordW, wordH });
-        drawText(g, "VERSION " JucePlugin_VersionString, { textX, art.getCentreY() + 8.0f, art.getRight() - textX, 16.0f },
-                 pixelFont(12.0f), pal.secondary);
-
-        // Loading bar: Win98 blocks in the accent colour.
-        const float progress = static_cast<float>(juce::jlimit(0.0, 1.0, elapsed() / seconds));
-        const juce::Rectangle<float> bar { r.getX() + 16.0f, art.getBottom() + 12.0f, r.getWidth() - 32.0f, 18.0f };
-        sunken(g, bar);
-        const auto inner = bar.reduced(3.0f);
-        const int blocks = static_cast<int>(inner.getWidth() / 10.0f), lit = juce::roundToInt(progress * static_cast<float>(blocks));
-        g.setColour(pal.accent.darker(0.35f));
-        for (int b = 0; b < lit; ++b) g.fillRect(inner.getX() + static_cast<float>(b) * 10.0f, inner.getY(), 8.0f, inner.getHeight());
-        drawText(g, "WAKING UP THE SEALS...", { bar.getX(), bar.getBottom() + 4.0f, bar.getWidth(), 16.0f }, pixelFont(12.0f), juce::Colours::black);
+        paintStandaloneBootSplash(g, getLocalBounds().toFloat(),
+                                  static_cast<float>(juce::jlimit(0.0, 1.0, elapsed() / seconds)));
     }
 
 private:
     double elapsed() const { return (juce::Time::getMillisecondCounterHiRes() - started) * 0.001; }
     void timerCallback() override { repaint(); }
 
-    juce::Image icon, word;
     double started = 0.0;
 };
 

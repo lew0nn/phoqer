@@ -15,16 +15,20 @@ struct ModeMotion
     float muffle = 0.0f;    // 0 open, 1 a closed-mouth hum (MURMUR)
 };
 
-ModeMotion modeMotion(BehaviourMode mode, float t, float bpm) noexcept
+ModeMotion modeMotion(BehaviourMode mode, double beats, float bpm) noexcept
 {
     ModeMotion m;
     const auto beatHz = bpm / 60.0f;      // the modes keep time with the song
-    const auto cycle = [t](float rateHz) { const auto p = t * rateHz; return (p - std::floor(p)) / rateHz; };
+    const auto cycle = [beats, beatHz](float multiple)
+    {
+        const auto p = beats * multiple;
+        return static_cast<float>((p - std::floor(p)) / (beatHz * multiple));
+    };
     switch (mode)
     {
         case BehaviourMode::honk:      // separate honks on 1/8 notes: a nasal hit that drops away to near silence
         {
-            const auto c = cycle(beatHz * 2.0f);
+            const auto c = cycle(2.0f);
             const auto hit = std::exp(-c / 0.07f) * std::min(1.0f, c / 0.006f);
             m.gain = 0.05f + 0.95f * hit;
             m.semitones = 2.5f * std::exp(-c / 0.04f);
@@ -35,7 +39,7 @@ ModeMotion modeMotion(BehaviourMode mode, float t, float bpm) noexcept
         }
         case BehaviourMode::bark:      // separate hard barks on 1/4 notes, silence between
         {
-            const auto c = cycle(beatHz);
+            const auto c = cycle(1.0f);
             // a fast rise, a full 60 ms, then the fall: a bark, not a punch
             const auto open = std::min(1.0f, c / 0.006f) * (c < 0.06f ? 1.0f : std::exp(-(c - 0.06f) / 0.08f));
             const auto shut = 1.0f - std::min(1.0f, std::max(0.0f, (c - 0.16f) / 0.04f));
@@ -47,7 +51,7 @@ ModeMotion modeMotion(BehaviourMode mode, float t, float bpm) noexcept
         }
         case BehaviourMode::wail:      // a long glide: up two and a half semitones and back, over two bars
         {
-            const auto s = std::sin(twoPi<float> * t * beatHz / 8.0f);
+            const auto s = static_cast<float>(std::sin(twoPi<double> * beats / 8.0));
             m.semitones = 2.4f * s;
             m.vowel = 0.35f * std::max(0.0f, s);              // the mouth opens as it climbs
             m.gain = 0.90f + 0.25f * std::max(0.0f, s);       // and it sings out at the top
@@ -93,6 +97,8 @@ void SealVoice::prepare(double newSampleRate, int)
     smoothVowel.setCurrentAndTargetValue(macros.vowel);
     smoothTide.setCurrentAndTargetValue(macros.tide);
     smoothDetune.setCurrentAndTargetValue(macros.detune);
+    smoothBend.reset(sampleRate, 0.005);
+    smoothBend.setCurrentAndTargetValue(0.0f);
     hardReset();
 }
 
@@ -128,6 +134,7 @@ void SealVoice::hardReset() noexcept
     stolenTail = 0.0f;
     stolenTailSamples = 0;
     noteAgeSeconds = 0.0f;
+    noteBeats = 0.0;
     deactivate();
 }
 
@@ -157,7 +164,9 @@ void SealVoice::startNote(int midiChannel, int midiNoteNumber, float velocity,
     baseFrequency = midiNoteToHz(static_cast<float>(currentMidiNote));
     fofBank.setNoteFrequency(baseFrequency);
     noteAgeSeconds = 0.0f;
+    noteBeats = 0.0;
     pitchWheelMoved(currentPitchWheelPosition);
+    smoothBend.setCurrentAndTargetValue(pitchWheelSemitones);
 
     // ADSR comes from the character preset. BARK stretches or tightens the
     // attack: twice as slow at 0, a quarter at 1, as measured at the default.
@@ -240,8 +249,11 @@ void SealVoice::stopNote(bool allowTailOff)
 
 void SealVoice::pitchWheelMoved(int value) noexcept
 {
-    pitchWheelSemitones = lerp(clamp(0.0f, 16383.0f, static_cast<float>(value)) / 16383.0f,
-                               -2.0f, 2.0f);
+    pitchWheelPosition = clamp(0, 16383, value);
+    const auto centered = pitchWheelPosition - 8192;
+    pitchWheelSemitones = static_cast<float>(centered) / (centered >= 0 ? 8191.0f : 8192.0f)
+                        * 2.0f;     // two semitones each way
+    smoothBend.setTargetValue(pitchWheelSemitones);
 }
 
 void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSamples)
@@ -267,6 +279,7 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
         // holds the contour measured from the reference recordings. It settles
         // to its last value and holds, so a sustained note stays in tune.
         noteAgeSeconds += dt;
+        noteBeats += static_cast<double>(sampleMacros.tempoBpm) / (60.0 * sampleRate);
         if (belch && ! releasing && noteAgeSeconds > belchSeconds)
             stopNote(true);
         // TIDE is expression: 0 plays a dead-straight note, the default 0.25 the
@@ -303,7 +316,7 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
 
         // The behaviour mode keeps moving the held note (see modeMotion).
         const auto motion = modeMotion(belch ? BehaviourMode::call : sampleMacros.behaviorMode,
-                                       noteAgeSeconds, sampleMacros.tempoBpm);
+                                       noteBeats, sampleMacros.tempoBpm);
         vocal.vowelMorph = clamp(0.0f, 1.0f, vocal.vowelMorph + motion.vowel + preset->vowelOffset);
         if (belch)     // a closed "oo" gulp; the belch comes up as a wide "aw"
             vocal.vowelMorph = noteAgeSeconds < 0.18f ? 0.05f : 0.45f;
@@ -313,7 +326,7 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
         vocal.barkTransient += motion.kick * barkScale;
         drift += motion.semitones;
         const auto frequency = static_cast<double>(baseFrequency)
-            * std::pow(2.0f, (contourSemitones + pitchWheelSemitones + detune + drift) / 12.0f);
+            * std::pow(2.0f, (contourSemitones + smoothBend.getNextValue() + detune + drift) / 12.0f);
 
         auto value = fofBank.process(frequency, *preset, sampleMacros, vocal, random);
         const auto attackPunch = 1.0f + 1.20f * vocal.barkTransient;

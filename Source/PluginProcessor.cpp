@@ -93,7 +93,13 @@ void PhoqerAudioProcessor::translateMidi(const juce::MidiBuffer& midiMessages) n
     for (const auto metadata : midiMessages)
     {
         if (midiEventCount >= static_cast<int>(midiEvents.size()))
+        {
+            // A dense MIDI burst must not discard note-offs and leave voices stuck.
+            midiEventCount = 0;
+            for (int channel = 0; channel < 16; ++channel)
+                midiEvents[static_cast<size_t>(midiEventCount++)] = { phoqer::MidiEventType::allNotesOff, 0, channel, 0, 0 };
             break;
+        }
 
         const auto& message = metadata.getMessage();
         const int channel = std::clamp(message.getChannel() - 1, 0, 15);
@@ -151,6 +157,8 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     keyboardState.processNextMidiBuffer(midiMessages, 0, buffer.getNumSamples(), true);
     translateMidi(midiMessages);
     if (panicRequested.exchange(false, std::memory_order_relaxed))
+    {
+        midiEventCount = 0;
         for (int channel = 0; channel < 16 && midiEventCount < static_cast<int>(midiEvents.size()); ++channel)
         {
             phoqer::MidiEvent off;
@@ -159,6 +167,7 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             off.sampleOffset = 0;
             midiEvents[static_cast<size_t>(midiEventCount++)] = off;
         }
+    }
 
     // Fed the fish: a gulp and the fish song, or overfed: a gulp and a belch, in the seal's own register.
     for (auto* request : { &fedRequested, &belchRequested })

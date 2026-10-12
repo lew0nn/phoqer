@@ -124,4 +124,77 @@ juce::Image loadAssetImage(const char* originalFilename)
     jassertfalse;
     return {};
 }
+
+namespace
+{
+void paintBootStars(juce::Graphics& g, juce::Rectangle<float> area)
+{
+    juce::Random random(11);
+    for (int k = 0; k < 24; ++k)
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.2f + 0.5f * random.nextFloat()));
+        g.fillRect(area.getX() + std::round(random.nextFloat() * area.getWidth() / 2.0f) * 2.0f,
+                   area.getY() + std::round(random.nextFloat() * area.getHeight() / 2.0f) * 2.0f,
+                   2.0f, 2.0f);
+    }
+    g.setOpacity(1.0f);
+}
+
+void paintBootProgress(juce::Graphics& g, juce::Rectangle<float> area, float progress, juce::Colour colour)
+{
+    sunken(g, area);
+    const auto inner = area.reduced(3.0f);
+    const int count = static_cast<int>(inner.getWidth() / 10.0f);
+    const int lit = juce::roundToInt(progress * static_cast<float>(count));
+    g.setColour(colour);
+    for (int block = 0; block < lit; ++block)
+        g.fillRect(inner.getX() + static_cast<float>(block) * 10.0f,
+                   inner.getY(), 8.0f, inner.getHeight());
+}
+}
+
+void paintStandaloneBootSplash(juce::Graphics& g, juce::Rectangle<float> bounds, float progress)
+{
+    const auto& palette = paletteFor(0);
+    static const auto icon = loadAssetImage("phoqer-app-icon-256.png");
+    static const auto wordmark = renderOutrunWordmark(0, true);
+    const float wordmarkWidth = static_cast<float>(wordmark.getWidth()) * 2.0f;
+    const float wordmarkHeight = static_cast<float>(wordmark.getHeight()) * 2.0f;
+    const char* voices[] { "BURP", "SQUEAL", "GROAN" };
+
+    progress = juce::jlimit(0.0f, 1.0f, progress);
+    g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+    g.fillAll(win98::face);
+
+    // Win98 installer structure: active title bar, artwork bay, status column and block meter.
+    const auto client = window98(g, bounds, "PHOQER.EXE", palette, true);
+    const auto artwork = client.withWidth(150.0f).reduced(2.0f);
+    g.setColour(palette.sky);
+    g.fillRect(artwork);
+    paintBootStars(g, artwork);
+    if (icon.isValid())
+        g.drawImage(icon, juce::Rectangle<float>(112.0f, 112.0f).withCentre(artwork.getCentre()));
+
+    const auto status = client.withTrimmedLeft(162.0f).reduced(8.0f, 10.0f);
+    g.drawImage(wordmark, { status.getX(), status.getY(), wordmarkWidth, wordmarkHeight });
+    drawText(g, "VERSION " JucePlugin_VersionString,
+             { status.getX(), status.getY() + wordmarkHeight + 4.0f, status.getWidth(), 14.0f },
+             pixelFont(11.0f), win98::shadow);
+
+    float y = status.getY() + wordmarkHeight + 30.0f;
+    for (int voice = 0; voice < 3; ++voice)
+    {
+        const float stage = progress * 3.0f;
+        const bool complete = stage > static_cast<float>(voice) + 0.6f;
+        const bool current = ! complete && stage > static_cast<float>(voice) - 0.4f;
+        const auto marker = complete ? "[X] " : current ? "[>] " : "[ ] ";
+        drawText(g, juce::String(marker) + "WAKING " + voices[voice] + "...",
+                 { status.getX(), y, status.getWidth(), 16.0f }, pixelFont(12.0f),
+                 complete || current ? juce::Colours::black : win98::shadow);
+        y += 22.0f;
+    }
+
+    paintBootProgress(g, { status.getX(), status.getBottom() - 18.0f, status.getWidth(), 18.0f },
+                      progress, palette.accent.darker(0.35f));
+}
 }

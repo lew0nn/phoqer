@@ -236,6 +236,7 @@ private:
     bool isDefault;
 };
 
+
 // A Win98 message box drawn inside the editor (so it scales with the UI and works inside a DAW):
 // title bar, optional icon, message lines, optional one-line text field, and buttons. It covers its
 // parent to block clicks underneath. Enter presses the first button, Escape or X closes with -1

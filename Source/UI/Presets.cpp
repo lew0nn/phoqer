@@ -93,8 +93,8 @@ Preset PresetLibrary::capture(const juce::String& name) const
 
 void PresetLibrary::apply(const Preset& p)
 {
-    for (const auto& [id, value] : p.values)
-        if (auto* param = state.getParameter(id))
+    for (const auto& [id, value] : p.values)     // a preset file can only set the sound, never OUTPUT
+        if (auto* param = state.getParameter(id); param != nullptr && parameterIds().contains(id))
         {
             param->beginChangeGesture();
             param->setValueNotifyingHost(param->convertTo0to1(value));

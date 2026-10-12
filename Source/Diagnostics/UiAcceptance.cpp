@@ -3,6 +3,7 @@
 
 #include "../PluginProcessor.h"
 #include "../UI/Editor.h"
+#include "../UI/Logo.h"
 
 #include <iostream>
 
@@ -31,6 +32,33 @@ int main(int argc, char** argv)
     const juce::File folder(juce::String::fromUTF8(argv[1]));
     folder.createDirectory();
 
+    if (juce::SystemStats::getEnvironmentVariable("PHOQER_SPLASH", {}).isNotEmpty())
+    {
+        const std::array<std::pair<const char*, float>, 4> frames {{
+            { "startup-00.png", 0.0f },
+            { "startup-33.png", 0.33f },
+            { "startup-66.png", 0.66f },
+            { "startup-100.png", 1.0f }
+        }};
+        for (const auto& [name, progress] : frames)
+        {
+            juce::Image image(juce::Image::RGB, phoqer::ui::bootSplashWidth * 2,
+                              phoqer::ui::bootSplashHeight * 2, true, juce::SoftwareImageType());
+            {
+                juce::Graphics g(image);
+                g.addTransform(juce::AffineTransform::scale(2.0f));
+                phoqer::ui::paintStandaloneBootSplash(
+                    g, { 0.0f, 0.0f, static_cast<float>(phoqer::ui::bootSplashWidth),
+                         static_cast<float>(phoqer::ui::bootSplashHeight) }, progress);
+            }
+            juce::FileOutputStream output(folder.getChildFile(name));
+            if (! output.openedOk() || ! juce::PNGImageFormat().writeImageToStream(image, output))
+                throw std::runtime_error(juce::String("Cannot save ").toStdString() + name);
+        }
+        std::cout << "STANDALONE_SPLASH_OK\n";
+        return 0;
+    }
+
     constexpr double sampleRate = 48000.0;
     constexpr int block = 256;
     const int blocksPerFrame = juce::roundToInt(sampleRate / block / 30.0);    // ~30 Hz UI ticks
@@ -39,7 +67,8 @@ int main(int argc, char** argv)
 
     for (int character : { 1, 0, 2 })
     {
-        PhoqerAudioProcessor processor;
+        auto owner = std::make_unique<PhoqerAudioProcessor>();
+        auto& processor = *owner;
         processor.prepareToPlay(sampleRate, block);
         setParameter(processor, "character", static_cast<float>(character));
         setParameter(processor, "behavior", static_cast<float>(modes[character]));
@@ -49,6 +78,11 @@ int main(int argc, char** argv)
 
         double now = 1000.0;
         save(editor->getView(), folder.getChildFile(juce::String("ui-") + names[character] + "-idle.png"));
+        phoqer::ui::WindowControls preview;
+        preview.audioSettings = preview.minimise = preview.toggleFullscreen = preview.close = [] {};
+        editor->setWindowControls(preview);
+        save(editor->getView(), folder.getChildFile(juce::String("ui-") + names[character] + "-standalone.png"));
+        editor->setWindowControls({});
         juce::AudioBuffer<float> buffer(2, block);
         float maxIntensity = 0.0f;
         for (int b = 0; b < 260; ++b)
