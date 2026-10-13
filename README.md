@@ -14,16 +14,20 @@
   <a href="https://github.com/lew0nn/phoqer/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/lew0nn/phoqer/total?style=flat-square&amp;label=downloads&amp;labelColor=12040A&amp;color=FF9F1C&amp;logo=github&amp;logoColor=white"></a>
 </p>
 
+<br>
+
 <p align="center">
-  <img src="Media/PHOQER_Banner.png" width="100%" alt="Three seals on an ice floe at sunset, each singing its own wave: BURP slow and wide, SQUEAL fast and jagged, GROAN long and smooth">
+  <img src="Media/PHOQER_Numbers.png" width="720" alt="3 seals, 5 moods, 8 voices, 0 samples">
 </p>
 
-<p align="center"><strong>Three seals, five moods, eight voices. No samples.</strong></p>
+<br>
 
 PHOQER builds every call while you play it. Formant-wave-function synthesis, the technique behind
 Chant and Delay Lama, makes each resonance of the seal's throat from overlapping grains, shaped by
 formant tables and pitch contours measured from real seal calls. The recordings were the reference;
 none of them are in the instrument.
+
+<br>
 
 ## Seals
 
@@ -38,6 +42,8 @@ none of them are in the instrument.
 
 Each seal has its own colours, and its portrait reacts as it sings.
 
+<br>
+
 ## Moods
 
 How a held note behaves. HONK, BARK and WAIL keep time with your song.
@@ -49,6 +55,8 @@ How a held note behaves. HONK, BARK and WAIL keep time with your song.
 | BARK | Hard barks on 1/4 notes, silence between |
 | WAIL | One long glide up and back over two bars |
 | MURMUR | A muttered, closed-mouth hum |
+
+<br>
 
 ## Controls
 
@@ -67,6 +75,8 @@ How a held note behaves. HONK, BARK and WAIL keep time with your song.
 MIDI: velocity, pitch bend (two semitones), the sustain pedal (CC 64), and the mod wheel (CC 1),
 which adds TIDE on top of the knob. Every knob can be automated.
 
+<br>
+
 ## Standalone app
 
 The standalone app adds a few things of its own:
@@ -84,6 +94,8 @@ In a DAW, PHOQER follows the project's tempo, and the metronome and REC are hidd
   <img src="Media/PHOQER_Standalone.png" width="100%" alt="The standalone app as GROAN, with METRO.EXE open">
 </p>
 
+<br>
+
 ## Presets & interface
 
 **Sixteen factory presets: INIT and five for each seal.**
@@ -96,6 +108,8 @@ Save your own as `.phqpreset` files. The interface is a set of Win98 programs: t
 SCOPE.EXE with its waveform and spectrogram, LEVEL.EXE, MIXER.EXE and KEYS.EXE. The menus hold undo
 and redo, copying and pasting settings, reverting to the preset, a panic button, zoom, a controls
 guide and the keyboard shortcuts.
+
+<br>
 
 ## Download
 
@@ -113,6 +127,8 @@ Runs PHOQER without a DAW; audio and MIDI devices are set from its EDIT menu.
 
 The installer is not code-signed, so Windows SmartScreen may stop it the first time: choose
 **More info**, then **Run anyway**.
+
+<br>
 
 ## Technical details
 
@@ -205,6 +221,8 @@ script still builds the zips.
 Built with C++17, JUCE 8.0.8 and CMake.
 
 </details>
+
+<br>
 
 ## License
 
