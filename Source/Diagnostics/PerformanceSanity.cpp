@@ -1,5 +1,8 @@
 #include "../Core/PhoqerEngine.h"
+#include <chrono>
 #include <cmath>
+#include <cstring>
+#include <memory>
 #include <iostream>
 #include <stdexcept>
 
@@ -18,8 +21,43 @@ void settle(PhoqerEngine& engine, AudioBuffer& buffer, const MacroState& macros,
 }
 }
 
-int main()
+// --cpu: the share of one core PHOQER needs at 44.1 kHz in 128-sample blocks, for 1, 4 and 8 held
+// notes of each seal (20 s of audio each). This is the table in the README.
+int cpuReport()
 {
+    constexpr double rate = 44100.0, seconds = 20.0;
+    constexpr int block = 128;
+    std::cout << "notes  BURP  SQUEAL  GROAN\n";
+    for (int notes : { 1, 4, 8 })
+    {
+        std::cout << notes << "     ";
+        for (int seal = 0; seal < 3; ++seal)
+        {
+            auto owned = std::make_unique<PhoqerEngine>();     // too big for the stack
+            auto& engine = *owned;
+            AudioBuffer buffer(2, block);
+            MacroState macros;
+            macros.character = static_cast<SealCharacter>(seal);
+            engine.prepare(rate, block, 2);
+            for (int n = 0; n < notes; ++n)
+            {
+                MidiEvent on { MidiEventType::noteOn, 0, 0, 48 + n * 3, 0.8f };
+                engine.process(buffer, &on, 1, macros, 0);
+            }
+            const int blocks = static_cast<int>(seconds * rate / block);
+            const auto start = std::chrono::steady_clock::now();
+            for (int b = 0; b < blocks; ++b) engine.process(buffer, nullptr, 0, macros, 0);
+            const double used = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            std::cout << "  " << static_cast<int>(used / seconds * 1000.0 + 0.5) / 10.0 << "%";
+        }
+        std::cout << "\n";
+    }
+    return 0;
+}
+
+int main(int argc, char** argv)
+{
+    if (argc > 1 && std::strcmp(argv[1], "--cpu") == 0) return cpuReport();
     try
     {
         {
