@@ -39,7 +39,7 @@ none of them are in the instrument.
 - **Nine knobs**, from BOOM to GLIDE, every one automatable.
 - **Eight voices**, with velocity, pitch bend, the sustain pedal and the mod wheel.
 - **No samples:** every call is synthesised while you play.
-- **Sixteen factory presets**, and your own as `.phqpreset` files.
+- Ships with **16 presets**.
 - **Standalone app** with a computer-key piano, REC to WAV and a metronome with a count-in.
 - **VST3 and standalone** for Windows x64. Free and open source.
 
@@ -133,15 +133,9 @@ In a DAW, PHOQER follows the project's tempo, and the metronome and REC are hidd
 
 <br>
 
-## Presets & interface
+## Interface
 
-**Sixteen factory presets: INIT and five for each seal.**
-
-`BRP FISH DEMAND · BRP HARBOUR BASS · BRP FOGHORN · BRP GRUMBLE · BRP PIER RIOT`<br>
-`SQL BEACH SOLO · SQL PUP · SQL KLAXON · SQL PUP CHOIR · SQL GOSSIP`<br>
-`GRN TAX AUDIT · GRN NIGHT TIDE · GRN SIREN SONG · GRN ICE CAVE · GRN HONK SHOW`
-
-Save your own as `.phqpreset` files. The interface is a set of Win98 programs: the seal's portrait,
+Ships with 16 presets; save your own as `.phqpreset` files. The interface is a set of Win98 programs: the seal's portrait,
 SCOPE.EXE with its waveform and spectrogram, LEVEL.EXE, MIXER.EXE and KEYS.EXE. The menus hold undo
 and redo, copying and pasting settings, reverting to the preset, a panic button, zoom, a controls
 guide and the keyboard shortcuts.
