@@ -14,10 +14,6 @@
   <a href="https://github.com/lew0nn/phoqer/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/lew0nn/phoqer/total?style=flat-square&amp;label=downloads&amp;labelColor=12040A&amp;color=FF9F1C&amp;logo=github&amp;logoColor=white"></a>
 </p>
 
-<p align="center">
-  <img src="Media/PHOQER.png" width="640" alt="PHOQER: BURP mid-call in the seal's portrait, its wave on SCOPE.EXE, the mixer and the keyboard">
-</p>
-
 <p align="center"><strong>Three seals, five moods, eight voices. No samples.</strong></p>
 
 PHOQER builds every call while you play it. Formant-wave-function synthesis, the technique behind
