@@ -10,6 +10,8 @@
 
 <p align="center"><em>A seal you can play. A synthetic vocal instrument for Windows.</em></p>
 
+<br>
+
 <p align="center">
   <a href="https://github.com/lew0nn/phoqer/releases/tag/v1.0.0"><img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-FF9F1C?style=flat-square&amp;labelColor=322412"></a>
   <a href="#download"><img alt="Windows x64" src="https://img.shields.io/badge/platform-Windows%20x64-FF792F?style=flat-square&amp;labelColor=321F15"></a>
