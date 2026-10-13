@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PHOQER MSI (WiX 3): the standalone app in Program Files\LWNX DSP\PHOQER and the VST3 in Common Files\VST3.
+     Built by build-release.ps1: candle -dVersion=1.0.0 -dSourceDir=<repo> -dDistDir=<repo>\dist installer\PHOQER.wxs -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="PHOQER"
+    Language="1033"
+    Version="$(var.Version)"
+    Manufacturer="LWNX DSP"
+    UpgradeCode="8D5C4B22-41D2-47A4-87BC-131F4095DA31">
+
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" Description="PHOQER" Manufacturer="LWNX DSP" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of PHOQER is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPCONTACT" Value="lewonn / LWNX DSP" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/lew0nn/phoqer" />
+    <Property Id="ARPPRODUCTICON" Value="PhoqerProductIcon" />
+    <Icon Id="PhoqerProductIcon" SourceFile="$(var.SourceDir)\resources\branding\app\phoqer-app-icon.ico" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="CompanyFolder" Name="LWNX DSP">
+          <Directory Id="INSTALLFOLDER" Name="PHOQER">
+            <Component Id="StandaloneComponent" Guid="D7E4CCE2-D8A7-477B-A57E-2A1044C78572" Win64="yes">
+              <File Id="StandaloneExe" Source="$(var.DistDir)\Standalone\PHOQER.exe" KeyPath="yes" />
+            </Component>
+            <Component Id="LicenseComponent" Guid="81FEBFA7-D48D-4758-A036-77112DA7DFC5" Win64="yes">
+              <File Id="LicenseFile" Source="$(var.SourceDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
+              <File Id="NoticeFile" Source="$(var.SourceDir)\NOTICE.md" Name="NOTICE.md" />
+              <File Id="ThirdPartyNoticesFile" Source="$(var.SourceDir)\THIRD_PARTY_NOTICES.md" Name="THIRD_PARTY_NOTICES.md" />
+            </Component>
+            <Directory Id="AppLicensesFolder" Name="PHOQER-Licenses">
+              <Component Id="AppLicensesComponent" Guid="4DBFDD7B-0D57-4921-BBA5-6F6EDDB6C613" Win64="yes">
+                <File Id="AppLic0" Source="$(var.DistDir)\Standalone\PHOQER-Licenses\Apache-2.0.txt" Name="Apache-2.0.txt" KeyPath="yes" />
+                <File Id="AppLic1" Source="$(var.DistDir)\Standalone\PHOQER-Licenses\LICENSE" Name="LICENSE" />
+                <File Id="AppLic2" Source="$(var.DistDir)\Standalone\PHOQER-Licenses\LICENSE.md" Name="LICENSE.md" />
+                <File Id="AppLic3" Source="$(var.DistDir)\Standalone\PHOQER-Licenses\NOTICE.md" Name="NOTICE.md" />
+                <File Id="AppLic4" Source="$(var.DistDir)\Standalone\PHOQER-Licenses\OFL-PressStart2P.txt" Name="OFL-PressStart2P.txt" />
+                <File Id="AppLic5" Source="$(var.DistDir)\Standalone\PHOQER-Licenses\OFL-Silkscreen.txt" Name="OFL-Silkscreen.txt" />
+                <File Id="AppLic6" Source="$(var.DistDir)\Standalone\PHOQER-Licenses\Roboto-NOTICE.txt" Name="Roboto-NOTICE.txt" />
+                <File Id="AppLic7" Source="$(var.DistDir)\Standalone\PHOQER-Licenses\THIRD_PARTY_NOTICES.md" Name="THIRD_PARTY_NOTICES.md" />
+              </Component>
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+
+      <Directory Id="CommonFiles64Folder">
+        <Directory Id="VST3CommonFolder" Name="VST3">
+          <Directory Id="VST3BundleFolder" Name="PHOQER.vst3">
+            <Directory Id="VST3ContentsFolder" Name="Contents">
+              <Directory Id="VST3ResourcesFolder" Name="Resources">
+                <Component Id="VST3ModuleInfoComponent" Guid="643B31F0-E523-4205-AC90-A13A27D6F7A7" Win64="yes">
+                  <File Id="VST3ModuleInfoFile" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\moduleinfo.json" KeyPath="yes" />
+                </Component>
+                <Directory Id="VST3LicensesFolder" Name="PHOQER-Licenses">
+                  <Component Id="VST3LicensesComponent" Guid="2B0E4F7A-93C1-4C55-9E57-6A0D3C8B1F42" Win64="yes">
+                    <File Id="VstLic0" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\PHOQER-Licenses\Apache-2.0.txt" Name="Apache-2.0.txt" KeyPath="yes" />
+                    <File Id="VstLic1" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\PHOQER-Licenses\LICENSE" Name="LICENSE" />
+                    <File Id="VstLic2" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\PHOQER-Licenses\LICENSE.md" Name="LICENSE.md" />
+                    <File Id="VstLic3" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\PHOQER-Licenses\NOTICE.md" Name="NOTICE.md" />
+                    <File Id="VstLic4" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\PHOQER-Licenses\OFL-PressStart2P.txt" Name="OFL-PressStart2P.txt" />
+                    <File Id="VstLic5" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\PHOQER-Licenses\OFL-Silkscreen.txt" Name="OFL-Silkscreen.txt" />
+                    <File Id="VstLic6" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\PHOQER-Licenses\Roboto-NOTICE.txt" Name="Roboto-NOTICE.txt" />
+                    <File Id="VstLic7" Source="$(var.DistDir)\PHOQER.vst3\Contents\Resources\PHOQER-Licenses\THIRD_PARTY_NOTICES.md" Name="THIRD_PARTY_NOTICES.md" />
+                  </Component>
+                </Directory>
+              </Directory>
+              <Directory Id="VST3BinaryFolder" Name="x86_64-win">
+                <Component Id="VST3BinaryComponent" Guid="B5B2C693-7169-457C-9E00-2DDF76928C29" Win64="yes">
+                  <File Id="VST3BinaryFile" Source="$(var.DistDir)\PHOQER.vst3\Contents\x86_64-win\PHOQER.vst3" KeyPath="yes" />
+                </Component>
+              </Directory>
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="CompleteFeature" Title="PHOQER" Level="1" Absent="disallow">
+      <ComponentRef Id="StandaloneComponent" />
+      <ComponentRef Id="LicenseComponent" />
+      <ComponentRef Id="VST3ModuleInfoComponent" />
+      <ComponentRef Id="VST3BinaryComponent" />
+      <ComponentRef Id="AppLicensesComponent" />
+      <ComponentRef Id="VST3LicensesComponent" />
+    </Feature>
+  </Product>
+</Wix>

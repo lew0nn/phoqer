@@ -52,15 +52,23 @@ none of them are in the instrument.
 
 Installs the VST3 plug-in, the standalone app, or both.
 
+### [MSI installer](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64.msi)
+
+Installs both in one step, for managed or scripted installs.
+
 ### [VST3](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-VST3.zip)
 
 The complete `PHOQER.vst3` bundle for Windows x64 hosts.
 
-### [Standalone](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Standalone.zip)
+### [Standalone](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Standalone.exe)
 
-Runs PHOQER without a DAW; audio and MIDI devices are set from its EDIT menu.
+One file that runs PHOQER without a DAW; audio and MIDI devices are set from its EDIT menu.
 
-The installer is not code-signed, so Windows SmartScreen may stop it the first time: choose
+### [Source](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Source.zip)
+
+The source code with JUCE included, ready to build.
+
+The installers and the app are not code-signed, so Windows SmartScreen may stop them the first time: choose
 **More info**, then **Run anyway**.
 
 <br>
@@ -211,7 +219,7 @@ Rescan plug-ins in the host.
 
 ### Standalone
 
-Extract the standalone package and run `PHOQER.exe`. Audio and MIDI are set from EDIT ▸ AUDIO/MIDI SETUP.
+Run `PHOQER-1.0.0-Windows-x64-Standalone.exe` from anywhere. Audio and MIDI are set from EDIT ▸ AUDIO/MIDI SETUP.
 
 </details>
 
@@ -219,7 +227,8 @@ Extract the standalone package and run `PHOQER.exe`. Audio and MIDI are set from
 <summary><strong>Build from source</strong></summary>
 
 Requirements: Windows x64, CMake 3.22+, Visual Studio 2022 with the MSVC desktop C++ toolchain, Git,
-and the pinned JUCE submodule. For the installer, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+and the pinned JUCE submodule (or the Source zip from a release, which includes JUCE). For the
+installers, [Inno Setup 6](https://jrsoftware.org/isinfo.php) and [WiX Toolset 3.14](https://github.com/wixtoolset/wix3/releases).
 
 ```powershell
 git clone --recurse-submodules https://github.com/lew0nn/phoqer.git
@@ -227,8 +236,8 @@ Set-Location phoqer
 powershell -ExecutionPolicy Bypass -File .\build-release.ps1
 ```
 
-The installer and the VST3 and standalone zips are written to `dist\release`. Without Inno Setup the
-script still builds the zips.
+Every release file is written to `dist\release`. Without Inno Setup or WiX the script skips that
+installer and builds the rest.
 
 Built with C++17, JUCE 8.0.8 and CMake.
 
