@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="Media/PHOQER.gif" width="100%" alt="PHOQER switching between its three seals, BURP, SQUEAL and GROAN, each mid-call">
+  <img src="Media/PHOQER.png" width="100%" alt="PHOQER: BURP mid-call in the seal's portrait, its wave on SCOPE.EXE, the mixer and the keyboard">
 </p>
 
 <p align="center"><strong>Three seals, five moods, eight voices. No samples.</strong></p>
