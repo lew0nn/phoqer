@@ -2,6 +2,10 @@
   <img src="Media/PHOQER_Logo.png" width="340" alt="PHOQER">
 </p>
 
+<p align="center">
+  <img src="Media/PHOQER_Cast.png" width="760" alt="BURP, GROAN and SQUEAL singing side by side">
+</p>
+
 <p align="center"><em>A seal you can play. A synthetic vocal instrument for Windows.</em></p>
 
 <p align="center">
@@ -12,13 +16,6 @@
   <a href="CMakeLists.txt"><img alt="C++17" src="https://img.shields.io/badge/C%2B%2B-17-F0A030?style=flat-square&amp;labelColor=282116"></a>
   <a href="LICENSE"><img alt="GNU AGPL v3" src="https://img.shields.io/badge/license-AGPL%203.0-44C27F?style=flat-square&amp;labelColor=021014&amp;logo=gnu&amp;logoColor=white"></a>
   <a href="https://github.com/lew0nn/phoqer/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/lew0nn/phoqer/total?style=flat-square&amp;label=downloads&amp;labelColor=12040A&amp;color=FF9F1C&amp;logo=github&amp;logoColor=white"></a>
-</p>
-
-<br>
-<br>
-
-<p align="center">
-  <img src="Media/PHOQER_Cast.png" width="760" alt="BURP, GROAN and SQUEAL singing side by side">
 </p>
 
 <br>
