@@ -15,11 +15,13 @@
 </p>
 
 <br>
+<br>
 
 <p align="center">
-  <img src="Media/PHOQER_Numbers.png" width="720" alt="3 seals, 5 moods, 8 voices, 0 samples">
+  <img src="Media/PHOQER_Choir.png" width="760" alt="BURP, GROAN and SQUEAL singing side by side">
 </p>
 
+<br>
 <br>
 
 PHOQER builds every call while you play it. Formant-wave-function synthesis, the technique behind
@@ -27,6 +29,41 @@ Chant and Delay Lama, makes each resonance of the seal's throat from overlapping
 formant tables and pitch contours measured from real seal calls. The recordings were the reference;
 none of them are in the instrument.
 
+<br>
+
+## Features
+
+- **Three seals:** BURP, SQUEAL and GROAN, each with its own voice, colours and a portrait that
+  reacts as it sings.
+- **Five moods** for a held note: one call, honks, barks, a wail or a hum, in time with your song.
+- **Nine knobs**, from BOOM to GLIDE, every one automatable.
+- **Eight voices**, with velocity, pitch bend, the sustain pedal and the mod wheel.
+- **No samples:** every call is synthesised while you play.
+- **Sixteen factory presets**, and your own as `.phqpreset` files.
+- **Standalone app** with a computer-key piano, REC to WAV and a metronome with a count-in.
+- **VST3 and standalone** for Windows x64. Free and open source.
+
+<br>
+<br>
+
+## Download
+
+### [Windows installer](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Setup.exe)
+
+Installs the VST3 plug-in, the standalone app, or both.
+
+### [VST3](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-VST3.zip)
+
+The complete `PHOQER.vst3` bundle for Windows x64 hosts.
+
+### [Standalone](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Standalone.zip)
+
+Runs PHOQER without a DAW; audio and MIDI devices are set from its EDIT menu.
+
+The installer is not code-signed, so Windows SmartScreen may stop it the first time: choose
+**More info**, then **Run anyway**.
+
+<br>
 <br>
 
 ## Seals
@@ -108,25 +145,6 @@ Save your own as `.phqpreset` files. The interface is a set of Win98 programs: t
 SCOPE.EXE with its waveform and spectrogram, LEVEL.EXE, MIXER.EXE and KEYS.EXE. The menus hold undo
 and redo, copying and pasting settings, reverting to the preset, a panic button, zoom, a controls
 guide and the keyboard shortcuts.
-
-<br>
-
-## Download
-
-### [Windows installer](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Setup.exe)
-
-Installs the VST3 plug-in, the standalone app, or both.
-
-### [VST3](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-VST3.zip)
-
-The complete `PHOQER.vst3` bundle for Windows x64 hosts.
-
-### [Standalone](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Standalone.zip)
-
-Runs PHOQER without a DAW; audio and MIDI devices are set from its EDIT menu.
-
-The installer is not code-signed, so Windows SmartScreen may stop it the first time: choose
-**More info**, then **Run anyway**.
 
 <br>
 
