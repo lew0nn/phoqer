@@ -14,6 +14,10 @@
   <a href="https://github.com/lew0nn/phoqer/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/lew0nn/phoqer/total?style=flat-square&amp;label=downloads&amp;labelColor=12040A&amp;color=FF9F1C&amp;logo=github&amp;logoColor=white"></a>
 </p>
 
+<p align="center">
+  <img src="Media/PHOQER_Banner.png" width="100%" alt="Three seals on an ice floe at sunset, each singing its own wave: BURP slow and wide, SQUEAL fast and jagged, GROAN long and smooth">
+</p>
+
 <p align="center"><strong>Three seals, five moods, eight voices. No samples.</strong></p>
 
 PHOQER builds every call while you play it. Formant-wave-function synthesis, the technique behind
