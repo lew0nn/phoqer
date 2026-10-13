@@ -9,13 +9,13 @@
 <p align="center"><em>A seal you can play. A synthetic vocal instrument for Windows.</em></p>
 
 <p align="center">
-  <a href="https://github.com/lew0nn/phoqer/releases/tag/v1.0.0"><img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-FF2D55?style=flat-square&amp;labelColor=12040A"></a>
-  <a href="#download"><img alt="Windows x64" src="https://img.shields.io/badge/platform-Windows%20x64-0078D4?style=flat-square&amp;labelColor=17202A"></a>
-  <a href="#download"><img alt="VST3 and standalone" src="https://img.shields.io/badge/formats-VST3%20%7C%20Standalone-E04BFF?style=flat-square&amp;labelColor=07031A"></a>
-  <a href="https://github.com/juce-framework/JUCE/releases/tag/8.0.8"><img alt="JUCE 8.0.8" src="https://img.shields.io/badge/JUCE-8.0.8-00A8B5?style=flat-square&amp;labelColor=152326"></a>
-  <a href="CMakeLists.txt"><img alt="C++17" src="https://img.shields.io/badge/C%2B%2B-17-F0A030?style=flat-square&amp;labelColor=282116"></a>
-  <a href="LICENSE"><img alt="GNU AGPL v3" src="https://img.shields.io/badge/license-AGPL%203.0-44C27F?style=flat-square&amp;labelColor=021014&amp;logo=gnu&amp;logoColor=white"></a>
-  <a href="https://github.com/lew0nn/phoqer/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/lew0nn/phoqer/total?style=flat-square&amp;label=downloads&amp;labelColor=12040A&amp;color=FF9F1C&amp;logo=github&amp;logoColor=white"></a>
+  <a href="https://github.com/lew0nn/phoqer/releases/tag/v1.0.0"><img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-FF9F1C?style=flat-square&amp;labelColor=322412"></a>
+  <a href="#download"><img alt="Windows x64" src="https://img.shields.io/badge/platform-Windows%20x64-FF792F?style=flat-square&amp;labelColor=321F15"></a>
+  <a href="#download"><img alt="VST3 and standalone" src="https://img.shields.io/badge/formats-VST3%20%7C%20Standalone-FF5342?style=flat-square&amp;labelColor=321A17"></a>
+  <a href="https://github.com/juce-framework/JUCE/releases/tag/8.0.8"><img alt="JUCE 8.0.8" src="https://img.shields.io/badge/JUCE-8.0.8-FF2D55?style=flat-square&amp;labelColor=32141A"></a>
+  <a href="CMakeLists.txt"><img alt="C++17" src="https://img.shields.io/badge/C%2B%2B-17-E5378E?style=flat-square&amp;labelColor=2E1622"></a>
+  <a href="LICENSE"><img alt="GNU AGPL v3" src="https://img.shields.io/badge/license-AGPL%203.0-CA41C6?style=flat-square&amp;labelColor=2A172A&amp;logo=gnu&amp;logoColor=white"></a>
+  <a href="https://github.com/lew0nn/phoqer/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/lew0nn/phoqer/total?style=flat-square&amp;label=downloads&amp;labelColor=271832&amp;color=B04BFF&amp;logo=github&amp;logoColor=white"></a>
 </p>
 
 <br>
