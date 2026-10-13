@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """PHOQER brand artwork generator (pixel art, flat voice palettes).
 
-  App logo:  framed seal-sun on the sea + Outrun wordmark -> resources/branding/app/
-  Website:   "sunset grid" icon + Outrun wordmark -> resources/branding/website/
+  App icon:  framed seal-sun on the sea -> resources/branding/app/
 
 The editor draws the same app logo procedurally (Source/UI/Logo.cpp); keep the two in step.
 The Windows .exe icon is app/phoqer-app-icon.ico (16-256 px, each size drawn for that size); the
@@ -45,38 +44,6 @@ def paint(shape, layers):
 def image(img, scale=1):
     im = Image.fromarray(np.clip(np.round(img), 0, 255).astype(np.uint8), 'RGBA')
     return im.resize((im.width * scale, im.height * scale), Image.NEAREST)
-
-# ------------------------------------------------------------------ Outrun wordmark
-TALL = {
-    'P': ["######..", "#######.", "##...###", "##....##", "##...###", "#######.", "######..", "##......", "##......", "##......", "##......"],
-    'H': ["##....##"] * 5 + ["########"] * 2 + ["##....##"] * 4,
-    'Q': [".######.", "########"] + ["##....##"] * 5 + ["##..#.##", "##..####", "########", ".#######", "......##"],
-    'O': [".######.", "########"] + ["##....##"] * 7 + ["########", ".######."],
-    'E': ["########", "########", "##......", "##......", "##......", "######..", "######..", "##......", "##......", "########", "########"],
-    'R': ["######..", "#######.", "##...###", "##....##", "##...###", "#######.", "######..", "##..##..", "##...##.", "##....##", "##....##"],
-}
-def letters(text="PHOQER", gap=2, height=12):
-    m = np.zeros((height, len(text) * 8 + (len(text) - 1) * gap), bool)
-    for i, ch in enumerate(text):
-        for y, row in enumerate(TALL[ch]):
-            for x, c in enumerate(row):
-                if c == '#': m[y, i * (8 + gap) + x] = True
-    return m
-
-def wordmark(voice, dark=True):
-    """Slanted wordmark: flat chrome bands, outline, offset shadow, speed lines."""
-    a, s, k = pal(voice)
-    m = letters(); h = m.shape[0]
-    sh = np.zeros((h, m.shape[1] + h // 2 + 2), bool)
-    for y in range(h): o = (h - 1 - y) // 2; sh[y, o:o + m.shape[1]] = m[y]
-    sh = np.pad(sh, 3)
-    speed = np.zeros_like(sh)
-    for y, n in ((5, 10), (8, 14), (11, 7)): speed[y, :n] = True
-    speed &= ~dil8(sh)
-    rows = np.arange(sh.shape[0])[:, None] - 3
-    return paint(sh.shape, [(shift(dil8(sh), 2, 1), darker(a, 1.4)), (outline(sh), DARK),
-                            (sh & (rows < 4), mix(s, WHITE, 0.55)), (sh & (rows >= 4) & (rows < 6), s), (sh & (rows >= 6), a),
-                            (sh & (rows == 6), mix(a, WHITE, 0.35)), (speed, s if dark else darker(a, 0.2))])
 
 # ------------------------------------------------------------------ icon geometry (designed in a 32 x 32 space)
 def coords(n):
@@ -184,49 +151,9 @@ def app_icon_large(voice, n):
 def app_icon(voice, n):
     return app_icon_small(voice, n) if n < 48 else app_icon_large(voice, n)
 
-def seal_silhouette(scale):
-    w, h = int(round(34 * scale)), int(round(26 * scale))
-    yy, xx = np.mgrid[0:h, 0:w].astype(float); yy, xx = yy / scale, xx / scale
-    m = (ell(xx, yy, 19, 20.5, 13, 5.2) | ell(xx, yy, 11, 16, 5.2, 6.5, 0.5) | ell(xx, yy, 8.5, 10.5, 3.6, 6.5, 0.35)
-         | ell(xx, yy, 7.5, 5.5, 4.2, 3.6, -0.25) | ell(xx, yy, 2.8, 3.6, 2.6, 1.7, -0.6) | ell(xx, yy, 14, 24, 3.2, 1.2, 0.3))
-    m |= (xx >= 29) & (xx <= 33) & (np.abs(yy - 19.5) <= (xx - 28) * 0.9) & (yy >= 16)
-    m[h - 1:, :] = False
-    eye = np.zeros_like(m); eye[int(4 * scale), int(7 * scale)] = True
-    return m, eye
-
-def sunset_grid(voice, n):
-    """WEBSITE: seal silhouette on the horizon, striped sun, neon floor."""
-    a, s, k = pal(voice); xx, yy, px = coords(n)
-    T = tile(xx, yy); hor = 19.0
-    sun = ell(xx, yy, 17.5, hor, 12.5, 12.5) & (yy < hor)
-    for y0, h in ((13.0, 1.0), (15.4, 1.2), (17.4, 1.4)): sun &= ~((yy >= y0) & (yy < y0 + max(h, px)))
-    seal, eye = seal_silhouette(0.46 * n / 32)
-    sm = np.zeros((n, n), bool); em = np.zeros((n, n), bool)
-    oy = int(hor / px) - seal.shape[0] + 1; ox = int(7.0 / px)
-    sm[oy:oy + seal.shape[0], ox:ox + seal.shape[1]] = seal; em[oy:oy + seal.shape[0], ox:ox + seal.shape[1]] = eye
-    ground = T & (yy >= hor)
-    grid = np.zeros((n, n), bool)
-    for y in (hor + 0.2, hor + 2.2, hor + 5.0, hor + 8.6): grid |= (yy >= y) & (yy < y + px)
-    for xb in (-14, -2, 10, 22, 34, 46):
-        t = (yy - hor) / (32 - hor); grid |= (np.abs(xx - (16 + (xb - 16) * t)) < px * 0.55) & (yy > hor)
-    grid &= ground
-    stars = np.zeros((n, n), bool)
-    if n >= 32:
-        for x, y in ((5, 5), (11, 3), (26, 4), (29, 9), (8, 10)): stars[int(y / px), int(x / px)] = True
-    rim = outline(sm) & ~ground & T & ~sun
-    return paint((n, n), [(T, k), (stars, mix(s, WHITE, 0.5)), (sun, bands(voice, yy, [10, 12.5, 15, 17.2])), (ground, mix(k, a, 0.12)),
-                          (grid, a), (rim, darker(a, 0.3)), (sm & T, k), (em & T, mix(s, WHITE, 0.4)), (outline(T), DARK)])
-
-# ------------------------------------------------------------------ exports
-def lockup(icon, word, scale, gap=6):
-    i, w = image(icon, scale), image(word, scale)
-    im = Image.new('RGBA', (i.width + gap * scale + w.width, max(i.height, w.height)), (0, 0, 0, 0))
-    im.paste(i, (0, (im.height - i.height) // 2), i); im.paste(w, (i.width + gap * scale, (im.height - w.height) // 2 + scale), w)
-    return im
-
 def main():
-    app, web = os.path.join(OUT, 'app'), os.path.join(OUT, 'website')
-    os.makedirs(app, exist_ok=True); os.makedirs(web, exist_ok=True)
+    app = os.path.join(OUT, 'app')
+    os.makedirs(app, exist_ok=True)
     # App icon (burp is the default voice). Windows gets a multi-size .ico with each size drawn for
     # that size; macOS/Linux builds take the two PNGs through JUCE (ICON_SMALL / ICON_BIG).
     sizes = [16, 20, 24, 32, 40, 48, 64]
@@ -235,14 +162,6 @@ def main():
                     append_images=frames[:-1])
     frames[3].save(os.path.join(app, 'phoqer-app-icon-32.png'))
     frames[-1].save(os.path.join(app, 'phoqer-app-icon-256.png'))
-    for v in VOICES:
-        lockup(app_icon(v, 64), wordmark(v), 2, gap=12).save(os.path.join(app, f'phoqer-logo-{v}.png'))
-        image(sunset_grid(v, 32), 16).save(os.path.join(web, f'phoqer-site-icon-{v}-512.png'))
-        a, s, k = pal(v)
-        hero = Image.new('RGBA', (1200, 630), tuple(int(c) for c in k) + (255,))
-        L = lockup(sunset_grid(v, 32), wordmark(v), 7, gap=8)
-        hero.paste(L, ((1200 - L.width) // 2, (630 - L.height) // 2), L)
-        hero.convert('RGB').save(os.path.join(web, f'phoqer-site-hero-{v}.png'))
     print('wrote', OUT)
 
 if __name__ == '__main__':
