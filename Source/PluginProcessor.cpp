@@ -152,6 +152,8 @@ void PhoqerAudioProcessor::translateMidi(const juce::MidiBuffer& midiMessages) n
             event.type = phoqer::MidiEventType::noteOn;
             event.note = message.getNoteNumber();
             event.value = message.getFloatVelocity();
+            lastNote.store(event.note, std::memory_order_relaxed);
+            lastVelocity.store(message.getVelocity(), std::memory_order_relaxed);
         }
         else if (message.isNoteOff())
         {
@@ -246,6 +248,7 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     engine.process(outputBuffer, midiEvents.data(), midiEventCount, macros,
                    output->load(std::memory_order_relaxed));
     midiEventCount = 0;
+    singing.store(engine.getActiveVoiceCount() > 0, std::memory_order_relaxed);
     // A count-in starts the click from beat 1 in the same block the recorder starts skipping it.
     const bool countingIn = recorder.countInRemaining() > 0;
     if (countingIn && ! wasCountingIn) metronome.restart();

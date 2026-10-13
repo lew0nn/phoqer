@@ -47,6 +47,7 @@ juce::String percent(double v) { return juce::String(juce::roundToInt(v * 100.0)
 juce::String decibels(double v) { return (v > 0.0 ? "+" : "") + juce::String(v, 1) + " dB"; }
 juce::String milliseconds(double v) { return v < 1000.0 ? juce::String(juce::roundToInt(v)) + " MS" : juce::String(v / 1000.0, 1) + " S"; }
 juce::String noteName(int note) { return juce::MidiMessage::getMidiNoteName(note, true, true, 4); }
+const char* const modeNames[] { "CALL", "HONK", "BARK", "WAIL", "MURMUR" };
 
 constexpr char controlKeys[] { 'z', 'x', 'c', 'v' };    // octave down/up, velocity down/up
 constexpr int lowestBase = 24, highestBase = 96, velocityStep = 10;
@@ -98,10 +99,9 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
         voiceTabs[slot] = std::make_unique<ChoiceButton>(ChoiceButton::Kind::voiceTab, c, voiceNames[c], parameterFor(state, "character"));
         addAndMakeVisible(*voiceTabs[slot]);
     }
-    const char* modes[] { "CALL", "HONK", "BARK", "WAIL", "MURMUR" };
     for (size_t m = 0; m < modeButtons.size(); ++m)
     {
-        modeButtons[m] = std::make_unique<ChoiceButton>(ChoiceButton::Kind::mode, static_cast<int>(m), modes[m], parameterFor(state, "behavior"));
+        modeButtons[m] = std::make_unique<ChoiceButton>(ChoiceButton::Kind::mode, static_cast<int>(m), modeNames[m], parameterFor(state, "behavior"));
         addAndMakeVisible(*modeButtons[m]);
     }
 
@@ -581,9 +581,11 @@ void PhoqerView::paint(juce::Graphics& g)
     g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
     // Live status bars.
     const auto sealClient = windowClient(sealWindow), scopeClient = windowClient(scopeWindow);
+    // Under the portrait: the note being sung and its velocity; blank while the seal is quiet.
+    const bool singing = processor.isSinging() && processor.getLastNote() >= 0;
     statusBar(g, sealClient.withTrimmedTop(sealClient.getHeight() - 15.0f),
-              { juce::String(seal.getWidth() / 2) + "x" + juce::String(seal.getHeight() / 2) + " PIXELS",
-                "MTH " + juce::String(juce::roundToInt(face.mouthOpen * 100.0f)) + "%" });
+              { singing ? noteName(processor.getLastNote()) : juce::String(),
+                singing ? "VEL " + juce::String(processor.getLastVelocity()) : juce::String() });
     statusBar(g, scopeClient.withTrimmedTop(scopeClient.getHeight() - 15.0f),
               { juce::String(juce::roundToInt(processor.getTelemetry().getSampleRate() / 1000.0f)) + " kHz",
                 juce::String(juce::roundToInt(scope.capturedMilliseconds())) + " ms", "TRIG NOTE" });

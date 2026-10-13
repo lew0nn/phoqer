@@ -113,6 +113,7 @@ void stateAndControls()
     burst.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
     p.processBlock(buffer, burst);
     burst.clear();
+    check(p.getLastNote() == 60 && p.getLastVelocity() == 127 && p.isSinging(), "portrait status bar would not show the sung note");
     for (int i = 0; i < 400; ++i) burst.addEvent(juce::MidiMessage::noteOn(1, 48 + i % 24, 1.0f), i % 128);
     burst.addEvent(juce::MidiMessage::allNotesOff(1), 127);
     p.processBlock(buffer, burst);

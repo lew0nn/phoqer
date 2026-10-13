@@ -57,6 +57,11 @@ public:
 
     // Records the output to WAV for the editor's REC button.
     phoqer::ui::Recorder& getRecorder() noexcept { return recorder; }
+    // What the seal is singing, for the portrait's status bar: the last note played, its MIDI velocity,
+    // and whether any voice is still sounding.
+    int getLastNote() const noexcept { return lastNote.load(std::memory_order_relaxed); }
+    int getLastVelocity() const noexcept { return lastVelocity.load(std::memory_order_relaxed); }
+    bool isSinging() const noexcept { return singing.load(std::memory_order_relaxed); }
     float getMetronomeBeats() const noexcept { return metronomeBeats.load(std::memory_order_relaxed); }
     int getMetronomeBeatsPerBar() const noexcept { return 2 + static_cast<int>(metronomeBeatsPerBar->load(std::memory_order_relaxed)); }
     int getCountInBars() const noexcept { return static_cast<int>(countIn->load(std::memory_order_relaxed)); }
@@ -75,6 +80,8 @@ private:
     phoqer::ui::Recorder recorder;
     phoqer::Metronome metronome;
     std::atomic<float> metronomeBeats { 0.0f };     // for the swinging metronome button
+    std::atomic<int> lastNote { -1 }, lastVelocity { 0 };
+    std::atomic<bool> singing { false };
     bool wasCountingIn = false;                     // audio thread only
 
     juce::AudioProcessorValueTreeState parameters;
