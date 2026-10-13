@@ -6,6 +6,8 @@
   <img src="Media/PHOQER_Cast.png" width="760" alt="BURP, GROAN and SQUEAL singing side by side">
 </p>
 
+<br>
+
 <p align="center"><em>A seal you can play. A synthetic vocal instrument for Windows.</em></p>
 
 <p align="center">
