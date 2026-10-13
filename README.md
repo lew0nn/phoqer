@@ -18,7 +18,7 @@
 <br>
 
 <p align="center">
-  <img src="Media/PHOQER_Choir.png" width="760" alt="BURP, GROAN and SQUEAL singing side by side">
+  <img src="Media/PHOQER_Cast.png" width="760" alt="BURP, GROAN and SQUEAL singing side by side">
 </p>
 
 <br>
