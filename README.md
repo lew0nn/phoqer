@@ -6,11 +6,7 @@
   <img src="Media/PHOQER_Cast.png" width="760" alt="BURP, GROAN and SQUEAL singing side by side">
 </p>
 
-<br>
-
-<p align="center"><em>A seal you can play. A synthetic vocal instrument for Windows.</em></p>
-
-<br>
+<p align="center"><strong>A seal you can play. A synthetic vocal instrument for Windows.</strong></p>
 
 <p align="center">
   <a href="https://github.com/lew0nn/phoqer/releases/tag/v1.0.0"><img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-FF9F1C?style=flat-square&amp;labelColor=322412"></a>
