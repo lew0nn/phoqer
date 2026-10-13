@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="Media/PHOQER.png" width="100%" alt="PHOQER: BURP mid-call in the seal's portrait, its wave on SCOPE.EXE, the mixer and the keyboard">
+  <img src="Media/PHOQER.png" width="640" alt="PHOQER: BURP mid-call in the seal's portrait, its wave on SCOPE.EXE, the mixer and the keyboard">
 </p>
 
 <p align="center"><strong>Three seals, five moods, eight voices. No samples.</strong></p>
@@ -135,6 +135,26 @@ Host state uses stable parameter IDs, so sessions saved with earlier versions lo
 setting at its default. Presets carry the sound only: loading one never changes OUTPUT, the tempo or
 the metronome, and older presets set GLIDE back to 0. The standalone app's tempo and metronome
 settings are not automatable.
+
+</details>
+
+<details>
+<summary><strong>CPU cost</strong></summary>
+
+PHOQER's cost follows how many notes are sounding: each held note is its own voice, built from
+grains in real time. Eight held notes, the most it plays at once, take 12 to 14% of one core.
+
+Measured on one core of an Intel Core i5-14400F, 44.1 kHz, stereo, 128-sample blocks, one instance
+with its default settings, as a share of realtime (the sound engine; the window's drawing is not
+included):
+
+| Notes held | BURP | SQUEAL | GROAN |
+| --- | --- | --- | --- |
+| 1 | ~2% | ~2% | ~2% |
+| 4 | ~7% | ~6% | ~7% |
+| 8 | ~14% | ~12% | ~14% |
+
+To measure your own machine, build from source and run `PHOQERPerformanceSanity --cpu`.
 
 </details>
 
