@@ -123,6 +123,10 @@ int main(int argc, char** argv)
             {
                 now += 1.0 / 30.0;
                 editor->tick(now);
+                // PHOQER_FRAMES=1: every frame of the call, for the README's animated seals.
+                if (juce::SystemStats::getEnvironmentVariable("PHOQER_FRAMES", {}).isNotEmpty())
+                    save(editor->getView(), folder.getChildFile(juce::String("frame-") + names[character] + "-"
+                                                                + juce::String(b / blocksPerFrame).paddedLeft('0', 3) + ".png"));
             }
             if (b == 12 || b == 60 || b == 150)
                 save(editor->getView(), folder.getChildFile(juce::String("ui-") + names[character] + "-" + juce::String(b) + ".png"));
