@@ -71,7 +71,9 @@ int main(int argc, char** argv)
         auto& processor = *owner;
         processor.prepareToPlay(sampleRate, block);
         setParameter(processor, "character", static_cast<float>(character));
-        setParameter(processor, "behavior", static_cast<float>(modes[character]));
+        // PHOQER_UI_MODE=<0-4> plays every seal in the same mood (for matching README animations).
+        const auto forcedMode = juce::SystemStats::getEnvironmentVariable("PHOQER_UI_MODE", {});
+        setParameter(processor, "behavior", static_cast<float>(forcedMode.isNotEmpty() ? forcedMode.getIntValue() : modes[character]));
         std::unique_ptr<juce::AudioProcessorEditor> base(processor.createEditor());
         auto* editor = dynamic_cast<phoqer::ui::PhoqerEditor*>(base.get());
         if (editor == nullptr) { std::cerr << "editor is not the PHOQER editor\n"; return 1; }
