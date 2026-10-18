@@ -42,12 +42,18 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
         ICON_SMALL resources/branding/app/phoqer-app-icon-32.png)
 endif()
 
+# AU on macOS as well; Windows builds VST3 and the standalone app.
+set(PHOQER_FORMATS VST3 Standalone)
+if(APPLE)
+    list(APPEND PHOQER_FORMATS AU)
+endif()
+
 juce_add_plugin(PHOQER
     COMPANY_NAME "LWNX DSP"
     BUNDLE_ID "io.github.lew0nn.phoqer"
     PLUGIN_MANUFACTURER_CODE Lwnx
     PLUGIN_CODE Phqr
-    FORMATS VST3 Standalone
+    FORMATS ${PHOQER_FORMATS}
     PRODUCT_NAME "PHOQER"
     DESCRIPTION "PHOQER synthetic seal vocal instrument"
     ${PHOQER_ICONS}
@@ -154,12 +160,23 @@ add_custom_command(TARGET PHOQER_VST3 POST_BUILD
         "$<TARGET_FILE_DIR:PHOQER_VST3>/../Resources/PHOQER-Licenses"
     COMMENT "Embedding PHOQER and JUCE license notices in the VST3 bundle")
 
+# Beside the .exe on Windows; inside the .app's Resources on macOS (code signing allows only code in MacOS/).
+if(APPLE)
+    set(PHOQER_STANDALONE_LICENSES "$<TARGET_FILE_DIR:PHOQER_Standalone>/../Resources/PHOQER-Licenses")
+else()
+    set(PHOQER_STANDALONE_LICENSES "$<TARGET_FILE_DIR:PHOQER_Standalone>/PHOQER-Licenses")
+endif()
 add_custom_command(TARGET PHOQER_Standalone POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:PHOQER_Standalone>/PHOQER-Licenses"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PHOQER_NOTICE_FILES}
-        "$<TARGET_FILE_DIR:PHOQER_Standalone>/PHOQER-Licenses"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${PHOQER_STANDALONE_LICENSES}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PHOQER_NOTICE_FILES} "${PHOQER_STANDALONE_LICENSES}"
     COMMENT "Collecting PHOQER and JUCE license notices for Standalone")
+
+if(TARGET PHOQER_AU)
+    add_custom_command(TARGET PHOQER_AU POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:PHOQER_AU>/../Resources/PHOQER-Licenses"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PHOQER_NOTICE_FILES} "$<TARGET_FILE_DIR:PHOQER_AU>/../Resources/PHOQER-Licenses"
+        COMMENT "Embedding PHOQER and JUCE license notices in the AU bundle")
+endif()
 
 option(PHOQER_BUILD_SANITY "Build the offline core sanity executable" ON)
 option(PHOQER_BUILD_VISUAL_ACCEPTANCE "Build the window-free UI acceptance renderer" OFF)

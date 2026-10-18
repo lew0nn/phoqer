@@ -1,0 +1,52 @@
+name: macOS build
+
+# Universal (Apple Silicon + Intel) AU, VST3 and standalone app, ad-hoc signed, as one downloadable artifact.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+          -DPHOQER_BUILD_SANITY=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --target PHOQER_AU PHOQER_VST3 PHOQER_Standalone -j"$(sysctl -n hw.ncpu)"
+
+      - name: Sign (ad hoc) and package
+        run: |
+          VERSION=$(sed -n 's/^project(PHOQER VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          ART=build/PHOQER_artefacts/Release
+          mkdir -p dist
+          for b in "$ART/AU/PHOQER.component" "$ART/VST3/PHOQER.vst3" "$ART/Standalone/PHOQER.app"; do
+            codesign --force --deep --sign - "$b"
+            codesign --verify --deep --strict "$b"
+            lipo -info "$(find "$b/Contents/MacOS" -type f | head -1)"
+          done
+          ditto -c -k --keepParent "$ART/AU/PHOQER.component" "dist/PHOQER-$VERSION-macOS-AU.zip"
+          ditto -c -k --keepParent "$ART/VST3/PHOQER.vst3" "dist/PHOQER-$VERSION-macOS-VST3.zip"
+          ditto -c -k --keepParent "$ART/Standalone/PHOQER.app" "dist/PHOQER-$VERSION-macOS-Standalone.zip"
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PHOQER-macOS
+          path: dist/*.zip
+
+      - name: Validate the AU (auval)
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R build/PHOQER_artefacts/Release/AU/PHOQER.component ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          auval -v aumu Phqr Lwnx
