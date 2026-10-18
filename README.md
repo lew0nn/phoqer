@@ -6,12 +6,12 @@
   <img src="Media/PHOQER_Cast.png" width="760" alt="BURP, GROAN and SQUEAL singing side by side">
 </p>
 
-<p align="center"><strong>A seal you can play. A synthetic vocal instrument for Windows.</strong></p>
+<p align="center"><strong>A seal you can play. A synthetic vocal instrument for Windows and macOS.</strong></p>
 
 <p align="center">
   <a href="https://github.com/lew0nn/phoqer/releases/tag/v1.0.0"><img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-FF9F1C?style=flat-square&amp;labelColor=322412"></a>
-  <a href="#download"><img alt="Windows x64" src="https://img.shields.io/badge/platform-Windows%20x64-FF792F?style=flat-square&amp;labelColor=321F15"></a>
-  <a href="#download"><img alt="VST3 and standalone" src="https://img.shields.io/badge/formats-VST3%20%7C%20Standalone-FF5342?style=flat-square&amp;labelColor=321A17"></a>
+  <a href="#download"><img alt="Windows and macOS" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-FF792F?style=flat-square&amp;labelColor=321F15"></a>
+  <a href="#download"><img alt="VST3, AU and standalone" src="https://img.shields.io/badge/formats-VST3%20%7C%20AU%20%7C%20Standalone-FF5342?style=flat-square&amp;labelColor=321A17"></a>
   <a href="https://github.com/juce-framework/JUCE/releases/tag/8.0.8"><img alt="JUCE 8.0.8" src="https://img.shields.io/badge/JUCE-8.0.8-FF2D55?style=flat-square&amp;labelColor=32141A"></a>
   <a href="CMakeLists.txt"><img alt="C++17" src="https://img.shields.io/badge/C%2B%2B-17-E5378E?style=flat-square&amp;labelColor=2E1622"></a>
   <a href="LICENSE"><img alt="GNU AGPL v3" src="https://img.shields.io/badge/license-AGPL%203.0-CA41C6?style=flat-square&amp;labelColor=2A172A&amp;logo=gnu&amp;logoColor=white"></a>
@@ -38,7 +38,7 @@ none of them are in the instrument.
 - **No samples:** every call is synthesised while you play.
 - Ships with **16 presets**.
 - **Standalone app** with a computer-key piano, REC to WAV and a metronome with a count-in.
-- **VST3 and standalone** for Windows x64. Free and open source.
+- **VST3, AU and standalone** for Windows and macOS. Free and open source.
 
 <br>
 <br>
@@ -53,20 +53,33 @@ Installs the VST3 plug-in, the standalone app, or both.
 
 Installs both in one step, for managed or scripted installs.
 
-### [VST3](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-VST3.zip)
+### [VST3 for Windows](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-VST3.zip)
 
 The complete `PHOQER.vst3` bundle for Windows x64 hosts.
 
-### [Standalone](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Standalone.exe)
+### [Standalone for Windows](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Standalone.exe)
 
 One file that runs PHOQER without a DAW; audio and MIDI devices are set from its EDIT menu.
+
+### [AU for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-macOS-AU.zip)
+
+The Audio Unit, for Logic, GarageBand and other AU hosts. Universal (Apple Silicon and Intel), macOS 10.13 or later.
+
+### [VST3 for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-macOS-VST3.zip)
+
+The `PHOQER.vst3` bundle for Mac hosts such as Ableton Live.
+
+### [Standalone for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-macOS-Standalone.zip)
+
+The app, without a DAW.
 
 ### [Source](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Source.zip)
 
 The source code with JUCE included, ready to build.
 
 The installers and the app are not code-signed, so Windows SmartScreen may stop them the first time: choose
-**More info**, then **Run anyway**.
+**More info**, then **Run anyway**. On macOS, the first install needs one Terminal command: see Manual installation
+under Technical details.
 
 <br>
 <br>
@@ -218,6 +231,16 @@ Rescan plug-ins in the host.
 
 Run `PHOQER-1.0.0-Windows-x64-Standalone.exe` from anywhere. Audio and MIDI are set from EDIT ▸ AUDIO/MIDI SETUP.
 
+### macOS
+
+Unzip each download, then move `PHOQER.component` to `~/Library/Audio/Plug-Ins/Components`,
+`PHOQER.vst3` to `~/Library/Audio/Plug-Ins/VST3` and `PHOQER.app` to `/Applications`. The files are not
+notarized by Apple, so run this in Terminal once before the first use, then rescan plug-ins in your host:
+
+```text
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/PHOQER.component ~/Library/Audio/Plug-Ins/VST3/PHOQER.vst3 /Applications/PHOQER.app
+```
+
 </details>
 
 <details>
@@ -235,6 +258,15 @@ powershell -ExecutionPolicy Bypass -File .\build-release.ps1
 
 Every release file is written to `dist\release`. Without Inno Setup or WiX the script skips that
 installer and builds the rest.
+
+On macOS, with Xcode's command-line tools and CMake:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+cmake --build build --config Release --target PHOQER_AU PHOQER_VST3 PHOQER_Standalone
+```
+
+The Mac release files come from the `macOS build` GitHub Action.
 
 Built with C++17, JUCE 8.0.8 and CMake.
 
