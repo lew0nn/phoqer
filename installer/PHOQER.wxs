@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- PHOQER MSI (WiX 3): the standalone app in Program Files\LWNX DSP\PHOQER and the VST3 in Common Files\VST3.
-     Built by build-release.ps1: candle -dVersion=1.0.0 -dSourceDir=<repo> -dDistDir=<repo>\dist installer\PHOQER.wxs -->
+     Built by build-release.ps1: candle -dVersion=1.0.1 -dSourceDir=<repo> -dDistDir=<repo>\dist installer\PHOQER.wxs -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product
     Id="*"

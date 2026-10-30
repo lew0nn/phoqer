@@ -9,7 +9,7 @@
 <p align="center"><strong>A seal you can play. A synthetic vocal instrument for Windows and macOS.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/lew0nn/phoqer/releases/tag/v1.0.0"><img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-FF9F1C?style=flat-square&amp;labelColor=322412"></a>
+  <a href="https://github.com/lew0nn/phoqer/releases/tag/v1.0.1"><img alt="Version 1.0.1" src="https://img.shields.io/badge/version-1.0.1-FF9F1C?style=flat-square&amp;labelColor=322412"></a>
   <a href="#download"><img alt="Windows and macOS" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-FF792F?style=flat-square&amp;labelColor=321F15"></a>
   <a href="#download"><img alt="VST3, AU and standalone" src="https://img.shields.io/badge/formats-VST3%20%7C%20AU%20%7C%20Standalone-FF5342?style=flat-square&amp;labelColor=321A17"></a>
   <a href="https://github.com/juce-framework/JUCE/releases/tag/8.0.8"><img alt="JUCE 8.0.8" src="https://img.shields.io/badge/JUCE-8.0.8-FF2D55?style=flat-square&amp;labelColor=32141A"></a>
@@ -45,35 +45,35 @@ none of them are in the instrument.
 
 ## Download
 
-### [Windows installer](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Setup.exe)
+### [Windows installer](https://github.com/lew0nn/phoqer/releases/download/v1.0.1/PHOQER-1.0.1-Windows-x64-Setup.exe)
 
 Installs the VST3 plug-in, the standalone app, or both.
 
-### [MSI installer](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64.msi)
+### [MSI installer](https://github.com/lew0nn/phoqer/releases/download/v1.0.1/PHOQER-1.0.1-Windows-x64.msi)
 
 Installs both in one step, for managed or scripted installs.
 
-### [VST3 for Windows](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-VST3.zip)
+### [VST3 for Windows](https://github.com/lew0nn/phoqer/releases/download/v1.0.1/PHOQER-1.0.1-Windows-x64-VST3.zip)
 
 The complete `PHOQER.vst3` bundle for Windows x64 hosts.
 
-### [Standalone for Windows](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Windows-x64-Standalone.exe)
+### [Standalone for Windows](https://github.com/lew0nn/phoqer/releases/download/v1.0.1/PHOQER-1.0.1-Windows-x64-Standalone.exe)
 
 One file that runs PHOQER without a DAW; audio and MIDI devices are set from its EDIT menu.
 
-### [AU for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-macOS-AU.zip)
+### [AU for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.1/PHOQER-1.0.1-macOS-AU.zip)
 
 The Audio Unit, for Logic, GarageBand and other AU hosts. Universal (Apple Silicon and Intel), macOS 10.13 or later.
 
-### [VST3 for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-macOS-VST3.zip)
+### [VST3 for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.1/PHOQER-1.0.1-macOS-VST3.zip)
 
 The `PHOQER.vst3` bundle for Mac hosts such as Ableton Live.
 
-### [Standalone for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-macOS-Standalone.zip)
+### [Standalone for macOS](https://github.com/lew0nn/phoqer/releases/download/v1.0.1/PHOQER-1.0.1-macOS-Standalone.zip)
 
 The app, without a DAW.
 
-### [Source](https://github.com/lew0nn/phoqer/releases/download/v1.0.0/PHOQER-1.0.0-Source.zip)
+### [Source](https://github.com/lew0nn/phoqer/releases/download/v1.0.1/PHOQER-1.0.1-Source.zip)
 
 The source code with JUCE included, ready to build.
 
@@ -188,7 +188,7 @@ settings are not automatable.
 <summary><strong>CPU cost</strong></summary>
 
 PHOQER's cost follows how many notes are sounding: each held note is its own voice, built from
-grains in real time. Eight held notes, the most it plays at once, take 12 to 14% of one core.
+grains in real time. Eight held notes, the most it plays at once, take 7 to 8% of one core.
 
 Measured on one core of an Intel Core i5-14400F, 44.1 kHz, stereo, 128-sample blocks, one instance
 with its default settings, as a share of realtime (the sound engine; the window's drawing is not
@@ -196,9 +196,9 @@ included):
 
 | Notes held | BURP | SQUEAL | GROAN |
 | --- | --- | --- | --- |
-| 1 | ~2% | ~2% | ~2% |
-| 4 | ~7% | ~6% | ~7% |
-| 8 | ~14% | ~12% | ~14% |
+| 1 | ~1% | ~1% | ~1% |
+| 4 | ~3.5% | ~3.5% | ~4% |
+| 8 | ~7% | ~7% | ~8% |
 
 To measure your own machine, build from source and run `PHOQERPerformanceSanity --cpu`.
 
@@ -229,7 +229,7 @@ Rescan plug-ins in the host.
 
 ### Standalone
 
-Run `PHOQER-1.0.0-Windows-x64-Standalone.exe` from anywhere. Audio and MIDI are set from EDIT ▸ AUDIO/MIDI SETUP.
+Run `PHOQER-1.0.1-Windows-x64-Standalone.exe` from anywhere. Audio and MIDI are set from EDIT ▸ AUDIO/MIDI SETUP.
 
 ### macOS
 
@@ -289,4 +289,4 @@ Make and release music with it however you like: no credit needed, no royalties.
 
 <p align="center">Bugs and sound ideas: <a href="https://github.com/lew0nn/phoqer/issues">Issues</a> · <a href="CONTRIBUTING.md">Contributing</a></p>
 
-<p align="center"><strong>PHOQER 1.0.0 · LWNX DSP</strong></p>
+<p align="center"><strong>PHOQER 1.0.1 · LWNX DSP</strong></p>

@@ -1,7 +1,7 @@
 ; PHOQER installer: a classic Win98-style setup (grey wizard, picture panel, blue gradient backdrop).
-; Built by build-release.ps1, which passes the version: ISCC /DMyAppVersion=1.0.0 installer\PHOQER.iss
+; Built by build-release.ps1, which passes the version: ISCC /DMyAppVersion=1.0.1 installer\PHOQER.iss
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.0.1"
 #endif
 #define MyAppName "PHOQER"
 #define MyAppPublisher "LWNX DSP"

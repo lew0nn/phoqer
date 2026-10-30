@@ -1,6 +1,6 @@
 # PHOQER development notes
 
-PHOQER 1.0.0 is a released C++17/JUCE 8 MIDI instrument. The project separates a
+PHOQER 1.0.1 is a released C++17/JUCE 8 MIDI instrument. The project separates a
 framework-neutral synthesis engine from its JUCE host and editor adapters.
 
 ## Architecture
