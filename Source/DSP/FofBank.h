@@ -41,12 +41,14 @@ private:
     std::array<double, formantBandCount> lockedHarmonic {};
     double noteFrequency = 0.0;
 
-    double sampleRate = 44100.0;
+    double sampleRate = 44100.0, inverseSampleRate = 1.0 / 44100.0;
     double fundamentalPhase = 0.0;
     float noiseLowPass = 0.0f;
     float noiseBody = 0.0f;
     float previousNoise = 0.0f;
     float noiseHigh = 0.0f;          // low-passed white, subtracted for the squeak
     float highCoefficient = 0.0f;
+    float coefficientAir = -1.0f;    // the AIR the two breath coefficients were worked out for
+    float airCoefficient = 0.0f, bodyCoefficient = 0.0f;
 };
 }

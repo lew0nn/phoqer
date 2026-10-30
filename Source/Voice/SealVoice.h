@@ -51,6 +51,11 @@ private:
     VoicePersonality personality;
     MacroState macros;
     BehaviourEngine behaviour;
+    // The behaviour engine's shapes move slowly, so they are worked out every controlStep samples;
+    // the two that reach the sound directly, amplitude and bark, are interpolated in between.
+    static constexpr int controlStep = 4;
+    int controlCountdown = 0;
+    VocalState controlFrom, controlTo;
     FofBank fofBank;
     AdsrEnvelope amplitudeEnvelope;
     SmoothedRandom wobble;   // the unsteady pitch of a real call, per character

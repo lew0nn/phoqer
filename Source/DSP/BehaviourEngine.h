@@ -28,6 +28,7 @@ public:
                const VoicePersonality& personality, float onsetPunch = 1.0f) noexcept
     {
         punch = onsetPunch;
+        vowelRateDt = -1.0f;     // barkAmount changes below
         mode = newMacros.behaviorMode;
         velocity = newVelocity;
         voicePersonality = personality;
@@ -79,7 +80,7 @@ public:
         const auto attackGate = smoothStep(0.0f,
             0.0015f + 0.0035f * (1.0f - barkAmount), elapsed);
         const auto barkTransient = punch * (0.48f + 0.52f * barkAmount)
-            * std::exp(-elapsed / (0.032f + 0.030f * (1.0f - barkAmount)));
+            * fadeExp(-elapsed / (0.032f + 0.030f * (1.0f - barkAmount)));
 
         // Finite chest-driven thrusts, not a continuous LFO. One note is a
         // bark opening into a short groan rather than an indefinitely held pad.
@@ -113,7 +114,11 @@ public:
         const auto vowelTarget = clamp(0.0f, 1.0f,
             macros.vowel - 0.12f * barkTransient + groanTravel
             - 0.10f * closing + 0.035f * thrust + vowelBias);
-        const auto vowelRate = 1.0f - std::exp(-dt * (10.0f + 12.0f * barkAmount));
+        if (dt != vowelRateDt)     // constant through a note: worked out once, not every sample
+        {
+            vowelRateDt = dt;
+            vowelRate = 1.0f - std::exp(-dt * (10.0f + 12.0f * barkAmount));
+        }
         current.vowelMorph += (vowelTarget - current.vowelMorph) * vowelRate;
 
         const auto openTarget = clamp(0.0f, 1.0f,
@@ -131,7 +136,7 @@ public:
             + 0.58f * barkTransient + 0.08f * macros.boom)
             * voicePersonality.throatBias);
 
-        const auto groanDecay = std::exp(-elapsed
+        const auto groanDecay = fadeExp(-elapsed
             / (0.78f + 0.40f * (1.0f - barkAmount)));
         const auto thrustGate = 0.70f + 0.30f * thrust;
         current.amplitudeShape = clamp(0.0f, 1.22f,
@@ -157,8 +162,12 @@ private:
     static float bellPulse(float time, float centre, float width) noexcept
     {
         const auto x = (time - centre) / std::max(0.001f, width);
-        return std::exp(-0.5f * x * x);
+        return fadeExp(-0.5f * x * x);
     }
+
+    // exp() of a decay or a bell's tail. Far down the tail the value is zero to float precision,
+    // so a long note stops paying for it.
+    static float fadeExp(float exponent) noexcept { return exponent < -115.0f ? 0.0f : fastExp(exponent); }
 
     VocalState current;
     VoicePersonality voicePersonality;
@@ -169,6 +178,7 @@ private:
     float velocity = 0.0f;
     float barkAmount = 0.0f;
     float punch = 1.0f;
+    float vowelRateDt = -1.0f, vowelRate = 0.0f;
     BehaviourMode mode = BehaviourMode::call;
     bool release = false;
 };

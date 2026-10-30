@@ -34,6 +34,7 @@ public:
     {
         phase = 1.0;          // fire on the first sample of a note
         periodScale = 1.0;
+        phaseScale = 1.0 / sampleRate;
         alternate = false;
         doubling = false;
     }
@@ -44,11 +45,11 @@ public:
     {
         Tick tick;
         const auto safeFrequency = clamp(20.0, sampleRate * 0.45, frequencyHz);
-        const auto periodSamples = sampleRate / safeFrequency;
 
         // The phase runs at this period's own length, so jitter really moves
         // the pitch from one period to the next instead of only the gain.
-        phase += 1.0 / (periodSamples * periodScale);
+        // A multiply: the division is done once a period, in phaseScale.
+        phase += safeFrequency * phaseScale;
         if (phase < 1.0)
             return tick;
 
@@ -57,7 +58,8 @@ public:
             phase = 0.0;
 
         periodScale = clamp(0.5, 1.5, 1.0 + static_cast<double>(preset.jitter * growl) * random.bipolar());
-        tick.periodSamples = periodSamples * periodScale;
+        phaseScale = 1.0 / (sampleRate * periodScale);
+        tick.periodSamples = sampleRate / safeFrequency * periodScale;
 
         const auto doublingChance = preset.subharmonicChance * growl + extraDoubling;
         if (doublingChance > 0.0f && random.nextFloat() < doublingChance)
@@ -87,6 +89,7 @@ private:
     double sampleRate = 44100.0;
     double phase = 1.0;
     double periodScale = 1.0;   // this period's length against the nominal one
+    double phaseScale = 1.0 / 44100.0;     // 1 / (sampleRate * periodScale)
     bool alternate = false;
     bool doubling = false;
 };

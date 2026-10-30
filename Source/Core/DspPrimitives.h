@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 
 namespace phoqer
 {
@@ -22,6 +24,38 @@ constexpr Type pi = static_cast<Type>(3.14159265358979323846264338327950288L);
 
 template <typename Type>
 constexpr Type twoPi = static_cast<Type>(2) * pi<Type>;
+
+// Fast 2^x, e^x and sin for the per-sample paths. They agree with the library functions to
+// about one part in ten million, below what a 24-bit file can hold, at a fraction of the cost.
+inline float fastExp2(float x) noexcept
+{
+    if (x < -126.0f) return 0.0f;
+    x = std::min(x, 127.0f);
+    const auto whole = static_cast<int>(x + (x >= 0.0f ? 0.5f : -0.5f));    // nearest integer
+    const auto y = (x - static_cast<float>(whole)) * 0.693147181f;           // the rest, as a power of e: |y| <= 0.35
+    const auto fraction = 1.0f + y * (1.0f + y * (0.5f + y * (1.0f / 6.0f + y * (1.0f / 24.0f
+                        + y * (1.0f / 120.0f + y * (1.0f / 720.0f + y * (1.0f / 5040.0f)))))));
+    const auto bits = static_cast<uint32_t>(whole + 127) << 23;              // 2^whole, built directly
+    float scale;
+    std::memcpy(&scale, &bits, sizeof scale);
+    return fraction * scale;
+}
+
+inline float fastExp(float x) noexcept { return fastExp2(x * 1.44269504f); }
+
+// sin(2 pi cycles), for a phase counted in cycles.
+inline float fastSin2Pi(double cycles) noexcept
+{
+    auto whole = static_cast<double>(static_cast<long long>(cycles));
+    if (whole > cycles) whole -= 1.0;
+    auto q = static_cast<float>(cycles - whole);                             // [0, 1)
+    if (q > 0.5f) q -= 1.0f;                                                 // [-0.5, 0.5]
+    if (q > 0.25f) q = 0.5f - q;                                             // sin(pi - a) = sin(a)
+    else if (q < -0.25f) q = -0.5f - q;
+    const auto a = q * twoPi<float>, a2 = a * a;                             // |a| <= pi / 2
+    return a * (1.0f + a2 * (-1.0f / 6.0f + a2 * (1.0f / 120.0f + a2 * (-1.0f / 5040.0f
+              + a2 * (1.0f / 362880.0f + a2 * (-1.0f / 39916800.0f))))));
+}
 
 inline float midiNoteToHz(float note) noexcept
 {

@@ -8,10 +8,12 @@ namespace phoqer
 void FofBank::prepare(double newSampleRate) noexcept
 {
     sampleRate = newSampleRate;
+    inverseSampleRate = 1.0 / sampleRate;
     for (auto& formant : formants)
         formant.prepare(sampleRate);
     pulse.prepare(sampleRate);
     highCoefficient = 1.0f - std::exp(-twoPi<float> * 2500.0f / static_cast<float>(sampleRate));
+    coefficientAir = -1.0f;
     reset();
 }
 
@@ -142,12 +144,12 @@ float FofBank::process(double frequencyHz, const CharacterPreset& preset,
     // The fundamental sine. FOF grains put energy only near the formants, so
     // without this a bass character with a 1 kHz first formant has no low end.
     const auto safeFrequency = clamp(20.0, sampleRate * 0.45, frequencyHz);
-    fundamentalPhase += safeFrequency / sampleRate;
+    fundamentalPhase += safeFrequency * inverseSampleRate;
     fundamentalPhase -= std::floor(fundamentalPhase);
     // Kept low: the reference calls have a weak fundamental, and a loud sine
     // here reads as a synth bass under the seal rather than as the seal.
     const auto fundamentalGain = preset.subOctaveGain + 0.06f * macros.boom;
-    const auto fundamental = static_cast<float>(std::sin(twoPi<double> * fundamentalPhase))
+    const auto fundamental = fastSin2Pi(fundamentalPhase)
                            * fundamentalGain;
 
     // Band-limited breath noise. The measured calls are almost entirely
@@ -155,12 +157,14 @@ float FofBank::process(double frequencyHz, const CharacterPreset& preset,
     // the pitch jitter, not hiss. So the floor is small and AIR brings breath
     // in from nothing, darker than before.
     const auto white = random.bipolar();
-    const auto airCutoff = 1400.0f + 1600.0f * macros.air;    // breath, kept below about 3 kHz
-    const auto bodyCutoff = 400.0f + 600.0f * macros.air;
-    const auto airCoefficient = 1.0f
-        - std::exp(-twoPi<float> * airCutoff / static_cast<float>(sampleRate));
-    const auto bodyCoefficient = 1.0f
-        - std::exp(-twoPi<float> * bodyCutoff / static_cast<float>(sampleRate));
+    if (macros.air != coefficientAir)     // they only change while AIR moves
+    {
+        coefficientAir = macros.air;
+        const auto airCutoff = 1400.0f + 1600.0f * macros.air;    // breath, kept below about 3 kHz
+        const auto bodyCutoff = 400.0f + 600.0f * macros.air;
+        airCoefficient = 1.0f - std::exp(-twoPi<float> * airCutoff / static_cast<float>(sampleRate));
+        bodyCoefficient = 1.0f - std::exp(-twoPi<float> * bodyCutoff / static_cast<float>(sampleRate));
+    }
     noiseLowPass += airCoefficient * (white - noiseLowPass);
     noiseBody += bodyCoefficient * (white - noiseBody);
     const auto bandNoise = noiseLowPass - 0.82f * noiseBody;

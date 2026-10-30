@@ -12,6 +12,24 @@ constexpr float startAngle = -2.35619449f, sweep = 4.71238898f;   // slider angl
 constexpr float arcStart = 2.35619449f;                           // the same start in screen angles (0 = right, y down)
 
 const juce::Colour lite2 { 0xffdfdfdf };
+
+// A value too wide for its box ("250 MS" in a small one) keeps the number at full size and sets
+// the unit at the pixel font's half size, on the same baseline, instead of being cut off.
+void drawValue(juce::Graphics& g, const juce::String& text, juce::Rectangle<float> box, juce::Colour ink)
+{
+    const auto big = pixelFont(16.0f, true);
+    const int split = text.lastIndexOfChar(' ');
+    if (split <= 0 || juce::GlyphArrangement::getStringWidth(big, text) <= box.getWidth() - 4.0f)
+        return drawText(g, text, box, big, ink, juce::Justification::centred);
+
+    const auto small = pixelFont(8.0f, true);
+    const auto number = text.substring(0, split), unit = text.substring(split + 1);
+    const float numberW = juce::GlyphArrangement::getStringWidth(big, number), unitW = juce::GlyphArrangement::getStringWidth(small, unit);
+    const float x = std::round(box.getCentreX() - (numberW + 2.0f + unitW) * 0.5f);
+    const float top = std::round(box.getCentreY() - 8.0f), baseline = top + big.getAscent();
+    drawText(g, number, { x, top, numberW + 1.0f, 16.0f }, big, ink, juce::Justification::centredLeft);
+    drawText(g, unit, { x + numberW + 2.0f, baseline - small.getAscent(), unitW + 1.0f, 8.0f }, small, ink, juce::Justification::centredLeft);
+}
 }
 
 juce::Image renderDial98(int character, float r, float proportion)
@@ -105,7 +123,7 @@ void PixelKnob::paint(juce::Graphics& g)
         const float boxW = spec.big ? 68.0f : juce::jmin(58.0f, w - 4.0f);     // small boxes keep a gap between them
         const juce::Rectangle<float> box { std::round((w - boxW) * 0.5f), 134.0f, boxW, 26.0f };
         sunken(g, box);
-        drawText(g, valueText, box, pixelFont(16.0f, true), valueInk, juce::Justification::centred);
+        drawValue(g, valueText, box, valueInk);
     }
     else
     {
@@ -113,7 +131,7 @@ void PixelKnob::paint(juce::Graphics& g)
         drawText(g, spec.name, { x, 4.0f, getWidth() - x, 14.0f }, pixelFont(9.0f, true), juce::Colours::black);
         const juce::Rectangle<float> box { x, 20.0f, juce::jmin(84.0f, getWidth() - x - 2.0f), 22.0f };
         sunken(g, box);
-        drawText(g, valueText, box, pixelFont(16.0f, true), valueInk, juce::Justification::centred);
+        drawValue(g, valueText, box, valueInk);
     }
 }
 }

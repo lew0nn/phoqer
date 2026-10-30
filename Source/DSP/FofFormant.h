@@ -36,6 +36,7 @@ public:
     void reset() noexcept
     {
         tail.reset();
+        busyGrains = 0;
         for (auto& grain : attack)
         {
             grain.busy = false;
@@ -90,7 +91,8 @@ public:
             victim.busy = false;
             slot = oldest;
         }
-
+        else
+            ++busyGrains;     // a retired victim's slot is reused, so the count only grows here
         attack[static_cast<size_t>(slot)].start(radius, omega, pi<double> / riseSamples,
                                                 riseSamples, gain);
     }
@@ -102,8 +104,11 @@ public:
         tail.advance();
         auto sum = tail.imaginary;
 
+        // Most samples have no grain in its skirt at all: a skirt lasts about 1.5 ms of a period.
         for (auto& grain : attack)
         {
+            if (busyGrains == 0)
+                break;
             if (! grain.busy)
                 continue;
 
@@ -116,6 +121,7 @@ public:
                 sum += grain.carrier.imaginary;      // the skirt has reached 1
                 tail.addScaled(1.0f, grain.carrier);
                 grain.busy = false;
+                --busyGrains;
             }
             else
             {
@@ -144,6 +150,7 @@ public:
 private:
     ComplexResonator tail;
     std::array<AttackGrain, attackSlots> attack {};
+    int busyGrains = 0;
     double sampleRate = 44100.0;
 };
 }
