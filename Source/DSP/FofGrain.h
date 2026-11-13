@@ -58,15 +58,18 @@ struct AttackGrain
     int riseSamples = 1;
     bool busy = false;
 
+    // offset: how far, in samples (0 to 1), the grain already is past its start: both rotations
+    // begin that far along, so a cycle that began between two samples is heard where it began.
     void start(double radius, double omega, double skirtRadians,
-               int newRiseSamples, float amplitude) noexcept
+               int newRiseSamples, float amplitude, double offset = 0.0) noexcept
     {
         carrier.setPole(radius, omega);
-        carrier.real = amplitude;
-        carrier.imaginary = 0.0f;
+        const auto decayed = static_cast<double>(amplitude) * std::pow(radius, offset);
+        carrier.real = static_cast<float>(decayed * std::cos(omega * offset));
+        carrier.imaginary = static_cast<float>(decayed * std::sin(omega * offset));
         skirt.setPole(1.0, skirtRadians);
-        skirt.real = 1.0f;
-        skirt.imaginary = 0.0f;
+        skirt.real = static_cast<float>(std::cos(skirtRadians * offset));
+        skirt.imaginary = static_cast<float>(std::sin(skirtRadians * offset));
         riseSamples = newRiseSamples > 0 ? newRiseSamples : 1;
         age = 0;
         busy = true;

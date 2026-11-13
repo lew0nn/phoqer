@@ -53,7 +53,7 @@ PortraitRenderer::Rgb PortraitRenderer::Painting::sample(float x, float y) const
 
 PortraitRenderer::PortraitRenderer()
 {
-    const char* files[] { "red_seal.png", "purple_seal.png", "ice_seal.png" };
+    const char* files[] { "red_seal.png", "purple_seal.png", "ice_seal.png", "kyrax_seal.png" };
     for (size_t i = 0; i < paintings.size(); ++i)
     {
         const auto image = loadImage(files[i]);
@@ -77,7 +77,7 @@ const PortraitRenderer::Landmarks& PortraitRenderer::landmarksFor(int character)
     static const Landmarks red    { { { { { 86, 57 }, 11, 6 }, { { 147, 58 }, 8, 6 } } }, { 124, 66 }, { 124, 94 }, 27, { { { 103, 80 }, { 147, 80 } } }, { 101, 190 } };
     static const Landmarks purple { { { { { 86, 51 }, 11, 6 }, { { 146, 51 }, 8, 6 } } }, { 121, 60 }, { 121, 87 }, 28, { { { 100, 74 }, { 144, 74 } } }, { 104, 190 } };
     static const Landmarks ice    { { { { { 84, 55 }, 11, 6 }, { { 145, 54 }, 8, 6 } } }, { 118, 62 }, { 120, 89 }, 28, { { { 98, 76 }, { 142, 76 } } }, { 104, 190 } };
-    return character == 0 ? red : character == 2 ? ice : purple;
+    return character == 0 ? red : character >= 2 ? ice : purple;
 }
 
 // Colour of the expressive painting at a painting-space position. Liquify-style inverse
@@ -278,18 +278,22 @@ PortraitRenderer::Rgb PortraitRenderer::expressive(const Painting& src, const La
 
 juce::Image PortraitRenderer::render(int character, const Expression& ex, int width, int height) const
 {
-    const auto& painting = paintings[static_cast<size_t>(juce::jlimit(0, 2, character))];
+    const auto& painting = paintings[static_cast<size_t>(juce::jlimit(0, 3, character))];
     const auto& lm = landmarksFor(character);
-    const auto& pal = paletteFor(character);
-    // Six-step ramp from the desktop sky up to a pale highlight in the character's colours.
-    const juce::Colour ramp[] { pal.sky, pal.accent.darker(1.1f), pal.accent.darker(0.45f), pal.accent,
-                                pal.accent.interpolatedWith(pal.secondary, 0.55f), pal.secondary.interpolatedWith(juce::Colours::white, 0.6f) };
+    const auto& pal = paletteFor(character==3?2:character);
+    const juce::Colour released[] { pal.sky, pal.accent.darker(1.1f), pal.accent.darker(0.45f), pal.accent,
+                                    pal.accent.interpolatedWith(pal.secondary, 0.55f), pal.secondary.interpolatedWith(juce::Colours::white, 0.6f) };
+    // KYRAX: the same recipe with a darker background, violet and hot-pink highlights (#06030c #322055 #583896 #9660ff #c85cc1 #f58ab0), x .92.
+    const juce::Colour kyrax[] { juce::Colour(6,3,11), juce::Colour(46,29,78), juce::Colour(81,52,138),
+                                 juce::Colour(138,88,235), juce::Colour(184,85,178), juce::Colour(225,127,162) };
+    const auto* ramp = character == 3 ? kyrax : released;
     static const int bayer[4][4] { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
 
     // Cover-fit the painting's interior (its own frame cropped away) into the bitmap.
     const juce::Rectangle<float> crop { 14.0f, 12.0f, painting.width - 28.0f, painting.height - 24.0f };
     const float k = juce::jmax(width / crop.getWidth(), height / crop.getHeight());
     const float ox = (width - crop.getWidth() * k) * 0.5f, oy = (height - crop.getHeight() * k) * 0.5f + 2.0f;
+    const float brightnessLift = character == 3 ? 0.14f : 0.20f;
 
     juce::Image out(juce::Image::RGB, width, height, false);
     juce::Image::BitmapData data(out, juce::Image::BitmapData::writeOnly);
@@ -300,7 +304,7 @@ juce::Image PortraitRenderer::render(int character, const Expression& ex, int wi
             const float py = crop.getY() + (static_cast<float>(y) + 0.5f - oy) / k;
             const auto c = expressive(painting, lm, ex, px, py);
             float lum = 0.3f * c.r + 0.59f * c.g + 0.11f * c.b;
-            lum = juce::jlimit(0.0f, 1.0f, (lum - 0.06f) / 0.82f * (1.0f + 0.2f * ex.face.intensity));
+            lum = juce::jlimit(0.0f, 1.0f, (lum - 0.06f) / 0.82f * (1.0f + brightnessLift * ex.face.intensity));
             const float v = lum * 5.0f;
             int level = static_cast<int>(std::floor(v));
             if ((v - static_cast<float>(level)) * 16.0f > static_cast<float>(bayer[y % 4][x % 4])) ++level;

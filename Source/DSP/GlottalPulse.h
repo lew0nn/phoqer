@@ -3,6 +3,7 @@
 #include "../Core/CharacterPreset.h"
 #include "../Core/DspPrimitives.h"
 #include "../Core/Random.h"
+#include <algorithm>
 
 namespace phoqer
 {
@@ -22,6 +23,7 @@ public:
         bool trigger = false;
         float amplitude = 1.0f;
         double periodSamples = 0.0;
+        double offsetSamples = 0.0;   // how long ago, in samples (0 to 1), the cycle really began
     };
 
     void prepare(double newSampleRate) noexcept
@@ -33,6 +35,7 @@ public:
     void reset() noexcept
     {
         phase = 1.0;          // fire on the first sample of a note
+        fresh = true;
         periodScale = 1.0;
         phaseScale = 1.0 / sampleRate;
         alternate = false;
@@ -49,11 +52,18 @@ public:
         // The phase runs at this period's own length, so jitter really moves
         // the pitch from one period to the next instead of only the gain.
         // A multiply: the division is done once a period, in phaseScale.
-        phase += safeFrequency * phaseScale;
+        const auto step = safeFrequency * phaseScale;
+        phase += step;
         if (phase < 1.0)
             return tick;
 
         phase -= 1.0;
+        // The cycle began between two samples: the overshoot over this sample's step says how long
+        // ago. The grains start from there, so their timing is exact at any pitch, not rounded to
+        // the sample (at 1 kHz that rounding was up to 1% of every period). A note's first cycle
+        // starts on its first sample.
+        tick.offsetSamples = fresh || phase >= 1.0 ? 0.0 : std::min(0.999, phase / step);
+        fresh = false;
         if (phase >= 1.0)       // a very high note should not queue up triggers
             phase = 0.0;
 
@@ -92,5 +102,6 @@ private:
     double phaseScale = 1.0 / 44100.0;     // 1 / (sampleRate * periodScale)
     bool alternate = false;
     bool doubling = false;
+    bool fresh = true;
 };
 }

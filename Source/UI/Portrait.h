@@ -51,6 +51,6 @@ private:
     static const Landmarks& landmarksFor(int character) noexcept;
     Rgb expressive(const Painting&, const Landmarks&, const Expression&, float x, float y) const noexcept;
 
-    std::array<Painting, 3> paintings;
+    std::array<Painting, 4> paintings;     // BURP, SQUEAL, GROAN, KYRAX (GROAN's seal without the ice)
 };
 }

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../Core/PhoqerEngine.h"
+#include "Core/PhoqerEngine.h"
 #include <algorithm>
-#include "../Voice/VoicePersonality.h"
+#include "Voice/VoicePersonality.h"
 
 namespace phoqer
 {

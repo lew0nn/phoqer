@@ -77,8 +77,11 @@ public:
     void setCharacter(int c) { character = c; repaint(); }
     void paintButton(juce::Graphics&, bool over, bool down) override;
     bool isSelected() const noexcept { return selected; }
+    std::function<void()> onReselect;     // set: a click while selected, or a right-click, calls this instead
 
 private:
+    void clicked(const juce::ModifierKeys& m) override { popupClick = m.isPopupMenu(); }
+    bool popupClick = false;
     Kind kind;
     int index;
     bool selected = false;
@@ -100,6 +103,7 @@ public:
     explicit PianoView(juce::MidiKeyboardState&);
     void setCharacter(int c) { character = c; repaint(); }
     void setQwertyBase(int note);                // shows an octave below to two above the base note
+    void setQwertyLabels(bool on) { qwertyLabels = on; repaint(); }     // the computer-key letters (standalone)
 
 private:
     void drawWhiteNote(int note, juce::Graphics&, juce::Rectangle<float>, bool down, bool over, juce::Colour, juce::Colour) override;
@@ -109,6 +113,7 @@ private:
     void resized() override;
 
     int character = 1, qwertyBase = 60;
+    bool qwertyLabels = false;
 };
 
 // Win98 menu bar: EDIT, VIEW, PRESET, HELP. It only draws the titles (the open one pressed in) and
@@ -225,15 +230,49 @@ private:
     Kind kind;
 };
 
+// Lets a pop-up inside the editor be dragged out into a window of its own, anywhere on screen, at the
+// editor's zoom. Let go of it wholly over the editor and it docks again. area: the part of the component
+// that is the window (all of it, or a message box's box), in its own coordinates. The owner forwards the
+// mouse-down and drags on its grab area (a title bar), and places the area for moveArea.
+class PopOut98 final : private juce::Timer
+{
+public:
+    PopOut98(juce::Component& owner, std::function<juce::Rectangle<int>()> area);
+    ~PopOut98() override;
+    bool isOut() const noexcept { return holder != nullptr; }
+    void mouseDown(const juce::MouseEvent&);
+    void mouseDrag(const juce::MouseEvent&);
+    void dock();
+    std::function<void(juce::Point<int>)> moveArea;      // put the area's top-left here, in the parent's coordinates
+    std::function<void(bool out)> onChange;               // popped out, or docked again
+
+private:
+    void popOut(juce::Point<int> mouseOnScreen);
+    void timerCallback() override;     // while out: follows the mouse during a drag; on top while PHOQER's app is in front
+    juce::Component& owner;
+    std::function<juce::Rectangle<int>()> area;
+    std::unique_ptr<juce::Component> holder;     // the desktop window it sits in while out
+    juce::Component* home = nullptr;             // the editor view it docks back into
+    juce::Point<float> grab;                     // where it was grabbed, from the area's top-left, in editor units
+    float scale = 1.0f;                          // the editor's zoom, carried out with it
+    bool following = false, onTop = false;
+};
+
 // A Win98 window floating inside the editor: drag it by its title bar, X hides it. Content goes in
 // clientArea() as child components; paintContent draws the rest (labels, lights) under them.
+// It can be dragged out of the editor (PopOut98); closing it docks it again.
 class FloatingWindow98 final : public juce::Component
 {
 public:
     explicit FloatingWindow98(const juce::String& title);
+    ~FloatingWindow98() override;
+    bool isPoppedOut() const noexcept { return popOut.isOut(); }
+    void dock() { popOut.dock(); }
+    void visibilityChanged() override;
     void setCharacter(int c) { character = c; repaint(); }
     juce::Rectangle<float> clientArea() const;
     std::function<void()> onClose, onMoved;
+    std::function<juce::Rectangle<float>(juce::Graphics&,juce::Rectangle<float>)> paintFrame;
     std::function<void(juce::Graphics&, juce::Rectangle<float> client)> paintContent;
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -246,8 +285,45 @@ private:
     int character = 0;
     bool dragging = false;
     TitleButton98 close { TitleButton98::Kind::close };
-    juce::ComponentDragger dragger;
-    juce::ComponentBoundsConstrainer constrainer;
+    PopOut98 popOut { *this, [this] { return getLocalBounds(); } };
+};
+
+// WAIL BEND: a small raised panel beside the WAIL button. A slider from 0 to 24 semitones and the value,
+// which a double-click turns into a box to type in. Any click outside closes it.
+class WailBendPanel98 final : public juce::Component
+{
+public:
+    WailBendPanel98(juce::RangedAudioParameter& bend, juce::RangedAudioParameter& hold);
+    ~WailBendPanel98() override;
+    void setCharacter(int);
+    void open(juce::Rectangle<int> beside, juce::Component* opener);     // clicks on the opener are not "outside"
+    void close();
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    void mouseDown(const juce::MouseEvent& e) override { popOut.mouseDown(e); }     // drag it by its background
+    void mouseDrag(const juce::MouseEvent& e) override { popOut.mouseDrag(e); }
+    juce::Slider slider { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
+    juce::Label value;
+    struct Padlock final : juce::Button     // pressed in: RISE AND HOLD
+    {
+        Padlock() : juce::Button("WAIL HOLD") { setClickingTogglesState(true); }
+        void paintButton(juce::Graphics&, bool over, bool down) override;
+    } lock;
+    std::function<void()> onBeginEdit;
+
+private:
+    struct Outside final : juce::MouseListener     // listens to every click while open: one outside closes the panel
+    {
+        explicit Outside(WailBendPanel98& p) : panel(p) {}
+        void mouseDown(const juce::MouseEvent&) override;
+        WailBendPanel98& panel;
+    } outside { *this };
+    void show(float);
+    juce::SliderParameterAttachment attachment;
+    juce::ButtonParameterAttachment lockAttachment;
+    juce::Component* opener = nullptr;
+    int character = 0;
+    PopOut98 popOut { *this, [this] { return getLocalBounds(); } };
 };
 
 // A small LCD readout that is also a button: the BPM, which opens METRO.EXE.
@@ -312,6 +388,19 @@ private:
     int character = 0;
 };
 
+// The dice beside the preset name: one click shuffles the sound (EDIT > RANDOMIZE KNOBS). A neon cube on the
+// metronome's dark glass, in the voice's colours: 1 on top, 2 on the left, 3 on the right.
+class DiceButton98 final : public juce::Button
+{
+public:
+    DiceButton98();
+    void setCharacter(int c) { character = c; repaint(); }
+    void paintButton(juce::Graphics&, bool over, bool down) override;
+
+private:
+    int character = 0;
+};
+
 
 // A Win98 message box drawn inside the editor (so it scales with the UI and works inside a DAW):
 // title bar, optional icon, message lines, optional one-line text field, and buttons. It covers its
@@ -341,6 +430,8 @@ public:
     void resized() override;
     bool keyPressed(const juce::KeyPress&) override;
     void parentHierarchyChanged() override;
+    void mouseDown(const juce::MouseEvent&) override;     // drag the box by its title bar, out of the editor too
+    void mouseDrag(const juce::MouseEvent&) override;
     juce::Rectangle<float> boxBounds() const;
 
 private:
@@ -348,6 +439,10 @@ private:
     float linesHeight() const;
 
     Spec spec;
+    juce::Point<float> offset;                 // where the box was dragged to, from the centre
+    bool dragging = false;
+    juce::Component blocker;                   // while the box is out, still blocks clicks on the editor
+    PopOut98 popOut { *this, [this] { return boxBounds().expanded(0.0f, 0.0f).withTrimmedRight(-4.0f).withTrimmedBottom(-4.0f).toNearestInt(); } };
     juce::TextEditor field;
     TitleButton98 closeButton { TitleButton98::Kind::close };
     std::vector<std::unique_ptr<PushButton98>> buttons;

@@ -1,9 +1,9 @@
 // Offline renderer for the PHOQER editor. Plays a real call through the
 // engine for each character, ticks the editor like its 30 Hz timer would, and saves snapshots.
 
-#include "../PluginProcessor.h"
-#include "../UI/Editor.h"
-#include "../UI/Logo.h"
+#include "PluginProcessor.h"
+#include "UI/Editor.h"
+#include "UI/Logo.h"
 
 #include <iostream>
 
@@ -12,7 +12,7 @@ namespace
 void save(juce::Component& component, const juce::File& file)
 {
     const auto image = component.createComponentSnapshot(component.getLocalBounds(), true, 2.0f);
-    file.deleteFile();
+    if(file.existsAsFile())throw std::runtime_error("Use a fresh snapshot output folder");
     juce::FileOutputStream stream(file);
     if (! stream.openedOk() || ! juce::PNGImageFormat().writeImageToStream(image, stream))
         throw std::runtime_error("Cannot save " + file.getFullPathName().toStdString());

@@ -20,6 +20,8 @@ public:
     void prepare(double rate) noexcept
     {
         sampleRate = std::max(1.0, rate);
+        duckIn = static_cast<float>(1.0 - std::exp(-1.0 / (0.0003 * sampleRate)));     // 0.3 ms
+        duckOut = static_cast<float>(1.0 - std::exp(-1.0 / (0.030 * sampleRate)));     // 30 ms
         reset();
     }
 
@@ -28,6 +30,7 @@ public:
         running = false;
         beatPhase = 0.0;
         clickLength = clickSample = 2;
+        duck = 1.0f;
     }
 
     // Start again from beat 1 on the next block, e.g. for a count-in (audio thread).
@@ -37,9 +40,10 @@ public:
     {
         if (enabled && ! running) { beatPhase = 1.0; beats = 0.0; clicks = 0; } // Click immediately when enabled.
         running = enabled;
-        if (! enabled && clickSample >= clickLength) return;
+        if (! enabled && clickSample >= clickLength && duck >= 1.0f) return;
         const double step = clamp(20.0f, 400.0f, bpm) / (60.0 * sampleRate);
         const double level = 0.2 * settings.volume * settings.volume;     // 70% matches the original click
+        clickPeak = static_cast<float>(level * 1.25 * 1.02);     // the loudest a click gets (accented; WOOD peaks near 1.02)
         constexpr float ceiling = 0.9661f;
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
@@ -53,17 +57,22 @@ public:
                 beatPhase += step; // Tempo changes preserve the fraction of the current beat.
                 beats += step;
             }
-            if (clickSample >= clickLength) continue;
-            const float click = static_cast<float>(level * (accented ? 1.25 : 1.0) * nextClickSample());
-            ++clickSample; // Turning off lets this short click finish without a discontinuity.
-
-            float peak = 0.0f;
+            const bool clicking = clickSample < clickLength;
+            if (! clicking && duck >= 1.0f) continue;
+            float click = 0.0f;
+            if (clicking)
+            {
+                click = static_cast<float>(level * (accented ? 1.25 : 1.0) * nextClickSample());
+                ++clickSample; // Turning off lets this short click finish without a discontinuity.
+            }
+            // Headroom for the click: the music dips smoothly by the click's own peak while it plays
+            // (fast in, gentle out), the same for both channels, so the sum stays under the ceiling
+            // without reshaping the music sample by sample.
+            const float target = clicking ? clamp(0.5f, 1.0f, (ceiling - clickPeak) / ceiling) : 1.0f;
+            duck += (target - duck) * (target < duck ? duckIn : duckOut);
+            if (duck > 0.99999f && ! clicking) duck = 1.0f;
             for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-                peak = std::max(peak, std::abs(buffer.getSample(channel, sample)));
-            // Reserve headroom only where needed; apply the same gain to both channels.
-            const float gain = std::min(1.0f, (ceiling - std::abs(click)) / std::max(ceiling - std::abs(click), peak));
-            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-                buffer.setSample(channel, sample, buffer.getSample(channel, sample) * gain + click);
+                buffer.setSample(channel, sample, buffer.getSample(channel, sample) * duck + click);
         }
     }
 
@@ -109,5 +118,6 @@ private:
     int clickLength = 2, clickSample = 2, sound = 0;
     long long clicks = 0;
     bool running = false, accented = false;
+    float duck = 1.0f, duckIn = 1.0f, duckOut = 1.0f, clickPeak = 0.0f;     // the music's gain around a click
 };
 }

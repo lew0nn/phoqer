@@ -5,6 +5,7 @@
 #include "Limiter.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace phoqer
@@ -16,12 +17,17 @@ public:
     {
         outputGain.reset(sampleRate, 0.04);
         outputGain.setCurrentAndTargetValue(1.0f);
+        dcPole = static_cast<float>(std::exp(-2.0 * 3.14159265358979 * 10.0 / sampleRate));
+        dcIn.fill(0.0f);
+        dcOut.fill(0.0f);
         limiter.prepare(sampleRate);
     }
 
     void reset() noexcept
     {
         meterRms = meterPeak = meterPreLimiterPeak = meterGainReductionDb = 0.0f;
+        dcIn.fill(0.0f);
+        dcOut.fill(0.0f);
         limiter.reset();
     }
 
@@ -42,6 +48,15 @@ public:
                 auto value = buffer.getSample(channel, sample) * gain;
                 if (! std::isfinite(value))
                     value = 0.0f;
+                if (channel < static_cast<int>(dcIn.size()))    // a 10 Hz high-pass: takes off the voices' small DC offset
+                {
+                    const auto c = static_cast<size_t>(channel);
+                    auto y = value - dcIn[c] + dcPole * dcOut[c];
+                    if (std::abs(y) < 1.0e-20f) y = 0.0f;
+                    dcIn[c] = value;
+                    dcOut[c] = y;
+                    value = y;
+                }
                 buffer.setSample(channel, sample, value);
                 preLimiterPeak = std::max(preLimiterPeak, std::abs(value));
             }
@@ -81,6 +96,8 @@ public:
     int getLatencySamples() const noexcept { return limiter.getLatencySamples(); }
 
 private:
+    std::array<float, 8> dcIn {}, dcOut {};     // the high-pass, per channel
+    float dcPole = 0.9986f;
     LinearSmoother outputGain;
     LookaheadLimiter limiter;
     float meterPeak = 0.0f, meterRms = 0.0f;

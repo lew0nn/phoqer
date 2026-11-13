@@ -12,6 +12,7 @@ void FofBank::prepare(double newSampleRate) noexcept
     for (auto& formant : formants)
         formant.prepare(sampleRate);
     pulse.prepare(sampleRate);
+    bass.prepare(sampleRate);
     highCoefficient = 1.0f - std::exp(-twoPi<float> * 2500.0f / static_cast<float>(sampleRate));
     coefficientAir = -1.0f;
     reset();
@@ -22,27 +23,50 @@ void FofBank::reset() noexcept
     for (auto& formant : formants)
         formant.reset();
     pulse.reset();
-    fundamentalPhase = 0.0;
+    bass.reset();
+    fundamentalCos = 1.0f;
+    fundamentalSin = 0.0f;
+    fundamentalStepCos = 1.0f;
+    fundamentalStepSin = 0.0f;
     noiseLowPass = noiseBody = previousNoise = noiseHigh = 0.0f;
     lockedHarmonic.fill(0.0);
 }
 
 FormantSpec FofBank::shapeFormant(const FormantSpec& base, size_t index,
                                   const MacroState& macros, const VocalState& vocal,
-                                  double fundamentalHz) noexcept
+                                  double fundamentalHz, const CharacterPreset& preset) noexcept
 {
     FormantSpec spec = base;
 
     // Band 0 is the low source resonance; bands 1 and 2 are F1 and F2, which
     // carry almost all of the perceived vowel; bands 3 and 4 are air.
     //
-    // The vowel is the call's own, moving one (VOWEL plus the mouth opening and
-    // closing through the call), not the knob's fixed value: before, the motion
-    // the behaviour engine drew never reached the sound. It walks a vowel path,
+    // The vowel follows the call: VOWEL plus the mouth opening and closing as the
+    // call goes, so the motion the behaviour engine draws reaches the sound. It walks a vowel path,
     // oo - oh - ah - eh - ee, as F1 and F2 ratios against each character's
     // measured formants, which sit at the default position. The ratios are the
     // human ones taken half way in log terms, so a seal stays a seal.
-    if (index == 1 || index == 2)
+    if(preset.fullVowelMap)
+    {
+        const auto pos=clamp(0.0f,1.0f,vocal.vowelMorph)*static_cast<float>(articulationVowels-1);
+        const auto lo=std::min(articulationVowels-2,static_cast<size_t>(pos));
+        const auto blend=pos-static_cast<float>(lo);
+        const auto& a=preset.articulationMap[lo][index];
+        const auto& b=preset.articulationMap[lo+1][index];
+        spec={lerp(blend,a.frequency,b.frequency),lerp(blend,a.bandwidth,b.bandwidth),
+              lerp(blend,a.gain,b.gain),lerp(blend,a.harmonicLock,b.harmonicLock)};
+        // High notes: the map's low, narrow bands fall between the harmonics (or under the note) and the
+        // voice thins out. A singer tunes the formants onto the harmonics up there, and so does this:
+        // nothing at C4 and below, fully from about D5.
+        if (index <= 2 && noteFrequency > highTuningFromHz)
+        {
+            const auto tuning = clamp(0.0f, 1.0f,
+                static_cast<float>((noteFrequency - highTuningFromHz) / (highTuningFullHz - highTuningFromHz)));
+            spec.harmonicLock = std::max(spec.harmonicLock, tuning);
+            spec.gain *= 1.0f - highTuningTrim * tuning;     // on a harmonic a band speaks louder: keep the top in line
+        }
+    }
+    else if (index == 1 || index == 2)
     {
         static constexpr float path[5][2] = {
             { 0.64f, 0.89f },   // oo
@@ -57,6 +81,10 @@ FormantSpec FofBank::shapeFormant(const FormantSpec& base, size_t index,
         const auto column = index - 1;
         spec.frequency *= lerp(fraction, path[lower][column], path[lower + 1][column]) / home;
     }
+
+    // The band as designed (the vowel map's when the voice has one), before BOOM and AIR reshape it:
+    // the narrow-band guards below test this.
+    const auto designedBandwidth = spec.bandwidth;
 
     // BOOM is the size of the animal: a longer vocal tract puts every resonance
     // lower, so all five move together, about 20 percent either way from the
@@ -103,16 +131,28 @@ FormantSpec FofBank::shapeFormant(const FormantSpec& base, size_t index,
         {
             const auto reference = noteFrequency > 1.0 ? noteFrequency : fundamentalHz;
             harmonic = std::max(1.0, std::floor(settled / reference + 0.5));
-            if (base.bandwidth < 100.0f && harmonic > 4.0)
+            if (designedBandwidth < 100.0f && harmonic > 4.0)
                 harmonic = 4.0;
         }
-        if (base.bandwidth < 100.0f && harmonic * fundamentalHz < 0.75 * settled)
+        if (designedBandwidth < 100.0f && harmonic * fundamentalHz < 0.75 * settled)
             lock = 1.0f;    // pulled well below its home: sit right on the harmonic
         const auto locked = static_cast<float>(harmonic * fundamentalHz);
         spec.frequency = lerp(lock, spec.frequency, locked);
     }
 
     return spec;
+}
+
+void FofBank::setFundamental(double hz) noexcept
+{
+    const auto step = twoPi<double> * clamp(20.0, sampleRate * 0.45, hz) * inverseSampleRate;
+    fundamentalStepCos = static_cast<float>(std::cos(step));
+    fundamentalStepSin = static_cast<float>(std::sin(step));
+    // Pull the vector back to unit length (one Newton step), so rounding never makes it grow or fade.
+    const auto lengthSquared = fundamentalCos * fundamentalCos + fundamentalSin * fundamentalSin;
+    const auto correction = 1.5f - 0.5f * lengthSquared;
+    fundamentalCos *= correction;
+    fundamentalSin *= correction;
 }
 
 float FofBank::process(double frequencyHz, const CharacterPreset& preset,
@@ -124,7 +164,7 @@ float FofBank::process(double frequencyHz, const CharacterPreset& preset,
     // BARK also sets the growl: the preset's jitter and period doubling scaled
     // from 0.4x to 2.1x (1x at the default 0.35), with extra doubling above 0.5
     // so even SQUEAL rasps when pushed.
-    const auto growl = 0.4f + 1.7f * macros.bark;
+    auto growl = 0.4f + 1.7f * macros.bark;
     const auto rasp = 0.10f * std::max(0.0f, macros.bark - 0.5f);
     const auto tick = pulse.advance(frequencyHz, preset, random, growl, rasp);
     if (tick.trigger)
@@ -133,8 +173,8 @@ float FofBank::process(double frequencyHz, const CharacterPreset& preset,
                          * (1.0 - 0.35 * clamp(0.0f, 1.0f, macros.air));
         for (size_t index = 0; index < formants.size(); ++index)
             formants[index].trigger(
-                shapeFormant(preset.formants[index], index, macros, vocal, frequencyHz),
-                tick.periodSamples, skirt, tick.amplitude);
+                shapeFormant(preset.formants[index], index, macros, vocal, frequencyHz, preset),
+                tick.periodSamples, skirt, tick.amplitude, tick.offsetSamples);
     }
 
     float voiced = 0.0f;
@@ -143,19 +183,18 @@ float FofBank::process(double frequencyHz, const CharacterPreset& preset,
 
     // The fundamental sine. FOF grains put energy only near the formants, so
     // without this a bass character with a 1 kHz first formant has no low end.
-    const auto safeFrequency = clamp(20.0, sampleRate * 0.45, frequencyHz);
-    fundamentalPhase += safeFrequency * inverseSampleRate;
-    fundamentalPhase -= std::floor(fundamentalPhase);
+    const auto nextCos = fundamentalCos * fundamentalStepCos - fundamentalSin * fundamentalStepSin;
+    fundamentalSin = fundamentalCos * fundamentalStepSin + fundamentalSin * fundamentalStepCos;
+    fundamentalCos = nextCos;
     // Kept low: the reference calls have a weak fundamental, and a loud sine
     // here reads as a synth bass under the seal rather than as the seal.
     const auto fundamentalGain = preset.subOctaveGain + 0.06f * macros.boom;
-    const auto fundamental = fastSin2Pi(fundamentalPhase)
-                           * fundamentalGain;
+    const auto fundamental = fundamentalSin * fundamentalGain;
 
     // Band-limited breath noise. The measured calls are almost entirely
     // voiced (spectral flatness 0.004 to 0.016): what sounds rough in them is
-    // the pitch jitter, not hiss. So the floor is small and AIR brings breath
-    // in from nothing, darker than before.
+    // the pitch jitter, not hiss. So the floor is small and AIR brings a dark
+    // breath in from nothing.
     const auto white = random.bipolar();
     if (macros.air != coefficientAir)     // they only change while AIR moves
     {
@@ -171,7 +210,7 @@ float FofBank::process(double frequencyHz, const CharacterPreset& preset,
     const auto smoothNoise = 0.70f * bandNoise + 0.30f * previousNoise;
     previousNoise = bandNoise;
 
-    const auto noiseGain = clamp(0.0f, 1.0f,
+    const auto noiseGain = clamp(0.0f, 0.7f,
         preset.noiseMix + 0.18f * macros.air * macros.air + 0.03f * vocal.barkTransient);
 
     // SQUEAL's squeak: the clip carries a noisy band above its few clean
@@ -180,10 +219,12 @@ float FofBank::process(double frequencyHz, const CharacterPreset& preset,
     const auto squeak = (white - noiseHigh) * preset.squeakNoise
                       * (0.6f + 0.4f * vocal.barkTransient) * vocal.amplitudeShape;
 
-    const auto value = (voiced * (1.0f - 0.20f * noiseGain)
+    auto value = (voiced * (1.0f - 0.20f * noiseGain)
                         + fundamental
                         + smoothNoise * noiseGain + squeak) * preset.outputTrim;
 
-    return clamp(-4.0f, 4.0f, std::isfinite(value) ? value : 0.0f);
+    if(preset.bassGain>0.0f)
+        value=value*preset.spectralBodyGain+bass.process(frequencyHz,preset)*preset.outputTrim;
+    return clamp(-4.0f, 4.0f, isFiniteSample(value) ? value : 0.0f);
 }
 }

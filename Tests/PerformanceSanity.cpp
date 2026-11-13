@@ -1,10 +1,11 @@
-#include "../Core/PhoqerEngine.h"
+#include "Core/PhoqerEngine.h"
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <memory>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 using namespace phoqer;
 namespace
@@ -102,6 +103,40 @@ int main(int argc, char** argv)
             check(engine.getNewestPitchNote() == 72, "a note after release glided");
         }
 
+        for (const float bend : { 2.4f, 12.0f, 24.0f })     // WAIL BEND reaches the voice: the sweep peaks at the set amount
+        {
+            uint64_t wailAge = 0;
+            SealVoice wail(7, wailAge);
+            MacroState m;
+            m.behaviorMode = BehaviourMode::wail;
+            m.wailBend = bend;
+            wail.prepare(48000, 512);
+            wail.setMacros(m);
+            wail.startNote(0, 60, 1, 8192);
+            AudioBuffer block(2, 512);
+            float peak = 0.0f;
+            for (int i = 0; i < 48000 * 2 / 512; ++i) { wail.renderNextBlock(block, 0, 512); peak = std::max(peak, std::abs(wail.getModeSemitones())); }
+            check(std::abs(peak - bend) < 0.05f * bend, "WAIL BEND did not reach the voice");
+        }
+        {   // WAIL HOLD: up to the bend in two beats (1 s at 120 BPM), then it stays there
+            uint64_t holdAge = 0;
+            SealVoice wail(9, holdAge);
+            MacroState m;
+            m.behaviorMode = BehaviourMode::wail;
+            m.wailBend = 12.0f;
+            m.wailHold = true;
+            wail.prepare(48000, 480);
+            wail.setMacros(m);
+            wail.startNote(0, 60, 1, 8192);
+            AudioBuffer block(2, 480);
+            for (int i = 0; i < 400; ++i)     // 4 s: past where the swing would have come back down
+            {
+                wail.renderNextBlock(block, 0, 480);
+                if (i == 50) check(wail.getModeSemitones() > 6.0f && wail.getModeSemitones() < 11.0f, "WAIL HOLD did not rise");
+                if (i >= 101) check(std::abs(wail.getModeSemitones() - 12.0f) < 0.001f, "WAIL HOLD did not stay at the top");
+            }
+        }
+
         uint64_t age = 0;
         SealVoice voice(123, age);
         MacroState macros;
@@ -150,7 +185,79 @@ int main(int argc, char** argv)
                     check(std::abs(impulse.getSample(0, i) - (i == limiter.getLatencySamples() ? 0.5f : 0.0f)) < 0.00001f,
                           "limiter impulse latency differs from reported latency");
             }
-        std::cout << "PERFORMANCE_SANITY_OK: poly glide, chords, bend, smoothing, limiter\n";
+        {   // Pressing the WAIL lock in the middle of a note glides there; it never jumps.
+            uint64_t holdAge = 0;
+            SealVoice wail(13, holdAge);
+            MacroState m;
+            m.behaviorMode = BehaviourMode::wail;
+            m.wailBend = 12.0f;
+            m.wailHold = false;
+            wail.prepare(48000, 480);
+            wail.setMacros(m);
+            wail.startNote(0, 60, 1, 8192);
+            AudioBuffer block(2, 480);
+            float last = 0.0f, worst = 0.0f;
+            for (int i = 0; i < 400; ++i)
+            {
+                if (i == 300) { m.wailHold = true; wail.setMacros(m); }     // at beat 6, the swing's bottom
+                wail.renderNextBlock(block, 0, 480);
+                const auto st = wail.getModeSemitones();
+                if (i > 0) worst = std::max(worst, std::abs(st - last));
+                last = st;
+            }
+            check(worst < 3.0f && std::abs(last - 12.0f) < 0.001f, "WAIL lock jumped instead of gliding");
+        }
+        {   // ARP: C-E-G held, UP at 1/8 and 120 BPM (11025 samples a step at 44.1 kHz): C, then E exactly a step later,
+            // one note at a time; letting go stops new steps; HOLD keeps them coming after the keys are up.
+            for (const bool hold : { false, true })
+            {
+                auto owned = std::make_unique<PhoqerEngine>();
+                auto& engine = *owned;
+                AudioBuffer buffer(2, 441);
+                CharacterPreset loaded;
+                MacroState m;
+                m.space = 0;
+                m.loadedVoice = &loaded;
+                m.tempoBpm = 120;
+                m.arp.on = true;
+                m.arp.rate = 1;
+                m.arp.hold = hold;
+                engine.prepare(44100, 441, 2);
+                std::vector<MidiEvent> chord { { MidiEventType::noteOn, 0, 0, 48, 0.8f }, { MidiEventType::noteOn, 0, 0, 52, 0.8f }, { MidiEventType::noteOn, 0, 0, 55, 0.8f } };
+                engine.process(buffer, chord.data(), static_cast<int>(chord.size()), m, 0);
+                check(engine.getNewestPitchNote() == 48 && engine.getActiveVoiceCount() == 1, "ARP did not start with the lowest key alone");
+                for (int b = 1; b < 25; ++b) engine.process(buffer, nullptr, 0, m, 0);
+                check(engine.getNewestPitchNote() == 48, "ARP stepped early");
+                engine.process(buffer, nullptr, 0, m, 0);          // block 25 starts on sample 11025: the second step
+                check(engine.getNewestPitchNote() == 52, "ARP did not step to E on time");
+                check(engine.getActiveVoiceCount() <= 2, "ARP played the chord together");
+                std::vector<MidiEvent> up { { MidiEventType::noteOff, 0, 0, 48, 0 }, { MidiEventType::noteOff, 0, 0, 52, 0 }, { MidiEventType::noteOff, 0, 0, 55, 0 } };
+                engine.process(buffer, up.data(), static_cast<int>(up.size()), m, 0);
+                for (int b = 0; b < 30; ++b) engine.process(buffer, nullptr, 0, m, 0);    // past the third step's time
+                check(hold ? engine.getNewestPitchNote() == 55 : engine.getNewestPitchNote() == 52, hold ? "ARP HOLD stopped" : "ARP kept stepping after the keys were up");
+            }
+        }
+        {   // NITRO's cap: 8 keys with three extra notes each play 16 voices at most, and they all end with their keys.
+            auto owned = std::make_unique<PhoqerEngine>();
+            auto& engine = *owned;
+            AudioBuffer buffer(2, 128);
+            CharacterPreset loaded;
+            MacroState m;
+            m.space = 0;
+            m.loadedVoice = &loaded;
+            m.nitro.on = true;
+            m.nitro.offsets = { 7, 12, 19 };
+            engine.prepare(48000, 128, 2);
+            std::vector<MidiEvent> keys;
+            for (int k = 0; k < 8; ++k) keys.push_back({ MidiEventType::noteOn, 0, 0, 48 + k * 3, 0.8f });
+            engine.process(buffer, keys.data(), static_cast<int>(keys.size()), m, 0);
+            settle(engine, buffer, m, 40);     // past the strum (3 x 12 ms) and the 3 ms fades
+            check(engine.getActiveVoiceCount() == 16, "NITRO did not stop at 16 voices");
+            for (int k = 0; k < 8; ++k) event(engine, buffer, m, MidiEventType::noteOff, 48 + k * 3, 0);
+            settle(engine, buffer, m);
+            check(engine.getActiveVoiceCount() == 0, "NITRO notes hung after the keys came up");
+        }
+        std::cout << "PERFORMANCE_SANITY_OK: poly glide, chords, bend, wail bend, wail hold, wail lock glide, ARP steps and HOLD, NITRO cap, smoothing, limiter\n";
         return 0;
     }
     catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

@@ -47,7 +47,7 @@ public:
     }
 
     void trigger(const FormantSpec& spec, double periodSamples, double skirtSeconds,
-                 float amplitude) noexcept
+                 float amplitude, double offsetSamples = 0.0) noexcept
     {
         const auto nyquist = sampleRate * 0.5;
         // Clamp bandwidth, never Q. A narrow bandwidth is simply a long decay.
@@ -94,7 +94,7 @@ public:
         else
             ++busyGrains;     // a retired victim's slot is reused, so the count only grows here
         attack[static_cast<size_t>(slot)].start(radius, omega, pi<double> / riseSamples,
-                                                riseSamples, gain);
+                                                riseSamples, gain, offsetSamples);
     }
 
     float process() noexcept
@@ -105,12 +105,15 @@ public:
         auto sum = tail.imaginary;
 
         // Most samples have no grain in its skirt at all: a skirt lasts about 1.5 ms of a period.
+        // Only the slots that were busy are visited, in slot order, and the loop ends at the last one.
+        int toVisit = busyGrains;
         for (auto& grain : attack)
         {
-            if (busyGrains == 0)
+            if (toVisit == 0)
                 break;
             if (! grain.busy)
                 continue;
+            --toVisit;
 
             grain.carrier.advance();
             grain.skirt.advance();
@@ -129,12 +132,7 @@ public:
             }
         }
 
-        if (! std::isfinite(sum))
-        {
-            reset();
-            return 0.0f;
-        }
-        return sum;
+        return sum;     // a non-finite value is caught once per voice, after all the bands (SealVoice)
     }
 
     bool isQuiescent() const noexcept

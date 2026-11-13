@@ -176,6 +176,24 @@ void matrix(Factory& factory, const juce::File& report)
 }
 }
 
+// What a DAW's automation list gets: the 18 KYRAX settings are named KYRAX, and only YAP, ARP and NITRO can be automated.
+void kyraxAutomation(Factory& factory)
+{
+    auto p = factory.make();
+    int found = 0;
+    for (auto* param : p->getParameters())
+    {
+        const auto name = param->getName(100);
+        if (! name.startsWith("KYRAX")) { check(! name.containsIgnoreCase("NITRO") && ! name.containsIgnoreCase("ARP") && name != "YAP", "a KYRAX setting lost its KYRAX name"); continue; }
+        ++found;
+        const bool shouldAutomate = name == "KYRAX YAP" || name == "KYRAX NITRO" || name == "KYRAX ARP";
+        std::cout << "  " << name << (param->isAutomatable() ? "  automatable\n" : "  window only\n");
+        check(param->isAutomatable() == shouldAutomate, "the wrong KYRAX settings are automatable");
+    }
+    check(found == 18, "expected 18 KYRAX settings");
+    std::cout << "VST3_KYRAX_AUTOMATION_OK: 18 settings named KYRAX, only YAP, ARP and NITRO automatable\n";
+}
+
 int main(int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI init;
@@ -183,7 +201,9 @@ int main(int argc, char** argv)
     {
         if (argc != 3) { std::cerr << "usage: PHOQERVst3HostChecks <bundle> <report.json>\n"; return 2; }
         Factory factory(juce::String::fromUTF8(argv[1]));
-        recallAndInstances(factory); tempo(factory);
+        kyraxAutomation(factory);
+        recallAndInstances(factory);
+        tempo(factory);
         matrix(factory, juce::File(juce::String::fromUTF8(argv[2])));
         std::cout << "VST3_HOST_CHECKS_OK\n";
         return 0;

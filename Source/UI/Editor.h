@@ -5,10 +5,14 @@
 #include "../PluginProcessor.h"
 #include "History.h"
 #include "Knob.h"
+#include "Nitro98.h"
 #include "Portrait.h"
 #include "Presets.h"
 #include "Style.h"
 #include "Views.h"
+#include "VoiceControls.h"
+#include "VoiceLibrary.h"
+#include "../Updates.h"
 
 #include <array>
 #include <functional>
@@ -27,10 +31,10 @@ struct WindowControls
 
 // The editor itself, laid out at a fixed base size (760 wide; shorter when KEYS.EXE is hidden).
 // PhoqerEditor scales it to the chosen zoom.
-class PhoqerView final : public juce::Component, private juce::Timer
+class PhoqerView final : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer
 {
 public:
-    static constexpr int width = 760, fullHeight = 730, compactHeight = 618;
+    static constexpr int width = 760, fullHeight = 745, compactHeight = 633;     // MIXER.EXE is 15 taller for the KYRAX box
 
     PhoqerView(PhoqerAudioProcessor&, Win98LookAndFeel&);
     ~PhoqerView() override;
@@ -52,6 +56,7 @@ public:
     void tick(double nowSeconds);
     void forceManicForTest(double nowSeconds) { manicUntil = nowSeconds + 0.5; }
     void feedFish();
+    void showVoiceBrowser();
     void revealFishForTest() { fishOut = true; logoSlide = fishSlide(); fish.setVisible(true); repaint(); }
 
     // VIEW menu actions, carried out by the editor that scales this view.
@@ -59,9 +64,29 @@ public:
     std::function<void(float)> onZoom;
     std::function<void()> onFitToScreen, onLayoutChanged;
 
+    // UPDATE.EXE (EditorUpdates.cpp). Public so the checks can show each state for a snapshot.
+    enum class UpdateStage { none, prompt, downloading, ready, failed, mismatch, upToDate, offline, kyrax };
+    void showUpdate(UpdateStage, const updates::Found& = {}, float progressForChecks = -1.0f);
+    juce::String updateNotice() const;              // the SCOPE.EXE status field's text when there's an update
+
 private:
     void timerCallback() override;
+    void setupUpdates();
+    void checkForUpdates(bool manual);
+    void updateFound(const updates::Found&, bool manual);
+    void layoutUpdate();
+    void startUpdateDownload();
+    void updatePressed(bool right);
+    void updateTick();
+    void paintUpdate(juce::Graphics&);
+    void openUpdateFromNotice();
+    juce::Rectangle<float> noticeArea() const;
     void applyCharacter(int);
+    void refreshVoiceControls();
+    void showEnterKey();
+    void showRemoveKey();
+    void keyChecked(const juce::String& error, int used);   // the activation server's answer, back on the message thread
+    void chooseVoice(int);
     void rebuildChrome(float scale);
     void setChoice(const char* id, int index);
     void releaseQwertyNotes();
@@ -70,11 +95,18 @@ private:
     float fishSlide() const;                       // how far the wordmark moves aside for the fish
     bool isStandalone() const noexcept { return windowControls.audioSettings != nullptr; }
     void setMetroOpen(bool);
+    juce::Rectangle<float> nitroBoxArea() const;     // the KYRAX group box (YAP, ARP, NITRO) under the small knobs
+    void layoutNitro();
+    void openNitro();
+    void layoutArp();
+    void openArp();
+    void refreshArp();     // RATE and HOLD buttons and the step preview follow their settings
     juce::Rectangle<float> transportArea() const;     // [switch | BPM]  [REC | 00:00] above the small knobs (standalone)
 
     // Menus and the actions behind them.
     void showMenu(int index);
     void showPopup(juce::PopupMenu&, juce::Rectangle<float> target, int menuIndex);
+    void showWailBend();
     juce::PopupMenu buildMenu(int index);
     void addPresetItems(juce::PopupMenu&);
     void resetKnobs();
@@ -96,6 +128,10 @@ private:
     void saveTake(const juce::String& fileName);
     void showDialog(Dialog98::Spec);
     void showMessage(const juce::String& title, const juce::StringArray& lines);
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int, int) override;
+    void chooseVoiceFile();
+    void installVoice(const juce::File&);
 
     PhoqerAudioProcessor& processor;
     Win98LookAndFeel& lookAndFeel;
@@ -112,6 +148,53 @@ private:
     Readout98 barTempo;
     NumberField98 bpmField;
     FloatingWindow98 metroWindow { "METRO.EXE" };
+    WailBendPanel98 wailBendPanel;
+    // YAP + NITRO (KYRAX only): a group box under the small knobs. Right-click NITRO for NITRO.EXE: the
+    // notes on a keyboard, a level for each, WIDTH, STRUM, DETUNE and a STACK quick pick.
+    IconToggle98 yapButton { IconToggle98::Icon::lips }, nitroButton { IconToggle98::Icon::bolt };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> yapAttachment, nitroAttachment;
+    FloatingWindow98 nitroWindow { "NITRO.EXE" };
+    std::unique_ptr<NitroKeys98> nitroKeys;
+    std::array<LevelSlider98, 3> nitroLevels;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> nitroAttachments;
+    std::vector<std::unique_ptr<PixelKnob>> nitroKnobs;
+    std::vector<std::unique_ptr<juce::ParameterAttachment>> nitroWatch;
+    juce::ComboBox stackBox;
+    ActionButton98 nitroOk { "OK" };
+    // ARP (KYRAX only), between YAP and NITRO. Right-click ARP for ARP.EXE: a step preview, RATE, HOLD, GATE,
+    // SWING, OCTAVES and PATTERN.
+    IconToggle98 arpButton { IconToggle98::Icon::notes };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> arpAttachment;
+    FloatingWindow98 arpWindow { "ARP.EXE" };
+    ArpSteps98 arpSteps;
+    std::array<std::unique_ptr<SegmentButton98>, 5> arpRates;
+    std::array<std::unique_ptr<SegmentButton98>, 2> arpHolds;     // OFF, ON
+    std::vector<std::unique_ptr<PixelKnob>> arpKnobs;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> arpAttachments;
+    std::vector<std::unique_ptr<juce::ParameterAttachment>> arpWatch;
+    juce::ComboBox arpPatternBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> arpPatternAttachment;
+    ActionButton98 arpOk { "OK" };
+    FloatingWindow98 updateWindow { "UPDATE.EXE" };
+    ActionButton98 updateLeft { "LATER" }, updateRight { "UPDATE" };
+    UpdateStage updateStage = UpdateStage::none;
+    updates::Found updateInfo;
+    bool checkingUpdates = false;
+    float updateTestProgress = -1.0f;
+    double downloadStartedMs = 0.0;     // the download screen stays up at least 2 s, so the animation is seen
+    juce::File updateFile;
+    // The installer download: JUCE's own thread reports here; tick() picks the result up on the message thread.
+    struct DownloadWatch final : juce::URL::DownloadTaskListener
+    {
+        std::atomic<juce::int64> bytes { 0 };
+        std::atomic<int> result { 0 };     // 0 running, 1 checked, 2 stopped, 3 didn't match
+        updates::Release release;
+        juce::File file;
+        void progress(juce::URL::DownloadTask*, juce::int64 done, juce::int64) override { bytes = done; }
+        void finished(juce::URL::DownloadTask*, bool ok) override { result = ! ok ? 2 : updates::verify(file, release) ? 1 : 3; }
+    } downloadWatch;
+    std::unique_ptr<juce::URL::DownloadTask> updateDownload;
+    DiceButton98 diceButton;     // beside the preset name: EDIT > RANDOMIZE KNOBS in one click
     MetronomeButton98 metronomeButton;
     bool metronomeWasOn = false;
     juce::Slider metronomeVolume { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
@@ -124,7 +207,13 @@ private:
     Fish98 fish;
     BlueScreen98 blueScreen;
     PianoView piano;
-    std::array<std::unique_ptr<ChoiceButton>, 3> voiceTabs;
+    std::array<std::unique_ptr<VoiceSlot98>, 4> voiceTabs;
+    ActionButton98 browseVoices { "=" }, tryOnlineButton { "TRY ONLINE" }, loadVoiceButton { "LOAD VOICE" }, useVoiceButton { "USE" }, keyButton { "GET ON ITCH" };
+    FloatingWindow98 voiceBrowser { "VOICES.EXE" };
+    std::array<std::unique_ptr<VoiceLibraryRow98>,4> voiceRows;
+    juce::ToggleButton quickVoice { "IN QUICK BAR" };
+    juce::String voiceControlsKey;     // what the voice strip last showed (refreshVoiceControls)
+    int browserVoice=3;
     std::array<std::unique_ptr<ChoiceButton>, 5> modeButtons;
     std::array<std::unique_ptr<TitleButton98>, 3> titleButtons;    // minimise, maximise, close
     WindowControls windowControls;
@@ -137,6 +226,7 @@ private:
     PresetLibrary presets;
     ParamHistory history;
     std::unique_ptr<Dialog98> dialog;
+    bool checkingKey = false;                                // the CHECKING box is up
     std::unique_ptr<juce::FileChooser> chooser;
     juce::File pendingTake;                                         // a stopped recording awaiting SAVE / DISCARD
     int recordChannels = 2;

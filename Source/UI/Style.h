@@ -14,6 +14,11 @@ struct Palette
     juce::Colour sky;         // desktop and darkest bitmap tone
 };
 
+juce::Colour approvedHoloColour(juce::Colour source, bool pinkEnd = false) noexcept;
+// KYRAX's colours, the website wordmark's: violet to rose, then cream. Every KYRAX colour comes from this list.
+inline constexpr juce::uint32 kyraxStops[] { 0xff9660ff, 0xffb057e7, 0xffca4ed0, 0xffe545b8, 0xffff6db8, 0xfff1588e, 0xffe4757d, 0xffe4e2a2 };
+inline constexpr int kyraxRose = 6, kyraxCream = 7;
+juce::Colour kyraxRamp(float t) noexcept;     // KYRAX knob arcs: violet to rose
 const Palette& paletteFor(int character) noexcept;     // 0 burp, 1 squeal, 2 groan
 
 namespace win98
@@ -27,6 +32,7 @@ struct Fonts
     static const Fonts& get();
 };
 
+constexpr float crispPixelPoints = 8.0f;     // the pixel font's own grid: small text is set at exactly this
 juce::Font pixelFont(float height, bool bold = false);
 juce::Font logoFont(float height);
 
@@ -44,7 +50,12 @@ juce::Rectangle<float> window98(juce::Graphics&, juce::Rectangle<float> bounds, 
                                 const Palette& palette, bool active, float titleHeight = defaultTitleHeight);
 juce::Rectangle<float> windowClient(juce::Rectangle<float> bounds, float titleHeight = defaultTitleHeight) noexcept;
 
-void statusBar(juce::Graphics&, juce::Rectangle<float>, const juce::StringArray& fields);
+// Status bar fields in the crisp 8 px pixel font. The last field can take another colour (the update notice).
+void statusBar(juce::Graphics&, juce::Rectangle<float>, const juce::StringArray& fields, juce::Colour lastColour = juce::Colours::black);
+// The voice's top title bar colour at t (0 left .. 1 right): the UPDATE.EXE disk wears it top to bottom.
+juce::Colour titleBarColour(int character, float t) noexcept;
+// The ink of the numbers in the knob boxes, per voice.
+juce::Colour valueInkFor(int character) noexcept;
 
 void drawText(juce::Graphics&, const juce::String&, juce::Rectangle<float>, const juce::Font&, juce::Colour,
               juce::Justification = juce::Justification::centredLeft);
@@ -81,6 +92,7 @@ public:
                       juce::ComboBox&) override;
     juce::Font getComboBoxFont(juce::ComboBox&) override;
     void positionComboBoxText(juce::ComboBox&, juce::Label&) override;
+    void drawLabel(juce::Graphics&, juce::Label&) override;     // through drawText, so pixel text lands on whole pixels
     void drawToggleButton(juce::Graphics&, juce::ToggleButton&, bool highlighted, bool down) override;
 
 private:

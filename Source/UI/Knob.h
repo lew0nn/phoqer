@@ -25,6 +25,7 @@ public:
         bool big = true;                // big dials carry their name above, in the large font
         Layout layout = Layout::mixer;
         std::function<juce::String(double)> format;
+        float nameY = 111.0f, boxY = 134.0f, boxH = 26.0f, valueSize = 16.0f;     // small mixer dials: name and value field
     };
 
     explicit PixelKnob(Spec);

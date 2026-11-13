@@ -5,6 +5,8 @@
 #include <map>
 #include <vector>
 
+class PhoqerAudioProcessor;
+
 namespace phoqer::ui
 {
 // A sound: voice, mode and every knob except OUTPUT (loading a preset never changes your level).
@@ -12,6 +14,7 @@ struct Preset
 {
     juce::String name;
     std::map<juce::String, float> values;      // parameter ID -> real value
+    juce::String voiceSelection;
     juce::File file;                           // empty for the built-ins
 };
 
@@ -20,7 +23,7 @@ struct Preset
 class PresetLibrary
 {
 public:
-    explicit PresetLibrary(juce::AudioProcessorValueTreeState&);
+    explicit PresetLibrary(PhoqerAudioProcessor&);
 
     static juce::File folder();
     static juce::StringArray parameterIds();
@@ -46,10 +49,13 @@ private:
     void apply(const Preset&);
     void remember(const juce::String& name);
 
+    PhoqerAudioProcessor& processor;
     juce::AudioProcessorValueTreeState& state;
     std::vector<Preset> presets;
     Preset loaded;                             // what "unchanged" means for the star
     bool hasLoaded = false;
+    mutable juce::String parsedSelection, parsedHash;     // isDirty's cache of the loaded preset's voice
+    mutable bool parsedSelected = false;
     int current = -1;
 };
 }

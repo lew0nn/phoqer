@@ -32,7 +32,7 @@ A narrow formant only speaks when a harmonic lands inside it, so each band carri
 harmonic is chosen once per note, so the formant never hops between overtones while the
 pitch moves.
 
-All three characters are data, not branches. `Source/Core/CharacterPreset.h` holds one
+All three characters are data: `Source/Core/CharacterPreset.h` holds one
 table entry per character with five formant bands, pitch contour, ADSR, noise ratio,
 jitter, shimmer, period-doubling probability, wobble, flutter and onset shape, derived
 from measurements of the reference recordings and then tuned by ear. Adding a character
@@ -58,10 +58,20 @@ identity is derived from `character` and is not stored as an independent paramet
 
 ## Validation
 
+`Source/` holds only what ships in the plugin; every check, study and test tool lives in `Tests/`.
+
 Build and run `PHOQERCoreSanity` for offline engine checks. It asserts, among other
 things, that all three characters are audible and sonically distinct, that the five modes differ,
 that a held note still sounds after nine seconds and stops after release, and that the
 sustain pedal holds a released key until the pedal comes up.
+
+`PHOQERSoundPrint --check Tests/SoundPrints.txt` fails when the sound changes: it renders
+every built-in voice in every mood on fixed notes and compares level and eight tone bands, frame by frame,
+within 0.01 dB. After a sound change has been approved by ear, `--write` stores the new prints.
+
+`PHOQERLevels --check Source/Voice/LevelTables.h` fails when a mood is more than 0.5 dB louder or quieter
+than CALL (BS.1770 K-weighted, loudest 400 ms, notes 48/55/62 at the defaults); `--write` rewrites the
+built-in rows from the measurement.
 
 `PHOQERPerformanceSanity` checks chords and ALL NOTES OFF, GLIDE (timing, and that chords don't glide), the pitch-bend endpoints, smoothing
 completion, and the limiter's stereo ceiling and reported latency across the sample-rate and
@@ -81,9 +91,10 @@ Validate the complete VST3 bundle with Steinberg's validator before distributing
 VST3 and Standalone at 44.1, 48, 88.2, and 96 kHz with block sizes including 32, 64, 128,
 512, and 1024.
 
-Note that the repository path must not contain parentheses. JUCE's Windows binary-data
+The build directory must not contain parentheses. JUCE's Windows binary-data
 generator is passed through MSBuild command files and fails with exit code 9009 otherwise,
-which affects the plugin targets but not `PHOQERCoreSanity`.
+which affects the plugin targets but not `PHOQERCoreSanity`. The source folder itself may
+contain them.
 
 ## Licensing
 

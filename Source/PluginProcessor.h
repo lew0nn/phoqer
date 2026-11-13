@@ -5,17 +5,18 @@
 #include "Core/MidiEvent.h"
 #include "Core/PhoqerEngine.h"
 #include "DSP/Metronome.h"
+#include "VoiceSelection.h"
 
 #include "UI/Recorder.h"
 
 #include <array>
 #include <atomic>
 
-class PhoqerAudioProcessor final : public juce::AudioProcessor
+class PhoqerAudioProcessor final : public juce::AudioProcessor, private juce::AsyncUpdater
 {
 public:
     PhoqerAudioProcessor();
-    ~PhoqerAudioProcessor() override = default;
+    ~PhoqerAudioProcessor() override { cancelPendingUpdate(); }
 
     void prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock) override;
     void releaseResources() override;
@@ -66,6 +67,10 @@ public:
     int getMetronomeBeatsPerBar() const noexcept { return 2 + static_cast<int>(metronomeBeatsPerBar->load(std::memory_order_relaxed)); }
     int getCountInBars() const noexcept { return static_cast<int>(countIn->load(std::memory_order_relaxed)); }
 
+    // KYRAX: the paid voice, its unlock, songs' snapshots and undo tokens (VoiceSelection.h).
+    VoiceSelection& getVoices() noexcept { return voices; }
+    const VoiceSelection& getVoices() const noexcept { return voices; }
+
 private:
     void translateMidi(const juce::MidiBuffer& midiMessages) noexcept;
     static std::atomic<float>* requireParameter(juce::AudioProcessorValueTreeState& state,
@@ -97,12 +102,34 @@ private:
     std::atomic<float>* behavior = nullptr;
     std::atomic<float>* standaloneTempo = nullptr;
     std::atomic<float>* glide = nullptr;
+    std::atomic<float>* wailBend = nullptr;
+    std::atomic<float>* wailHold = nullptr;
     std::atomic<float>* metronomeEnabled = nullptr;
     std::atomic<float>* metronomeVolume = nullptr;
     std::atomic<float>* metronomeBeatsPerBar = nullptr;
     std::atomic<float>* metronomeAccent = nullptr;
     std::atomic<float>* metronomeSound = nullptr;
     std::atomic<float>* countIn = nullptr;
+    std::atomic<float>* yap = nullptr;
+    std::atomic<float>* nitro = nullptr;
+    std::array<std::atomic<float>*, phoqer::nitroNotes> nitroNote {}, nitroLevel {};
+    std::atomic<float>* nitroWidth = nullptr;
+    std::atomic<float>* nitroStrum = nullptr;
+    std::atomic<float>* nitroDetune = nullptr;
+    std::atomic<float>* arp = nullptr;
+    std::atomic<float>* arpRate = nullptr;
+    std::atomic<float>* arpPattern = nullptr;
+    std::atomic<float>* arpHold = nullptr;
+    std::atomic<float>* arpGate = nullptr;
+    std::atomic<float>* arpSwing = nullptr;
+    std::atomic<float>* arpOctaves = nullptr;
+    VoiceSelection voices { *this, parameters };     // after the parameters it reads
+    // A song's voice choice restored off the main thread (some hosts load songs on a worker thread)
+    // waits here and is applied on the main thread, where the licence and voice files are read.
+    void handleAsyncUpdate() override;
+    juce::CriticalSection pendingLock;
+    juce::String pendingSelection;
+    bool selectionPending = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PhoqerAudioProcessor)
 };

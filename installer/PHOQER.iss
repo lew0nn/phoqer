@@ -46,7 +46,7 @@ WelcomeFontName=Microsoft Sans Serif
 WelcomeFontSize=12
 
 [Messages]
-WelcomeLabel2=This will install [name/ver] on your computer: the VST3 plug-in for your DAW and the standalone app.%n%nThree seals live inside: BURP, SQUEAL and GROAN.
+WelcomeLabel2=This will install [name/ver] on your computer: the VST3 plug-in for your DAW and the standalone app.%n%nInside: seals that sing.
 
 [Types]
 Name: "full"; Description: "Full installation (VST3 and standalone app)"
@@ -63,7 +63,9 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\NOTICE.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\PHOQER.vst3\*"; DestDir: "{commoncf64}\VST3\PHOQER.vst3"; Components: vst3; Flags: ignoreversion recursesubdirs createallsubdirs
+; An update started by PHOQER passes /VST3DIR="..." (the folder its PHOQER.vst3 was loaded from), so a plug-in kept
+; outside Common Files\VST3 is replaced where it is instead of getting a second copy.
+Source: "..\dist\PHOQER.vst3\*"; DestDir: "{param:VST3DIR|{commoncf64}\VST3}\PHOQER.vst3"; Components: vst3; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\dist\Standalone\*"; DestDir: "{app}"; Components: standalone; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

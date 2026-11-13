@@ -46,7 +46,10 @@ double Recorder::seconds() const noexcept
 
 void Recorder::process(const juce::AudioBuffer<float>& buffer)
 {
-    const juce::ScopedLock sl(writerLock);
+    // Never wait here (audio thread): if start() or stop() holds the lock right now, skip this block.
+    // The lock is what keeps stop() from deleting the writer while this block is being written.
+    const juce::ScopedTryLock sl(writerLock);
+    if (! sl.isLocked()) return;
     auto* w = active.load();
     if (w == nullptr) return;
     // Skip what is left of the count-in; record from the downbeat on.

@@ -1,109 +1,81 @@
-#include "Editor.h"
-
-#include "Logo.h"
-#include "Recorder.h"
-#include "Settings.h"
-
-#include <PhoqerUIAssets.h>
+// PhoqerView: the main window. Building it, layout, drawing, the 60 Hz tick, the keyboard and the mouse;
+// and PhoqerEditor, the plugin window around it (zoom, screen fit).
+#include "EditorShared.h"
 
 namespace phoqer::ui
 {
-namespace
-{
-// Window frames (view coordinates; KEYS.EXE is left out when hidden).
-const juce::Rectangle<float> headWindow { 6, 4, 748, 90 };
-const juce::Rectangle<float> modeWindow { 6, 100, 86, 278 };
-const juce::Rectangle<float> sealWindow { 98, 100, 262, 278 };
-const juce::Rectangle<float> scopeWindow { 366, 100, 388, 194 };
-const juce::Rectangle<float> outputWindow { 366, 300, 388, 78 };
-const juce::Rectangle<float> metroDefault { 465, 125, 173, 168 };    // METRO.EXE's first position: over SCOPE.EXE
-const juce::Rectangle<float> mixerWindow { 6, 384, 748, 228 };
-const juce::Rectangle<float> keysWindow { 6, 618, 748, 106 };
-
-// The main window's title bar is taller than the others' so its real caption buttons are easy to hit.
-constexpr float headTitleHeight = 22.0f;
-constexpr float headerToolsHeight = 24.0f;
-constexpr float captionButtonW = 20.0f, captionButtonH = 18.0f;
-
-
-// Header: the PHOQER wordmark at 2 units per pixel like the rest of the UI, a little in from the left.
-constexpr float logoWordPixel = 2.0f, logoWordInset = 16.0f;
-
-// MANIC: the first 150 ms of a new call in BARK mode above this face intensity flashes the grin.
-constexpr float manicIntensity = 0.85f;
-constexpr double manicWatchSeconds = 0.15, manicHoldSeconds = 0.5;
-constexpr int barkMode = 2;
-
-const char* voiceNames[] { "BURP", "SQUEAL", "GROAN" };
-
-juce::RangedAudioParameter& parameterFor(juce::AudioProcessorValueTreeState& state, const char* id)
-{
-    auto* p = state.getParameter(id);
-    jassert(p != nullptr);
-    return *p;
-}
-
-juce::String percent(double v) { return juce::String(juce::roundToInt(v * 100.0)) + "%"; }
-juce::String decibels(double v) { return (v > 0.0 ? "+" : "") + juce::String(v, 1) + " dB"; }
-juce::String milliseconds(double v) { return v < 1000.0 ? juce::String(juce::roundToInt(v)) + " MS" : juce::String(v / 1000.0, 1) + " S"; }
-juce::String noteName(int note) { return juce::MidiMessage::getMidiNoteName(note, true, true, 4); }
-const char* const modeNames[] { "CALL", "HONK", "BARK", "WAIL", "MURMUR" };
-
-constexpr char controlKeys[] { 'z', 'x', 'c', 'v' };    // octave down/up, velocity down/up
-constexpr int lowestBase = 24, highestBase = 96, velocityStep = 10;
-
-// Header row: the preset box sits between the logo and the voice tabs; REC at the menu row's end.
-constexpr float presetBoxX = 224.0f, presetBoxW = 224.0f;
-
-// Menu item IDs. Radio items (one of several) live in Win98LookAndFeel's radio range.
-constexpr float zoomSteps[] { 1.0f, 1.25f, 1.5f, 2.0f };
-constexpr int zoomIdFirst = Win98LookAndFeel::radioIdFirst + 1;
-constexpr int presetIdFirst = Win98LookAndFeel::radioIdFirst + 100;
-
-// The sound knobs RANDOMIZE touches (never OUTPUT, so it cannot jump your level).
-const char* soundKnobs[] { "boom", "air", "bark", "space", "vowel", "detune", "tide" };
-
-bool modifierHeld()
-{
-    const auto mods = juce::ModifierKeys::getCurrentModifiersRealtime();
-    return mods.isCtrlDown() || mods.isAltDown() || mods.isCommandDown();
-}
-
-juce::String minutesSeconds(double seconds)
-{
-    const int s = static_cast<int>(seconds);
-    return juce::String(s / 60).paddedLeft('0', 2) + ":" + juce::String(s % 60).paddedLeft('0', 2);
-}
-}
-
 // ===================================================================================== VIEW
 PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     : processor(owner), lookAndFeel(laf), scope(owner.getTelemetry()), meter(owner.getTelemetry()),
       bpmField(parameterFor(owner.getParameters(), "standaloneTempo"), "BPM", 20, 400, 15.0f),
+      wailBendPanel(parameterFor(owner.getParameters(), "wailBend"), parameterFor(owner.getParameters(), "wailHold")),
       piano(owner.getKeyboardState()),
       characterAttachment(parameterFor(owner.getParameters(), "character"),
-                          [this](float value) { applyCharacter(juce::roundToInt(value)); }, nullptr),
-      presets(owner.getParameters()),
-      history(owner, [this] { return presets.loadedName(); },
-              [this](const juce::String& name) { presets.select(name); })
+                          [this](float) { applyCharacter(processor.getVoices().getVisualVoice()); }, nullptr),
+      presets(owner),
+      history(owner, [this] { return presets.loadedName()+"\n"+processor.getVoices().captureVoiceToken(); },
+              [this](const juce::String& name) { presets.select(name.upToFirstOccurrenceOf("\n",false,false));processor.getVoices().restoreVoiceToken(name.fromFirstOccurrenceOf("\n",false,false));processor.getVoices().notifyVoiceChange(); })
 {
     setOpaque(true);
     auto& state = processor.getParameters();
     lastCallSerial = processor.getTelemetry().getCallSerial();
     showKeys = UiSettings::get().showKeys();
 
-    const int voiceOrder[] { 0, 1, 2 };    // BURP first: it is the default voice
     for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
     {
-        const int c = voiceOrder[slot];
-        voiceTabs[slot] = std::make_unique<ChoiceButton>(ChoiceButton::Kind::voiceTab, c, voiceNames[c], parameterFor(state, "character"));
+        const int c=static_cast<int>(slot);
+        voiceTabs[slot]=std::make_unique<VoiceSlot98>(c);
+        voiceTabs[slot]->label=voiceNames[c];
+        voiceTabs[slot]->setComponentID("voice"+juce::String(c));
+        voiceTabs[slot]->onClick=[this,c]{if(voiceTabs[static_cast<size_t>(c)]->available)chooseVoice(c);else showVoiceBrowser();};
         addAndMakeVisible(*voiceTabs[slot]);
+        voiceRows[slot]=std::make_unique<VoiceLibraryRow98>(c);
+        voiceRows[slot]->setComponentID("voiceRow"+juce::String(c));
+        voiceRows[slot]->onClick=[this,c]{browserVoice=c;voiceBrowser.repaint();refreshVoiceControls();};
+        voiceBrowser.addAndMakeVisible(*voiceRows[slot]);
     }
+    quickVoice.setComponentID("quickVoice");quickVoice.setWantsKeyboardFocus(false);quickVoice.setMouseClickGrabsKeyboardFocus(false);
+    quickVoice.onClick=[this]
+    {
+        auto& tree=processor.getParameters().state;
+        int mask=static_cast<int>(tree.getProperty("voiceQuickMask",15));
+        const int bit=1<<browserVoice;
+        mask=quickVoice.getToggleState()?mask|bit:mask&~bit;
+        tree.setProperty("voiceQuickMask",mask,nullptr);
+        // The quick bar shows its voices in the order they were put in it: one ticked goes to the end.
+        if(quickVoice.getToggleState())
+        {
+            const auto digit=juce::String(browserVoice);
+            UiSettings::get().setVoiceOrder(UiSettings::get().voiceOrder().removeCharacters(digit)+digit);
+        }
+        refreshVoiceControls();
+    };
+    voiceBrowser.addAndMakeVisible(quickVoice);
+    browseVoices.setComponentID("browseVoices");browseVoices.setTooltip("BROWSE VOICES");
+    browseVoices.onClick=[this]{showVoiceBrowser();};addAndMakeVisible(browseVoices);
+    voiceBrowser.setComponentID("voiceBrowser");voiceBrowser.onClose=[this]{voiceBrowser.setVisible(false);};
+    voiceBrowser.paintFrame=paintVoiceLibraryFrame;
+    voiceBrowser.paintContent=[](juce::Graphics& g,juce::Rectangle<float>){paintVoiceLibraryContent(g);};
+    tryOnlineButton.setComponentID("tryOnline");
+    tryOnlineButton.onClick=[]{juce::URL("https://lewonn.com/phoqer#try").launchInDefaultBrowser();};     // play KYRAX in the browser demo
+    useVoiceButton.setComponentID("useVoice");
+    useVoiceButton.onClick=[this]{if(browserVoice==3&&!processor.getVoices().isVoiceUnlocked()){showEnterKey();return;}chooseVoice(browserVoice);voiceBrowser.setVisible(false);};
+    useVoiceButton.primary=true;
+    keyButton.setComponentID("keyButton");
+    keyButton.onClick=[this]{if(processor.getVoices().isVoiceUnlocked())showRemoveKey();else juce::URL("https://lewonn.itch.io/kyrax").launchInDefaultBrowser();};
+    loadVoiceButton.setComponentID("loadVoice");
+    loadVoiceButton.onClick=[this]{chooseVoiceFile();};
+    for(auto* button:{&tryOnlineButton,&loadVoiceButton,&useVoiceButton,&keyButton})voiceBrowser.addAndMakeVisible(*button);
+    addChildComponent(voiceBrowser);
     for (size_t m = 0; m < modeButtons.size(); ++m)
     {
         modeButtons[m] = std::make_unique<ChoiceButton>(ChoiceButton::Kind::mode, static_cast<int>(m), modeNames[m], parameterFor(state, "behavior"));
         addAndMakeVisible(*modeButtons[m]);
     }
+    modeButtons[3]->onReselect = [this] { showWailBend(); };
+    modeButtons[3]->setTooltip("WAIL: CLICK AGAIN (OR RIGHT-CLICK) FOR WAIL BEND");
+    wailBendPanel.onBeginEdit = [this] { releaseQwertyNotes(); };
+    addChildComponent(wailBendPanel);
 
     struct KnobDef { const char* id; const char* name; const char* description; bool big; };
     const KnobDef defs[] { { "boom", "BOOM", "LOW BODY", true }, { "air", "AIR", "BREATH", true }, { "bark", "BARK", "GROWL", true },
@@ -127,6 +99,213 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
         knob->setDoubleClickReturnValue(true, p.convertFrom0to1(p.getDefaultValue()));
         knobs.push_back(std::move(knob));
     }
+
+    // YAP + NITRO
+    yapButton.setComponentID("yap");
+    nitroButton.setComponentID("nitro");
+    yapAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(state, "yap", yapButton);
+    nitroAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(state, "nitro", nitroButton);
+    nitroButton.onRightClick = [this] { openNitro(); };
+    addAndMakeVisible(yapButton);
+    addAndMakeVisible(nitroButton);
+    nitroKeys = std::make_unique<NitroKeys98>(std::array<juce::RangedAudioParameter*, 3> {
+        &parameterFor(state, "nitroNote1"), &parameterFor(state, "nitroNote2"), &parameterFor(state, "nitroNote3") });
+    nitroKeys->setComponentID("nitroKeys");
+    nitroWindow.addAndMakeVisible(*nitroKeys);
+    for (size_t k = 0; k < nitroLevels.size(); ++k)
+    {
+        const auto id = "nitroLevel" + juce::String(static_cast<int>(k) + 1);
+        auto& slider = nitroLevels[k];
+        slider.colour = nitroNoteColour(static_cast<int>(k));
+        slider.setComponentID(id);
+        nitroAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(state, id, slider));
+        slider.onValueChange = [this] { nitroWindow.repaint(); };
+        nitroWindow.addChildComponent(slider);
+        nitroWatch.push_back(std::make_unique<juce::ParameterAttachment>(parameterFor(state, ("nitroNote" + juce::String(static_cast<int>(k) + 1)).toRawUTF8()),
+                                                                        [this](float) { layoutNitro(); nitroKeys->repaint(); nitroWindow.repaint(); }, nullptr));
+    }
+    {
+        struct NitroKnob { const char* id; const char* name; std::function<juce::String(double)> format; };
+        const NitroKnob nitroDefs[] { { "nitroWidth", "WIDTH", percent },
+                                 { "nitroStrum", "STRUM", [](double v) { return juce::String(juce::roundToInt(v)) + " MS"; } },
+                                 { "nitroDetune", "DETUNE", [](double v) { return juce::String(v, v < 10.0 ? 1 : 0) + " CT"; } } };
+        for (const auto& def : nitroDefs)
+        {
+            PixelKnob::Spec spec;
+            spec.name = def.name;
+            spec.radius = 12.0f;
+            spec.centreY = 20.0f;     // low enough that the dial's ring is not cut off at the top
+            spec.big = false;
+            spec.nameY = 37.0f;
+            spec.boxY = 48.0f;
+            spec.boxH = 15.0f;
+            spec.valueSize = 10.0f;
+            spec.format = def.format;
+            auto knob = std::make_unique<PixelKnob>(spec);
+            knob->setComponentID(def.id);
+            nitroAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(state, def.id, *knob));
+            auto& p = parameterFor(state, def.id);
+            knob->setDoubleClickReturnValue(true, p.convertFrom0to1(p.getDefaultValue()));
+            nitroWindow.addAndMakeVisible(*knob);
+            nitroKnobs.push_back(std::move(knob));
+        }
+    }
+    for (int i = 0; i < static_cast<int>(std::size(nitroStacks)); ++i) stackBox.addItem(nitroStacks[i].name, i + 1);
+    stackBox.setTextWhenNothingSelected("CUSTOM");
+    stackBox.setComponentID("nitroStack");
+    stackBox.onChange = [this]
+    {
+        const int i = stackBox.getSelectedId() - 1;
+        if (! juce::isPositiveAndBelow(i, static_cast<int>(std::size(nitroStacks)))) return;
+        for (int k = 0; k < 3; ++k)
+        {
+            auto& p = parameterFor(processor.getParameters(), ("nitroNote" + juce::String(k + 1)).toRawUTF8());
+            p.beginChangeGesture();
+            p.setValueNotifyingHost(p.convertTo0to1(static_cast<float>(nitroStacks[i].notes[k])));
+            p.endChangeGesture();
+        }
+    };
+    nitroWindow.addAndMakeVisible(stackBox);
+    nitroOk.setComponentID("nitroOk");
+    nitroOk.primary = true;
+    nitroOk.onClick = [this] { nitroWindow.setVisible(false); };
+    nitroWindow.addAndMakeVisible(nitroOk);
+    nitroWindow.setComponentID("nitroWindow");
+    nitroWindow.paintContent = [this](juce::Graphics& g, juce::Rectangle<float> c)
+    {
+        auto& state = processor.getParameters();
+        const auto keys = nitroKeys->getBounds().toFloat();
+        const float w = nitroKeys->whiteWidth();
+        for (const auto [offset, text] : { std::pair { -12, "-12" }, { 0, "ROOT" }, { 12, "+12" }, { 24, "+24" } })
+            drawText(g, text, { keys.getX() + nitroKeys->keyX(offset) + w * 0.5f - 15.0f, keys.getBottom() + 2.0f, 30.0f, 8.0f },
+                     pixelFont(8.0f), win98::shadow, juce::Justification::centred);
+        int row = 0;
+        for (int k = 0; k < 3; ++k)
+        {
+            const int offset = juce::roundToInt(parameterFor(state, ("nitroNote" + juce::String(k + 1)).toRawUTF8()).convertFrom0to1(
+                parameterFor(state, ("nitroNote" + juce::String(k + 1)).toRawUTF8()).getValue()));
+            if (offset == 0) continue;
+            const juce::Rectangle<float> r { c.getX() + nitroMargin, c.getY() + nitroRowsY + row * nitroRowGap, 30.0f, 16.0f };
+            g.setColour(nitroNoteColour(k));
+            g.fillRect(r);
+            g.setColour(juce::Colours::black);
+            g.drawRect(r, 1.0f);
+            drawText(g, (offset > 0 ? "+" : "") + juce::String(offset), r, pixelFont(10.0f, true), juce::Colours::black, juce::Justification::centred);
+            const auto box = juce::Rectangle<float>(c.getRight() - nitroMargin - 34.0f, r.getY(), 34.0f, 16.0f);
+            sunken(g, box);
+            drawText(g, juce::String(juce::roundToInt(nitroLevels[static_cast<size_t>(k)].getValue() * 100.0)) + "%", box.withTrimmedTop(3.0f),
+                     pixelFont(10.0f, true), paletteFor(character).accent.darker(0.6f), juce::Justification::centred);
+            ++row;
+        }
+        if (row < 3)
+        {
+            const juce::Rectangle<float> r { c.getX() + nitroMargin, c.getY() + nitroRowsY + row * nitroRowGap, c.getWidth() - 2.0f * nitroMargin, 16.0f };
+            g.setColour(win98::shadow);
+            g.drawRect(r, 1.0f);
+            drawText(g, "+ ADD A NOTE: TAP A KEY", r, pixelFont(8.0f), win98::shadow, juce::Justification::centred);
+        }
+        drawText(g, "STACK", { c.getX() + nitroMargin, c.getBottom() - 28.0f, 40.0f, 16.0f }, pixelFont(10.0f, true), juce::Colours::black);
+    };
+    addChildComponent(nitroWindow);
+    for (auto* child : nitroWindow.getChildren())
+    {
+        child->setWantsKeyboardFocus(false);
+        child->setMouseClickGrabsKeyboardFocus(false);
+    }
+
+    // ARP, between YAP and NITRO. Right-click it for ARP.EXE.
+    arpButton.setComponentID("arp");
+    arpAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(state, "arp", arpButton);
+    arpButton.onRightClick = [this] { openArp(); };
+    addAndMakeVisible(arpButton);
+    arpSteps.setComponentID("arpSteps");
+    arpSteps.pattern = [this] { return juce::roundToInt(processor.getParameters().getRawParameterValue("arpPattern")->load()); };
+    arpSteps.octaves = [this] { return juce::roundToInt(processor.getParameters().getRawParameterValue("arpOctaves")->load()); };
+    arpWindow.addAndMakeVisible(arpSteps);
+    const auto setArp = [this](const char* id, float value)
+    {
+        auto& p = parameterFor(processor.getParameters(), id);
+        p.beginChangeGesture();
+        p.setValueNotifyingHost(p.convertTo0to1(value));
+        p.endChangeGesture();
+        refreshArp();     // the buttons show the pick at once, not on the next update
+    };
+    const char* const rateNames[] { "1/4", "1/8", "1/16", "1/32", "1/8T" };
+    for (int i = 0; i < 5; ++i)
+    {
+        auto& b = arpRates[static_cast<size_t>(i)];
+        b = std::make_unique<SegmentButton98>(rateNames[i]);
+        b->setComponentID("arpRate" + juce::String(i));
+        b->onPick = [setArp, i] { setArp("arpRate", static_cast<float>(i)); };
+        arpWindow.addAndMakeVisible(*b);
+    }
+    for (int i = 0; i < 2; ++i)
+    {
+        auto& b = arpHolds[static_cast<size_t>(i)];
+        b = std::make_unique<SegmentButton98>(i == 0 ? "OFF" : "ON");
+        b->setComponentID(i == 0 ? "arpHoldOff" : "arpHoldOn");
+        b->setTooltip("HOLD: KEEPS PLAYING AFTER YOU LET GO. A NEW CHORD REPLACES IT");
+        b->onPick = [setArp, i] { setArp("arpHold", static_cast<float>(i)); };
+        arpWindow.addAndMakeVisible(*b);
+    }
+    {
+        struct ArpKnob { const char* id; const char* name; std::function<juce::String(double)> format; };
+        const ArpKnob arpDefs[] { { "arpGate", "GATE", percent }, { "arpSwing", "SWING", percent },
+                                  { "arpOctaves", "OCTAVES", [](double v) { return juce::String(juce::roundToInt(v)) + " OCT"; } } };
+        for (const auto& def : arpDefs)
+        {
+            PixelKnob::Spec spec;
+            spec.name = def.name;
+            spec.radius = 12.0f;
+            spec.centreY = 20.0f;
+            spec.big = false;
+            spec.nameY = 35.5f;     // 6 px from the dial to its name and from the name to its box
+            spec.boxY = 49.0f;
+            spec.boxH = 15.0f;
+            spec.valueSize = 10.0f;
+            spec.format = def.format;
+            auto knob = std::make_unique<PixelKnob>(spec);
+            knob->setComponentID(def.id);
+            arpAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(state, def.id, *knob));
+            auto& p = parameterFor(state, def.id);
+            knob->setDoubleClickReturnValue(true, p.convertFrom0to1(p.getDefaultValue()));
+            arpWindow.addAndMakeVisible(*knob);
+            arpKnobs.push_back(std::move(knob));
+        }
+    }
+    for (const auto* name : { "UP", "DOWN", "UP + DOWN", "RANDOM", "AS PLAYED" }) arpPatternBox.addItem(name, arpPatternBox.getNumItems() + 1);
+    arpPatternBox.setComponentID("arpPattern");
+    arpPatternAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(state, "arpPattern", arpPatternBox);
+    arpWindow.addAndMakeVisible(arpPatternBox);
+    for (const auto* id : { "arpRate", "arpHold", "arpPattern", "arpOctaves" })
+        arpWatch.push_back(std::make_unique<juce::ParameterAttachment>(parameterFor(state, id), [this](float) { refreshArp(); }, nullptr));
+    arpOk.setComponentID("arpOk");
+    arpOk.primary = true;
+    arpOk.onClick = [this] { arpWindow.setVisible(false); };
+    arpWindow.addAndMakeVisible(arpOk);
+    arpWindow.setComponentID("arpWindow");
+    arpWindow.paintContent = [this](juce::Graphics& g, juce::Rectangle<float> c)
+    {
+        const auto steps = arpSteps.getBounds().toFloat();
+        drawText(g, "1", { steps.getX(), steps.getBottom() + 2.0f, 20.0f, 8.0f }, pixelFont(8.0f), win98::shadow);
+        drawText(g, juce::String(ArpSteps98::steps), { steps.getRight() - 20.0f, steps.getBottom() + 2.0f, 20.0f, 8.0f }, pixelFont(8.0f),
+                 win98::shadow, juce::Justification::centredRight);
+        const auto font = pixelFont(10.0f, true);
+        drawText(g, "RATE", { c.getX() + nitroMargin, arpRates[0]->getBounds().toFloat().getY(), 44.0f, 17.0f }, font, juce::Colours::black);
+        drawText(g, "HOLD", { c.getX() + nitroMargin, arpHolds[0]->getBounds().toFloat().getY(), 44.0f, 17.0f }, font, juce::Colours::black);
+        drawText(g, "PATTERN", { c.getX() + nitroMargin, c.getBottom() - 28.0f, 56.0f, 16.0f }, font, juce::Colours::black);
+    };
+    addChildComponent(arpWindow);
+    for (auto* child : arpWindow.getChildren())
+    {
+        child->setWantsKeyboardFocus(false);
+        child->setMouseClickGrabsKeyboardFocus(false);
+    }
+    refreshArp();
+    setupUpdates();
+    diceButton.setComponentID("dice");
+    diceButton.onClick = [this] { randomizeKnobs(); };
+    addAndMakeVisible(diceButton);
 
     for (auto* view : std::initializer_list<juce::Component*> { &seal, &scope, &meter, &menuBar, &presetBox })
         addAndMakeVisible(*view);
@@ -230,6 +409,7 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     setWantsKeyboardFocus(true);
 
     characterAttachment.sendInitialUpdate();
+    refreshVoiceControls();
     setSize(width, baseHeight());
     tick(juce::Time::getMillisecondCounterHiRes() * 0.001);
     startTimerHz(30);
@@ -258,6 +438,8 @@ void PhoqerView::releaseQwertyNotes()
 
 bool PhoqerView::keyStateChanged(bool)
 {
+    // The computer-key piano is the standalone's: in a DAW the host's own typing keyboard plays PHOQER.
+    if (! isStandalone()) return false;
     // No notes while a box is open (its text field gets the typing) or while Ctrl / Alt is held for a shortcut.
     if (dialog != nullptr || blueScreen.isVisible()) { releaseQwertyNotes(); return false; }
     const bool shortcut = modifierHeld();
@@ -305,6 +487,7 @@ void PhoqerView::setWindowControls(WindowControls controls)
     recordControl.setVisible(isStandalone());
     barMetronome.setVisible(isStandalone());
     barTempo.setVisible(isStandalone());
+    piano.setQwertyLabels(isStandalone());          // the letters on the keys are the standalone's computer-key piano
     setMetroOpen(static_cast<bool>(processor.getParameters().state.getProperty("metroOpen", false)));
     chrome = {};                                    // the transport's group box is standalone only
     resized();
@@ -318,6 +501,7 @@ bool PhoqerView::onTitleBar(juce::Point<float> p) const
 // The PHOQER.EXE title bar moves the standalone window, and double-clicking it toggles fullscreen.
 void PhoqerView::mouseDown(const juce::MouseEvent& e)
 {
+    if (updateNotice().isNotEmpty() && noticeArea().contains(e.position)) { openUpdateFromNotice(); return; }     // UPDATE ... READY
     draggingWindow = windowControls.startDrag != nullptr && onTitleBar(e.position);
     if (draggingWindow) windowControls.startDrag(e);
 }
@@ -400,8 +584,8 @@ bool PhoqerView::keyPressed(const juce::KeyPress& key)
                 showMenu(i);
                 return true;
             }
-    // Swallow the playing keys so the host or OS does not also act on them.
-    return ! key.getModifiers().isCommandDown() && ! key.getModifiers().isAltDown() && c != 0
+    // Swallow the playing keys so the OS does not also act on them (standalone only; a DAW keeps its keys).
+    return isStandalone() && ! key.getModifiers().isCommandDown() && ! key.getModifiers().isAltDown() && c != 0
         && (juce::String(qwertyKeys).containsChar(c) || juce::String("zxcv").containsChar(c));
 }
 
@@ -415,22 +599,134 @@ void PhoqerView::setChoice(const char* id, int index)
 
 void PhoqerView::applyCharacter(int c)
 {
-    character = juce::jlimit(0, 2, c);
+    character = juce::jlimit(0, 3, c);
     lookAndFeel.setCharacter(character);
     logoWord = renderOutrunWordmark(character, false);
     fish.setCharacter(character);
     for (auto& k : knobs) k->setCharacter(character);
     for (auto& b : modeButtons) b->setCharacter(character);
+    wailBendPanel.setCharacter(character);
     scope.setCharacter(character);
     bpmField.setCharacter(character);
     metronomeButton.setCharacter(character);
     barMetronome.setCharacter(character);
     barTempo.setCharacter(character);
     metroWindow.setCharacter(character);
+    voiceBrowser.setCharacter(character);
     meter.setCharacter(character);
     piano.setCharacter(character);
+    const bool kyrax = character == 3;
+    for (auto* b : { &yapButton, &arpButton, &nitroButton }) { b->setEnabled(kyrax); b->setVisible(kyrax); }
+    yapButton.setTooltip("YAP: KYRAX TALKS IN 8THS AT THE TEMPO");
+    arpButton.setTooltip("ARP: PLAYS THE HELD KEYS ONE BY ONE AT THE TEMPO. RIGHT-CLICK FOR ARP.EXE");
+    nitroButton.setTooltip("NITRO: EXTRA NOTES ON EVERY KEY. RIGHT-CLICK FOR NITRO.EXE");
+    if (! kyrax) { nitroWindow.setVisible(false); arpWindow.setVisible(false); }
+    nitroWindow.setCharacter(character);
+    arpWindow.setCharacter(character);
+    updateWindow.setCharacter(character);
+    for (auto& k : nitroKnobs) k->setCharacter(character);
+    for (auto& k : arpKnobs) k->setCharacter(character);
+    diceButton.setCharacter(character);
     chrome = {};
     repaint();
+}
+
+juce::Rectangle<float> PhoqerView::nitroBoxArea() const
+{
+    const auto mix = windowClient(mixerWindow);
+    return { mix.getX() + 516.0f, mix.getY() + 174.0f, 214.0f, 35.0f };     // controls 8 below the top line, 7 above the bottom one
+}
+
+void PhoqerView::openNitro()
+{
+    if (! nitroButton.isEnabled()) return;
+    layoutNitro();
+    nitroWindow.setVisible(true);
+    nitroWindow.toFront(false);
+}
+
+// NITRO.EXE: the keyboard, a row for each note in use (then one empty row), the three dials, STACK and OK.
+void PhoqerView::layoutNitro()
+{
+    if (nitroWindow.getWidth() == 0)
+    {
+        const auto box = nitroBoxArea();
+        nitroWindow.setBounds(juce::Rectangle<float>(box.getRight() - nitroWindowW, box.getY() - nitroWindowH - 4.0f, nitroWindowW, nitroWindowH)
+                                  .toNearestInt().constrainedWithin(getLocalBounds()));
+    }
+    const auto c = nitroWindow.clientArea();
+    nitroKeys->setBounds(juce::Rectangle<float>(c.getX() + nitroMargin, c.getY() + nitroKeysY, c.getWidth() - 2.0f * nitroMargin, nitroKeysH).toNearestInt());
+    auto& state = processor.getParameters();
+    int row = 0;
+    std::array<int, 3> notes {};
+    for (int k = 0; k < 3; ++k)
+    {
+        auto& p = parameterFor(state, ("nitroNote" + juce::String(k + 1)).toRawUTF8());
+        notes[static_cast<size_t>(k)] = juce::roundToInt(p.convertFrom0to1(p.getValue()));
+        auto& slider = nitroLevels[static_cast<size_t>(k)];
+        slider.setVisible(notes[static_cast<size_t>(k)] != 0);
+        if (notes[static_cast<size_t>(k)] == 0) continue;
+        slider.setBounds(juce::Rectangle<float>(c.getX() + nitroMargin + 36.0f, c.getY() + nitroRowsY + row * nitroRowGap, c.getWidth() - 2.0f * nitroMargin - 78.0f, 16.0f).toNearestInt());
+        ++row;
+    }
+    const float cell = (c.getWidth() - 2.0f * nitroMargin) / 3.0f;
+    for (size_t k = 0; k < nitroKnobs.size(); ++k)
+        nitroKnobs[k]->setBounds(juce::Rectangle<float>(c.getX() + nitroMargin + k * cell, c.getY() + nitroDialsY, cell, nitroDialH).toNearestInt());
+    stackBox.setBounds(juce::Rectangle<float>(c.getX() + nitroMargin + 40.0f, c.getBottom() - 28.0f, 112.0f, 16.0f).toNearestInt());
+    nitroOk.setBounds(juce::Rectangle<float>(c.getRight() - nitroMargin - 56.0f, c.getBottom() - 29.0f, 56.0f, 18.0f).toNearestInt());
+    int match = 0;
+    for (int i = 0; i < static_cast<int>(std::size(nitroStacks)); ++i)
+    {
+        std::array<int, 3> a { nitroStacks[i].notes[0], nitroStacks[i].notes[1], nitroStacks[i].notes[2] }, b = notes;
+        std::sort(a.begin(), a.end());
+        std::sort(b.begin(), b.end());
+        if (a == b) { match = i + 1; break; }
+    }
+    stackBox.setSelectedId(match, juce::dontSendNotification);
+}
+
+void PhoqerView::openArp()
+{
+    if (! arpButton.isEnabled()) return;
+    layoutArp();
+    arpWindow.setVisible(true);
+    arpWindow.toFront(false);
+}
+
+// ARP.EXE, NITRO.EXE's size: the step preview, RATE, HOLD, the three dials, PATTERN and OK.
+void PhoqerView::layoutArp()
+{
+    if (arpWindow.getWidth() == 0)
+    {
+        const auto box = nitroBoxArea();
+        arpWindow.setBounds(juce::Rectangle<float>(box.getRight() - nitroWindowW, box.getY() - nitroWindowH - 4.0f, nitroWindowW, nitroWindowH)
+                                .toNearestInt().constrainedWithin(getLocalBounds()));
+    }
+    const auto c = arpWindow.clientArea();
+    const float x0 = c.getX() + nitroMargin, w = c.getWidth() - 2.0f * nitroMargin;
+    arpSteps.setBounds(juce::Rectangle<float>(x0, c.getY() + 8.0f, w, 46.0f).toNearestInt());
+    const float bx = x0 + 46.0f, bw = std::floor((x0 + w - bx - 12.0f) / 5.0f);
+    for (size_t i = 0; i < arpRates.size(); ++i)
+        arpRates[i]->setBounds(juce::Rectangle<float>(bx + static_cast<float>(i) * (bw + 3.0f), c.getY() + 66.0f, bw, 17.0f).toNearestInt());
+    for (size_t i = 0; i < arpHolds.size(); ++i)
+        arpHolds[i]->setBounds(juce::Rectangle<float>(bx + static_cast<float>(i) * (bw + 3.0f), c.getY() + 89.0f, bw, 17.0f).toNearestInt());
+    const float cell = w / 3.0f;
+    for (size_t k = 0; k < arpKnobs.size(); ++k)
+        arpKnobs[k]->setBounds(juce::Rectangle<float>(x0 + static_cast<float>(k) * cell, c.getY() + 114.0f, cell, 72.0f).toNearestInt());
+    arpPatternBox.setBounds(juce::Rectangle<float>(x0 + 58.0f, c.getBottom() - 28.0f, 104.0f, 16.0f).toNearestInt());
+    arpOk.setBounds(juce::Rectangle<float>(c.getRight() - nitroMargin - 56.0f, c.getBottom() - 29.0f, 56.0f, 18.0f).toNearestInt());
+}
+
+void PhoqerView::refreshArp()
+{
+    auto& state = processor.getParameters();
+    const int rate = juce::roundToInt(state.getRawParameterValue("arpRate")->load());
+    const bool hold = state.getRawParameterValue("arpHold")->load() >= 0.5f;
+    for (size_t i = 0; i < arpRates.size(); ++i)
+        if (arpRates[i] != nullptr) arpRates[i]->setToggleState(static_cast<int>(i) == rate, juce::dontSendNotification);
+    if (arpHolds[0] != nullptr) arpHolds[0]->setToggleState(! hold, juce::dontSendNotification);
+    if (arpHolds[1] != nullptr) arpHolds[1]->setToggleState(hold, juce::dontSendNotification);
+    arpSteps.repaint();
 }
 
 juce::Rectangle<float> PhoqerView::transportArea() const
@@ -450,11 +746,19 @@ void PhoqerView::resized()
 {
     const auto client = [](juce::Rectangle<float> r) { return windowClient(r); };
     const auto head = windowClient(headWindow, headTitleHeight);
-    menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, head.getWidth(), headerToolsHeight).toNearestInt());
+    menuBar.setBounds(juce::Rectangle<float>(head.getX(), head.getY() - 2.0f, 452.0f, headerToolsHeight).toNearestInt());
     const auto row = head.withTrimmedTop(headerToolsHeight);
-    for (size_t slot = 0; slot < voiceTabs.size(); ++slot)
-        voiceTabs[slot]->setBounds(juce::Rectangle<float>(row.getRight() - 4.0f - (3 - slot) * 94.0f + 4.0f, row.getCentreY() - 12.0f, 90.0f, 24.0f).toNearestInt());
+    voiceControlsKey = {};     // the quick bar lays its tabs out in refreshVoiceControls
+    refreshVoiceControls();
+    browseVoices.setBounds(718,62,26,22);
+    if(voiceBrowser.getWidth()==0)voiceBrowser.setBounds(506,96,238,298);
+    for(size_t i=0;i<4;++i)voiceRows[i]->setBounds(13,48+static_cast<int>(i)*41,212,40);
+    quickVoice.setBounds(14,225,210,18);
+    tryOnlineButton.setBounds(10,247,104,22);
+    useVoiceButton.setBounds(122,247,106,22);
+    keyButton.setBounds(10,276,218,16);
     presetBox.setBounds(juce::Rectangle<float>(presetBoxX, std::round(row.getCentreY() - 12.0f), presetBoxW, 24.0f).toNearestInt());
+    diceButton.setBounds(juce::Rectangle<float>(presetBoxX - 27.0f, std::round(row.getCentreY() - 12.0f), 24.0f, 24.0f).toNearestInt());
     fish.setHome({ juce::roundToInt(row.getX() + logoWordInset), juce::roundToInt(row.getCentreY()) - fish.getHeight() / 2 });
 
     const auto tools = client(modeWindow);
@@ -465,6 +769,7 @@ void PhoqerView::resized()
     scope.setBounds(client(scopeWindow).withTrimmedBottom(18.0f).reduced(2.0f).toNearestInt());
     {
         // METRO.EXE: BPM glass and the metronome on top, beat lights, five settings rows.
+        if (! metroWindow.isPoppedOut())
         metroWindow.setBounds(juce::Rectangle<float>(static_cast<float>(processor.getParameters().state.getProperty("metroX", metroDefault.getX())),
                                                      static_cast<float>(processor.getParameters().state.getProperty("metroY", metroDefault.getY())),
                                                      metroDefault.getWidth(), metroDefault.getHeight()).toNearestInt()
@@ -500,6 +805,16 @@ void PhoqerView::resized()
         barTempo.setBounds(t.withX(t.getX() + h + 4.0f).withWidth(bpmW).toNearestInt());
         recordControl.setBounds(t.withTrimmedLeft(h + 4.0f + bpmW + 8.0f).toNearestInt());
     }
+    {
+        // The KYRAX box: YAP, ARP and NITRO, metronome-size switches with their names, 63 apart.
+        const auto box = nitroBoxArea();
+        const float s = 19.0f, y = box.getY() + 8.0f;
+        yapButton.setBounds(juce::Rectangle<float>(box.getX() + 9.0f, y, s, s).toNearestInt());
+        arpButton.setBounds(juce::Rectangle<float>(box.getX() + 9.0f + 63.0f, y, s, s).toNearestInt());
+        nitroButton.setBounds(juce::Rectangle<float>(box.getX() + 9.0f + 126.0f, y, s, s).toNearestInt());
+        if (nitroWindow.isVisible()) layoutNitro();
+        if (arpWindow.isVisible()) layoutArp();
+    }
     const auto keys = client(keysWindow);
     const float pianoWidth = std::floor((keys.getWidth() - 6.0f) / PianoView::whiteKeysShown) * PianoView::whiteKeysShown;
     piano.setBounds(juce::Rectangle<float>(pianoWidth, keys.getHeight() - 24.0f).withCentre({ keys.getCentreX(), keys.getY() + 3.0f + (keys.getHeight() - 24.0f) * 0.5f }).toNearestInt());
@@ -531,6 +846,7 @@ void PhoqerView::rebuildChrome(float scale)
 
     // Header window: the PHOQER wordmark; the preset box and voice tabs sit on the right.
     const auto head = window98(g, headWindow, "PHOQER.EXE - " + voice, pal, true, headTitleHeight);
+    sunken(g,{464,60,252,26},juce::Colour(14,8,24));
     juce::ignoreUnused(head);     // the wordmark is drawn live in paint(), so it can slide aside
 
     window98(g, modeWindow, "MODE.EXE", pal, false);
@@ -544,6 +860,29 @@ void PhoqerView::rebuildChrome(float scale)
     g.fillRect(mix.getX() + 501.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
     g.setColour(win98::light);
     g.fillRect(mix.getX() + 502.0f, mix.getY() + 14.0f, 1.0f, mix.getHeight() - 28.0f);
+    if (character == 3)
+    {
+        // The KYRAX group box and the switches' names: KYRAX only, nothing there on the other voices.
+        const auto box = nitroBoxArea();
+        g.setColour(win98::shadow);
+        g.drawRect(box.withTrimmedRight(1.0f).withTrimmedBottom(1.0f), 1.0f);
+        g.setColour(win98::light);
+        g.drawRect(box.withTrimmedLeft(1.0f).withTrimmedTop(1.0f), 1.0f);
+        g.setColour(win98::shadow);
+        g.drawRect(box.withTrimmedRight(1.0f).withTrimmedBottom(1.0f), 1.0f);
+        const juce::String caption = "KYRAX";
+        const auto font = pixelFont(8.0f, true);
+        const auto label = juce::Rectangle<float>(box.getX() + 8.0f, box.getY() - 5.0f, juce::GlyphArrangement::getStringWidth(font, caption) + 6.0f, 10.0f);
+        g.setColour(win98::face);
+        g.fillRect(label);
+        const auto ink = juce::Colours::black;
+        drawText(g, caption, label, font, ink, juce::Justification::centred);
+        const auto names = pixelFont(10.0f, true);
+        const float s = 19.0f, y = box.getY() + 8.0f;
+        const char* const switchNames[] { "YAP", "ARP", "NITRO" };
+        for (int i = 0; i < 3; ++i)
+            drawText(g, switchNames[i], { box.getX() + 9.0f + static_cast<float>(i) * 63.0f + s + 5.0f, y, 60.0f, s }, names, ink);
+    }
     if (isStandalone())
     {
         // A Win98 group box round the transport: an etched frame with its caption set into the top line.
@@ -586,10 +925,12 @@ void PhoqerView::paint(juce::Graphics& g)
     statusBar(g, sealClient.withTrimmedTop(sealClient.getHeight() - 15.0f),
               { singing ? noteName(processor.getLastNote()) : juce::String(),
                 singing ? "VEL " + juce::String(processor.getLastVelocity()) : juce::String() });
+    const auto notice = updateNotice();     // an update takes the field that otherwise only says TRIG NOTE
     statusBar(g, scopeClient.withTrimmedTop(scopeClient.getHeight() - 15.0f),
               { juce::String(juce::roundToInt(processor.getTelemetry().getSampleRate() / 1000.0f)) + " kHz",
-                juce::String(juce::roundToInt(scope.capturedMilliseconds())) + " ms", "TRIG NOTE" });
-    if (showKeys)
+                juce::String(juce::roundToInt(scope.capturedMilliseconds())) + " ms", notice.isNotEmpty() ? notice : "TRIG NOTE" },
+              notice.isNotEmpty() ? valueInkFor(character) : juce::Colours::black);
+    if (showKeys && isStandalone())
     {
         const auto keysClient = windowClient(keysWindow);
         const auto bar = keysClient.withTrimmedTop(keysClient.getHeight() - 15.0f);
@@ -605,6 +946,9 @@ void PhoqerView::timerCallback()
 
 void PhoqerView::tick(double now)
 {
+    updateTick();
+    if(character!=processor.getVoices().getVisualVoice())applyCharacter(processor.getVoices().getVisualVoice());
+    refreshVoiceControls();
     const auto& telemetry = processor.getTelemetry();
     const auto target = telemetry.readFace();
     auto follow = [](float& value, float goal) { value += (goal - value) * 0.55f; };
@@ -747,7 +1091,7 @@ void PhoqerView::tick(double now)
 
     // Keep the computer keyboard live: take focus whenever the window is active, and let go of
     // held notes when it is not (key-up events would never arrive).
-    if (auto* peer = getPeer(); peer != nullptr && peer->isFocused())
+    if (auto* peer = getPeer(); isStandalone() && peer != nullptr && peer->isFocused())
     {
         if (! hasKeyboardFocus(true) && isShowing()) grabKeyboardFocus();
     }
@@ -779,448 +1123,10 @@ void PhoqerView::tick(double now)
     {
         logoSlide = std::abs(goal - logoSlide) < 0.5f ? goal : logoSlide + (goal - logoSlide) * 0.27f;
         fish.setVisible(logoSlide > fish.getWidth() * 0.6f && now >= fishBackAt);
+        diceButton.setVisible(logoSlide < 0.5f);     // the fish's wordmark slides over the dice's place
         repaint(logoBounds().getUnion(logoBounds().translated(fishSlide(), 0.0f)).expanded(2.0f).toNearestInt());
     }
     ++frame;
-}
-
-// ------------------------------------------------------------------------------------------ MENUS
-namespace
-{
-void addItem(juce::PopupMenu& menu, const juce::String& text, int id, bool enabled, bool ticked, const juce::String& shortcut,
-             std::function<void()> action)
-{
-    juce::PopupMenu::Item item(text);
-    item.itemID = id;
-    item.isEnabled = enabled;
-    item.isTicked = ticked;
-    item.shortcutKeyDescription = shortcut;
-    item.action = std::move(action);
-    menu.addItem(std::move(item));
-}
-}
-
-void PhoqerView::addPresetItems(juce::PopupMenu& menu)
-{
-    presets.refresh();
-    const auto& all = presets.all();
-    for (size_t i = 0; i < all.size(); ++i)
-    {
-        const int index = static_cast<int>(i);
-        if (index > 0 && ! presets.isBuiltIn(index) && presets.isBuiltIn(index - 1)) menu.addSeparator();    // your own presets
-        addItem(menu, PresetLibrary::numbered(index, all[i].name), presetIdFirst + index, true, index == presets.currentIndex(), {},
-                [this, index] { loadPreset(index); });
-    }
-}
-
-juce::PopupMenu PhoqerView::buildMenu(int index)
-{
-    juce::PopupMenu m;
-    int id = 1;
-    switch (index)
-    {
-        case 0:    // EDIT
-            addItem(m, "UNDO", id++, history.canUndo(), false, "CTRL+Z", [this] { history.undo(); });
-            addItem(m, "REDO", id++, history.canRedo(), false, "CTRL+Y", [this] { history.redo(); });
-            m.addSeparator();
-            addItem(m, "RESET ALL KNOBS", id++, true, false, {}, [this] { resetKnobs(); });
-            addItem(m, "RANDOMIZE KNOBS", id++, true, false, {}, [this] { randomizeKnobs(); });
-            addItem(m, "REVERT TO PRESET", id++, presets.currentIndex() >= 0 && presets.isDirty(), false, {},
-                    [this] { loadPreset(presets.currentIndex()); });
-            m.addSeparator();
-            addItem(m, "COPY SETTINGS", id++, true, false, {}, [this] { copySettings(); });
-            addItem(m, "PASTE SETTINGS", id++, true, false, {}, [this] { pasteSettings(); });
-            m.addSeparator();
-            addItem(m, "PANIC (ALL NOTES OFF)", id++, true, false, {}, [this] { panic(); });
-            m.addSeparator();
-            addItem(m, "AUDIO/MIDI SETUP...", id++, windowControls.audioSettings != nullptr, false, {},
-                    [this] { if (windowControls.audioSettings) windowControls.audioSettings(); });
-            break;
-
-        case 1:    // VIEW
-        {
-            const float zoom = currentZoom ? currentZoom() : 1.0f;
-            for (int z = 0; z < static_cast<int>(std::size(zoomSteps)); ++z)
-            {
-                const float step = zoomSteps[z];
-                addItem(m, "ZOOM " + juce::String(juce::roundToInt(step * 100.0f)) + "%", zoomIdFirst + z, true,
-                        std::abs(zoom - step) < 0.005f, {}, [this, step] { if (onZoom) onZoom(step); });
-            }
-            addItem(m, "FIT TO SCREEN", id++, true, false, {}, [this] { if (onFitToScreen) onFitToScreen(); });
-            m.addSeparator();
-            addItem(m, "START IN FULL SCREEN", id++, windowControls.toggleFullscreen != nullptr, UiSettings::get().startFullscreen(), {},
-                    [] { UiSettings::get().setStartFullscreen(! UiSettings::get().startFullscreen()); });
-            m.addSeparator();
-            addItem(m, "KEYS.EXE", id++, true, showKeys, {}, [this] { toggleKeys(); });
-            break;
-        }
-
-        case 2:    // PRESET
-            addItem(m, "SAVE PRESET...", id++, true, false, "CTRL+S", [this] { showSavePreset(); });
-            addItem(m, "OPEN PRESET...", id++, true, false, "CTRL+O", [this] { showOpenPreset(); });
-            addItem(m, "INIT", id++, true, false, {}, [this] { loadPreset(0); });
-            m.addSeparator();
-            addPresetItems(m);
-            break;
-
-        case 3:    // HELP
-            addItem(m, "KEYBOARD SHORTCUTS...", id++, true, false, {}, [this] { showShortcuts(); });
-            addItem(m, "CONTROLS GUIDE...", id++, true, false, {}, [this] { showGuide(); });
-            m.addSeparator();
-            addItem(m, "VISIT GITHUB...", id++, true, false, {},
-                    [] { juce::URL("https://github.com/lew0nn/phoqer").launchInDefaultBrowser(); });
-            addItem(m, "LICENCES...", id++, true, false, {}, [this] { showLicences(); });
-            m.addSeparator();
-            addItem(m, "ABOUT PHOQER...", id++, true, false, {}, [this] { showAbout(); });
-            break;
-
-        default: break;
-    }
-    return m;
-}
-
-void PhoqerView::showMenu(int index)
-{
-    if (dialog != nullptr || ! juce::isPositiveAndBelow(index, MenuBar98::itemCount)) return;
-    auto menu = buildMenu(index);
-    const auto title = menuBar.itemBounds(index);
-    showPopup(menu, title.translated(static_cast<float>(menuBar.getX()), static_cast<float>(menuBar.getY())), index);
-}
-
-// Drops a menu down from an area of this view. The target component makes the menu scale with the zoom.
-void PhoqerView::showPopup(juce::PopupMenu& menu, juce::Rectangle<float> target, int menuIndex)
-{
-    releaseQwertyNotes();
-    menu.setLookAndFeel(&lookAndFeel);
-    menuBar.setOpenIndex(menuIndex);
-    const auto screenArea = localAreaToGlobal(target.toNearestInt());
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withTargetScreenArea(screenArea)
-                                                 .withMinimumWidth(140),
-                       [safe = juce::Component::SafePointer<PhoqerView>(this)](int)
-                       {
-                           if (safe != nullptr) safe->menuBar.setOpenIndex(-1);
-                       });
-}
-
-// ---------------------------------------------------------------------------------------- ACTIONS
-void PhoqerView::resetKnobs()
-{
-    history.performAsOne([this]
-    {
-        for (const auto* id : { "boom", "air", "bark", "space", "vowel", "detune", "tide", "glide", "output" })
-        {
-            auto& p = parameterFor(processor.getParameters(), id);
-            p.beginChangeGesture();
-            p.setValueNotifyingHost(p.getDefaultValue());
-            p.endChangeGesture();
-        }
-    });
-}
-
-void PhoqerView::randomizeKnobs()
-{
-    history.performAsOne([this]
-    {
-        auto& random = juce::Random::getSystemRandom();
-        for (const auto* id : soundKnobs)
-        {
-            auto& p = parameterFor(processor.getParameters(), id);
-            p.beginChangeGesture();
-            p.setValueNotifyingHost(random.nextFloat());
-            p.endChangeGesture();
-        }
-    });
-}
-
-void PhoqerView::loadPreset(int index)
-{
-    history.performAsOne([this, index] { presets.load(index); });
-}
-
-void PhoqerView::stepPreset(int delta)
-{
-    presets.refresh();
-    const int count = static_cast<int>(presets.all().size());
-    if (count == 0) return;
-    const int from = presets.currentIndex() < 0 ? (delta > 0 ? -1 : 0) : presets.currentIndex();
-    loadPreset(((from + delta) % count + count) % count);
-}
-
-void PhoqerView::toggleKeys()
-{
-    showKeys = ! showKeys;
-    UiSettings::get().setShowKeys(showKeys);
-    if (! showKeys) releaseQwertyNotes();
-    piano.setVisible(showKeys);
-    setSize(width, baseHeight());
-    chrome = {};
-    repaint();
-    if (onLayoutChanged) onLayoutChanged();
-}
-
-void PhoqerView::showDialog(Dialog98::Spec spec)
-{
-    releaseQwertyNotes();
-    spec.character = character;
-    auto userClose = std::move(spec.onClose);
-    spec.onClose = [this, userClose](int button, const juce::String& field)
-    {
-        dialog = nullptr;                                     // gone before the action, which may open another box
-        if (userClose) userClose(button, field);
-    };
-    dialog = std::make_unique<Dialog98>(std::move(spec));
-    addAndMakeVisible(*dialog);
-}
-
-void PhoqerView::showMessage(const juce::String& title, const juce::StringArray& lines)
-{
-    Dialog98::Spec spec;
-    spec.title = title;
-    spec.lines = lines;
-    showDialog(std::move(spec));
-}
-
-void PhoqerView::showAbout()
-{
-    Dialog98::Spec spec;
-    spec.title = "ABOUT PHOQER";
-    spec.icon = loadAssetImage("phoqer-app-icon-32.png");
-    spec.lines = { "PHOQER", "VERSION " JucePlugin_VersionString, "", "~A SYNTHETIC SEAL VOICE", "~LWNX DSP" };
-    showDialog(std::move(spec));
-}
-
-void PhoqerView::showShortcuts()
-{
-    Dialog98::Spec spec;
-    spec.title = "KEYBOARD SHORTCUTS";
-    spec.width = 560.0f;
-    spec.labelWidth = 190.0f;
-    spec.lines = { "#PLAY",
-                   "KEYS.EXE|YOUR KEYBOARD IS A PIANO: PRESS THE LETTER ON A KEY",
-                   "[Z] [X]|ONE OCTAVE DOWN, ONE UP",
-                   "[C] [V]|SOFTER, HARDER",
-                   "#EDIT",
-                   "[CTRL]+[Z]|UNDO",
-                   "[CTRL]+[Y]|REDO",
-                   "[CTRL]+[S]|SAVE A PRESET",
-                   "[CTRL]+[O]|OPEN A PRESET",
-                   "[ALT]+[E] [V] [P] [H]|OPEN A MENU" };
-    showDialog(std::move(spec));
-}
-
-void PhoqerView::showGuide()
-{
-    Dialog98::Spec spec;
-    spec.title = "CONTROLS GUIDE";
-    spec.width = 560.0f;
-    spec.labelWidth = 110.0f;
-    spec.lines = { "#KNOBS",
-                   "BOOM|THE SEAL'S SIZE: SMALL, OR BIG WITH MORE CHEST",
-                   "AIR|BREATH, FROM NONE AT ALL",
-                   "BARK|ATTACK AND GROWL: A SOFT SWELL TO A HARD HIT",
-                   "SPACE|REVERB: DRY TO A BIG DARK CAVE",
-                   "VOWEL|OO, OH, AH, EH, EE",
-                   "DETUNE|WIDTH: ONE VOICE TO A WIDE DOUBLE",
-                   "TIDE|EXPRESSION: A STRAIGHT NOTE TO SCOOPS AND VIBRATO",
-                   "OUTPUT|THE LEVEL",
-                   "#MODES",
-                   "CALL|ONE CALL PER NOTE",
-                   "HONK|NASAL HONKS WHILE THE KEY IS HELD",
-                   "BARK|HARD BARKS WHILE THE KEY IS HELD",
-                   "WAIL|A LONG GLIDE UP AND BACK",
-                   "MURMUR|A MUTTERED, CLOSED-MOUTH HUM",
-                   "#METRONOME (STANDALONE APP)",
-                   "SWITCH|ABOVE THE SMALL KNOBS, BESIDE REC: THE CLICK ON / OFF; NEVER IN WAV TAKES",
-                   "BPM|CLICK IT TO OPEN METRO.EXE; CLICK THE BPM THERE TO TYPE A TEMPO",
-                   "SETTINGS|VOLUME, BEATS PER BAR, ACCENT ON BEAT 1, SOUND",
-                   "COUNT-IN|1 OR 2 BARS OF CLICKS BEFORE REC STARTS",
-                   "REC|RECORD TO WAV; PRESS AGAIN TO STOP AND SAVE" };
-    showDialog(std::move(spec));
-}
-
-void PhoqerView::showLicences()
-{
-    Dialog98::Spec spec;
-    spec.title = "LICENCES";
-    spec.width = 520.0f;
-    spec.labelWidth = 240.0f;
-    spec.lines = { "#PHOQER IS FREE SOFTWARE",
-                   "PHOQER|GNU AGPL 3.0 ONLY",
-                   "#BUILT WITH",
-                   "JUCE|AGPL 3.0",
-                   "VST3 SDK|GPL 3.0",
-                   "SILKSCREEN, PRESS START 2P|SIL OFL 1.1",
-                   "ROBOTO|APACHE 2.0",
-                   "",
-                   "~OPEN TEXTS SHOWS THE FULL LICENCES" };
-    spec.buttons = { "OPEN TEXTS", "OK" };
-    spec.onClose = [](int button, const juce::String&)
-    {
-        if (button != 0) return;
-        // The texts are built into the plugin, so they open even where no files sit beside it.
-        const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("PHOQER-Licenses");
-        folder.createDirectory();
-        for (const auto* file : { "LICENSE", "NOTICE.md", "THIRD_PARTY_NOTICES.md", "OFL-Silkscreen.txt",
-                                  "OFL-PressStart2P.txt", "Apache-2.0.txt", "Roboto-NOTICE.txt" })
-            for (int i = 0; i < PhoqerUIAssets::namedResourceListSize; ++i)
-            {
-                const auto* name = PhoqerUIAssets::namedResourceList[i];
-                if (juce::String(PhoqerUIAssets::getNamedResourceOriginalFilename(name)) != file) continue;
-                int size = 0;
-                const auto* data = PhoqerUIAssets::getNamedResource(name, size);
-                folder.getChildFile(file).replaceWithData(data, static_cast<size_t>(size));
-            }
-        folder.startAsProcess();
-    };
-    showDialog(std::move(spec));
-}
-
-void PhoqerView::panic()
-{
-    releaseQwertyNotes();
-    processor.getKeyboardState().allNotesOff(0);
-    processor.panic();
-}
-
-// A sound as one line of text, to paste into a message and back: "PHOQER character=0 behavior=2 boom=0.750 ..."
-void PhoqerView::copySettings()
-{
-    juce::String text = "PHOQER";
-    for (const auto& id : PresetLibrary::parameterIds())
-        if (auto* v = processor.getParameters().getRawParameterValue(id))
-            text << " " << id << "=" << juce::String(v->load(), 3);
-    juce::SystemClipboard::copyTextToClipboard(text);
-    showMessage("COPY SETTINGS", { "THE SOUND IS ON THE CLIPBOARD.", "~PASTE IT IN A MESSAGE, OR BACK HERE" });
-}
-
-void PhoqerView::pasteSettings()
-{
-    const auto tokens = juce::StringArray::fromTokens(juce::SystemClipboard::getTextFromClipboard().trim(), " \t\r\n", {});
-    const auto ids = PresetLibrary::parameterIds();
-    std::vector<std::pair<juce::String, float>> values;
-    if (tokens.size() > 1 && tokens[0] == "PHOQER")
-        for (int i = 1; i < tokens.size(); ++i)
-        {
-            const auto key = tokens[i].upToFirstOccurrenceOf("=", false, false);
-            if (ids.contains(key) && tokens[i].containsChar('='))
-                values.emplace_back(key, tokens[i].fromFirstOccurrenceOf("=", false, false).getFloatValue());
-        }
-    if (values.empty())
-    {
-        showMessage("PASTE SETTINGS", { "NO PHOQER SOUND ON THE CLIPBOARD.", "~COPY ONE WITH EDIT > COPY SETTINGS" });
-        return;
-    }
-    history.performAsOne([this, &values]
-    {
-        for (const auto& [id, value] : values)
-        {
-            auto& p = parameterFor(processor.getParameters(), id.toRawUTF8());
-            p.beginChangeGesture();
-            p.setValueNotifyingHost(p.convertTo0to1(value));
-            p.endChangeGesture();
-        }
-    });
-}
-
-void PhoqerView::showSavePreset()
-{
-    if (dialog != nullptr) return;
-    const int current = presets.currentIndex();
-    Dialog98::Spec spec;
-    spec.title = "SAVE PRESET";
-    spec.lines = { "NAME THIS SOUND:", "~SAVED IN DOCUMENTS\\PHOQER\\PRESETS" };
-    spec.fieldLabel = "NAME:";
-    spec.fieldText = current >= 0 && ! presets.isBuiltIn(current) ? presets.all()[static_cast<size_t>(current)].name
-                                                                 : juce::String("MY ") + voiceNames[character];
-    spec.buttons = { "SAVE", "CANCEL" };
-    spec.onClose = [this](int button, const juce::String& text) { if (button == 0) savePresetAs(text); };
-    showDialog(std::move(spec));
-}
-
-void PhoqerView::savePresetAs(const juce::String& rawName)
-{
-    const auto name = PresetLibrary::cleanName(rawName);
-    if (name.isEmpty()) { showMessage("SAVE PRESET", { "TYPE A NAME FIRST.", "~LETTERS, DIGITS, SPACE, - AND _" }); return; }
-    const int existing = presets.find(name);
-    if (presets.isBuiltIn(existing)) { showMessage("SAVE PRESET", { name + " IS A BUILT-IN PRESET.", "~PICK ANOTHER NAME." }); return; }
-    auto write = [this, name]
-    {
-        if (! presets.save(name)) showMessage("SAVE PRESET", { "COULD NOT SAVE THE PRESET.", "~" + PresetLibrary::folder().getFullPathName().toUpperCase() });
-    };
-    if (existing < 0) { write(); return; }
-    Dialog98::Spec spec;
-    spec.title = "SAVE PRESET";
-    spec.lines = { name + " ALREADY EXISTS.", "REPLACE IT?" };
-    spec.buttons = { "YES", "NO" };
-    spec.onClose = [write](int button, const juce::String&) { if (button == 0) write(); };
-    showDialog(std::move(spec));
-}
-
-void PhoqerView::showOpenPreset()
-{
-    if (dialog != nullptr || chooser != nullptr) return;
-    releaseQwertyNotes();
-    PresetLibrary::folder().createDirectory();
-    chooser = std::make_unique<juce::FileChooser>("OPEN PRESET", PresetLibrary::folder(), "*.phqpreset");
-    chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                         [safe = juce::Component::SafePointer<PhoqerView>(this)](const juce::FileChooser& fc)
-                         {
-                             if (safe == nullptr) return;
-                             const auto file = fc.getResult();
-                             safe->chooser = nullptr;
-                             if (file == juce::File()) return;
-                             bool ok = false;
-                             safe->history.performAsOne([&] { ok = safe->presets.loadFile(file); });
-                             if (! ok) safe->showMessage("OPEN PRESET", { "NOT A PHOQER PRESET:", "~" + file.getFileName().toUpperCase() });
-                         });
-}
-
-void PhoqerView::toggleRecording()
-{
-    auto& recorder = processor.getRecorder();
-    if (! recorder.isRecording())
-    {
-        if (dialog != nullptr) return;
-        recordChannels = juce::jlimit(1, 2, processor.getTotalNumOutputChannels());
-        // COUNT-IN: whole bars of clicks first; the take starts on the downbeat after them.
-        const double rate = processor.getSampleRate(), bpm = processor.getParameters().getRawParameterValue("standaloneTempo")->load();
-        const auto countIn = static_cast<juce::int64>(std::llround(processor.getCountInBars() * processor.getMetronomeBeatsPerBar()
-                                                                   * 60.0 / juce::jmax(20.0, bpm) * rate));
-        if (! recorder.start(rate, recordChannels, countIn))
-            showMessage("RECORD", { "COULD NOT START RECORDING.", "~CHECK THE AUDIO SETUP." });
-        return;
-    }
-    const double length = recorder.seconds(), rate = recorder.sampleRate();
-    pendingTake = recorder.stop();
-    Dialog98::Spec spec;
-    spec.title = "SAVE RECORDING";
-    spec.lines = { "SAVE THIS TAKE?",
-                   "~LENGTH " + minutesSeconds(length) + "  " + juce::String(juce::roundToInt(rate / 1000.0)) + " KHZ  24-BIT "
-                       + (recordChannels == 2 ? "STEREO" : "MONO"),
-                   "~SAVED IN DOCUMENTS\\PHOQER\\RECORDINGS" };
-    spec.fieldLabel = "FILE:";
-    spec.fieldText = Recorder::nextFileName(voiceNames[character]).getFileName();
-    spec.buttons = { "SAVE", "DISCARD" };
-    spec.closable = false;                                    // a take is only lost on purpose
-    spec.onClose = [this](int button, const juce::String& text)
-    {
-        if (button == 0) saveTake(text);
-        else { pendingTake.deleteFile(); pendingTake = juce::File(); }
-    };
-    showDialog(std::move(spec));
-}
-
-void PhoqerView::saveTake(const juce::String& rawName)
-{
-    auto name = juce::File::createLegalFileName(rawName.trim());
-    if (name.isEmpty()) name = Recorder::nextFileName(voiceNames[character]).getFileName();
-    if (! name.endsWithIgnoreCase(".wav")) name << ".WAV";
-    auto folder = Recorder::folder();
-    folder.createDirectory();
-    auto target = folder.getChildFile(name);
-    if (target.exists()) target = target.getNonexistentSibling(false);
-    if (pendingTake.moveFileTo(target)) { pendingTake = juce::File(); return; }
-    showMessage("SAVE RECORDING", { "COULD NOT SAVE THE TAKE.", "~IT WILL BE SAVED ON EXIT INSTEAD." });
 }
 
 // =================================================================================== EDITOR

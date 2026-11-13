@@ -1,4 +1,5 @@
 #include "Presets.h"
+#include "../PluginProcessor.h"
 
 namespace phoqer::ui
 {
@@ -30,10 +31,23 @@ constexpr BuiltIn builtIns[] {
     { "GRN HONK SHOW",    2, 1, 0.50f, 0.10f, 0.60f, 0.25f, 0.45f, 0.10f, 0.30f },
 };
 
+// KYRAX's bank, listed only once KYRAX is installed and unlocked on this computer. Each one plays the
+// installed KYRAX (GROAN is the stand-in a saved copy names) and sets YAP, NITRO and GLIDE as well.
+// Mode, the seven sound knobs, GLIDE (ms), YAP, NITRO, its three notes, level, WIDTH, STRUM (ms), DETUNE (ct).
+struct KyraxBuiltIn { const char* name; int mode; float boom, air, bark, space, vowel, detune, tide, glide; bool yap, nitro;
+                      int note1, note2, note3; float level, width, strum, cents; };
+constexpr KyraxBuiltIn kyraxBuiltIns[] {
+    { "KYX TALK SHOW",   0, 0.55f, 0.20f, 0.40f, 0.20f, 0.50f, 0.00f, 0.30f,  0.0f, true,  false,  7, 12,   0, 0.7f, 0.6f, 12.0f,  0.0f },
+    { "KYX POWER STACK", 2, 0.70f, 0.10f, 0.70f, 0.15f, 0.35f, 0.00f, 0.20f,  0.0f, false, true,   7, 12,   0, 0.7f, 0.6f,  0.0f,  0.0f },
+    { "KYX MEGA CHOIR",  0, 0.50f, 0.30f, 0.15f, 0.60f, 0.40f, 0.20f, 0.50f,  0.0f, false, true,  12, 19, -12, 0.6f, 0.9f,  0.0f, 12.0f },
+    { "KYX HARP RISE",   0, 0.45f, 0.25f, 0.25f, 0.45f, 0.50f, 0.00f, 0.35f,  0.0f, false, true,  12, 19,  24, 0.6f, 0.9f, 80.0f,  0.0f },
+    { "KYX DOUBLE TALK", 0, 0.60f, 0.20f, 0.35f, 0.30f, 0.60f, 0.00f, 0.40f, 80.0f, true,  true,  12,  0,   0, 0.6f, 0.5f,  0.0f,  0.0f },
+};
+
 bool same(float a, float b) { return std::abs(a - b) < 0.0015f; }
 }
 
-PresetLibrary::PresetLibrary(juce::AudioProcessorValueTreeState& s) : state(s)
+PresetLibrary::PresetLibrary(PhoqerAudioProcessor& p) : processor(p),state(p.getParameters())
 {
     refresh();
     // Pick up the preset the session was using, without re-applying it.
@@ -49,7 +63,9 @@ juce::File PresetLibrary::folder()
 
 juce::StringArray PresetLibrary::parameterIds()
 {
-    return { "character", "behavior", "boom", "air", "bark", "space", "vowel", "detune", "tide", "glide" };
+    return { "character", "behavior", "boom", "air", "bark", "space", "vowel", "detune", "tide", "glide", "wailBend", "wailHold",
+             "yap", "nitro", "nitroNote1", "nitroNote2", "nitroNote3", "nitroLevel1", "nitroLevel2", "nitroLevel3",
+             "nitroWidth", "nitroStrum", "nitroDetune", "arp", "arpRate", "arpPattern", "arpHold", "arpGate", "arpSwing", "arpOctaves" };
 }
 
 void PresetLibrary::refresh()
@@ -64,6 +80,20 @@ void PresetLibrary::refresh()
                      { "air", b.air }, { "bark", b.bark }, { "space", b.space }, { "vowel", b.vowel }, { "detune", b.detune }, { "tide", b.tide } };
         presets.push_back(p);
     }
+    if (processor.getVoices().hasLoadedVoice())
+        for (const auto& b : kyraxBuiltIns)
+        {
+            Preset p;
+            p.name = b.name;
+            p.voiceSelection = R"({"selected":true})";     // the installed KYRAX
+            p.values = { { "character", 2.0f }, { "behavior", static_cast<float>(b.mode) }, { "boom", b.boom }, { "air", b.air },
+                         { "bark", b.bark }, { "space", b.space }, { "vowel", b.vowel }, { "detune", b.detune }, { "tide", b.tide },
+                         { "glide", b.glide }, { "yap", b.yap ? 1.0f : 0.0f }, { "nitro", b.nitro ? 1.0f : 0.0f },
+                         { "nitroNote1", static_cast<float>(b.note1) }, { "nitroNote2", static_cast<float>(b.note2) },
+                         { "nitroNote3", static_cast<float>(b.note3) }, { "nitroLevel1", b.level }, { "nitroLevel2", b.level },
+                         { "nitroLevel3", b.level }, { "nitroWidth", b.width }, { "nitroStrum", b.strum }, { "nitroDetune", b.cents } };
+            presets.push_back(p);
+        }
     auto files = folder().findChildFiles(juce::File::findFiles, false, juce::String("*") + fileExtension);
     files.sort();
     for (const auto& f : files)
@@ -72,6 +102,7 @@ void PresetLibrary::refresh()
             Preset p;
             p.name = xml->getStringAttribute("name", f.getFileNameWithoutExtension()).toUpperCase();
             p.file = f;
+            p.voiceSelection=xml->getStringAttribute("loadedVoiceSelection");
             for (auto* e : xml->getChildWithTagNameIterator("PARAM"))
                 p.values[e->getStringAttribute("id")] = static_cast<float>(e->getDoubleAttribute("value"));
             presets.push_back(p);
@@ -85,6 +116,7 @@ Preset PresetLibrary::capture(const juce::String& name) const
 {
     Preset p;
     p.name = name;
+    p.voiceSelection=processor.getVoices().captureVoiceSelection();
     for (const auto& id : parameterIds())
         if (auto* param = state.getParameter(id))
             p.values[id] = param->convertFrom0to1(param->getValue());
@@ -93,13 +125,16 @@ Preset PresetLibrary::capture(const juce::String& name) const
 
 void PresetLibrary::apply(const Preset& p)
 {
-    if (p.values.find("glide") == p.values.end())          // older presets predate GLIDE: no glide, not the last one
-        if (auto* param = state.getParameter("glide"))
-        {
-            param->beginChangeGesture();
-            param->setValueNotifyingHost(param->getDefaultValue());
-            param->endChangeGesture();
-        }
+    for (const auto* id : { "glide", "wailBend", "wailHold", "yap", "nitro", "nitroNote1", "nitroNote2", "nitroNote3", "nitroLevel1",
+                            "nitroLevel2", "nitroLevel3", "nitroWidth", "nitroStrum", "nitroDetune",
+                            "arp", "arpRate", "arpPattern", "arpHold", "arpGate", "arpSwing", "arpOctaves" })     // older presets predate these: the default, not the last one
+        if (p.values.find(id) == p.values.end())
+            if (auto* param = state.getParameter(id))
+            {
+                param->beginChangeGesture();
+                param->setValueNotifyingHost(param->getDefaultValue());
+                param->endChangeGesture();
+            }
     for (const auto& [id, value] : p.values)     // a preset file can only set the sound, never OUTPUT
         if (auto* param = state.getParameter(id); param != nullptr && parameterIds().contains(id))
         {
@@ -107,6 +142,10 @@ void PresetLibrary::apply(const Preset& p)
             param->setValueNotifyingHost(param->convertTo0to1(value));
             param->endChangeGesture();
         }
+    // The voice last, as a song restores it: a locked paid voice names the preset's own free voice
+    // as the stand-in, not the one that was playing before.
+    processor.getVoices().restoreVoiceSelection(p.voiceSelection);
+    processor.getVoices().notifyVoiceChange();
 }
 
 void PresetLibrary::remember(const juce::String& name)
@@ -131,6 +170,7 @@ bool PresetLibrary::loadFile(const juce::File& f)
     Preset p;
     p.name = xml->getStringAttribute("name", f.getFileNameWithoutExtension()).toUpperCase();
     p.file = f;
+    p.voiceSelection=xml->getStringAttribute("loadedVoiceSelection");
     for (auto* e : xml->getChildWithTagNameIterator("PARAM"))
         p.values[e->getStringAttribute("id")] = static_cast<float>(e->getDoubleAttribute("value"));
     apply(p);
@@ -181,6 +221,7 @@ bool PresetLibrary::save(const juce::String& rawName)
     juce::XmlElement xml("PHOQERPRESET");
     xml.setAttribute("name", name);
     xml.setAttribute("version", 1);
+    xml.setAttribute("loadedVoiceSelection",p.voiceSelection);
     for (const auto& [id, value] : p.values)
     {
         auto* e = xml.createNewChildElement("PARAM");
@@ -202,6 +243,17 @@ bool PresetLibrary::save(const juce::String& rawName)
 bool PresetLibrary::isDirty() const
 {
     if (! hasLoaded) return false;
+    // Parsed once per loaded preset. Holding the string keeps its buffer alive, so a new preset's
+    // text can never reuse the same address.
+    if (loaded.voiceSelection.getCharPointer().getAddress() != parsedSelection.getCharPointer().getAddress())
+    {
+        parsedSelection = loaded.voiceSelection;
+        const auto voice = juce::JSON::parse(parsedSelection);
+        parsedSelected = static_cast<bool>(voice["selected"]);
+        parsedHash = voice["hash"].toString();
+    }
+    if(parsedSelected!=(processor.getVoices().getVisualVoice()==3))return true;
+    if(processor.getVoices().getVisualVoice()==3&&parsedHash.isNotEmpty()&&parsedHash!=processor.getVoices().loadedVoiceHash())return true;     // no hash: the installed KYRAX (a built-in)
     for (const auto& [id, value] : loaded.values)
         if (auto* param = state.getParameter(id); param != nullptr && ! same(param->convertFrom0to1(param->getValue()), value))
             return true;

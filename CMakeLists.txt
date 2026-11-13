@@ -1,17 +1,15 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(PHOQER VERSION 1.0.1 LANGUAGES C CXX)
+set(PHOQER_VERSION "1.1.0" CACHE STRING "PHOQER version (a test build of a fake update sets 1.1.1)")
+project(PHOQER VERSION ${PHOQER_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/JUCE/CMakeLists.txt")
-    message(FATAL_ERROR "JUCE is missing. Run: git submodule update --init --recursive")
-endif()
-
-add_subdirectory(vendor/JUCE)
+set(PHOQER_JUCE_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/vendor/JUCE" CACHE PATH "Existing JUCE source")
+add_subdirectory("${PHOQER_JUCE_SOURCE}" vendor/JUCE)
 
 juce_add_binary_data(PHOQER_UIAssets
     HEADER_NAME PhoqerUIAssets.h NAMESPACE PhoqerUIAssets
@@ -22,9 +20,11 @@ juce_add_binary_data(PHOQER_UIAssets
         resources/ui/Shared/Roboto-Regular.ttf
         resources/ui/Purple/purple_seal.png
         resources/ui/Ice/ice_seal.png
+        resources/ui/Kyrax/kyrax_seal.png
         resources/ui/Red/red_seal.png
         resources/branding/app/phoqer-app-icon-256.png
         resources/branding/app/phoqer-app-icon-32.png
+        resources/branding/app/kyrax-badge-32.png
         LICENSE
         NOTICE.md
         THIRD_PARTY_NOTICES.md
@@ -32,6 +32,12 @@ juce_add_binary_data(PHOQER_UIAssets
         LICENSES/Roboto-NOTICE.txt
         resources/ui/Fonts/OFL-Silkscreen.txt
         resources/ui/Fonts/OFL-PressStart2P.txt)
+
+# KYRAX's voice data ships as a separate file beside the app (Voices/) and inside the VST3 bundle
+# (Resources/Voices/), never compiled into PHOQER: AGPL code and the paid data stay separate works.
+# It lives outside the public source tree; PHOQER_KYRAX_FILE picks which file (a test build can carry a changed voice).
+set(PHOQER_KYRAX_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../Voices/KYRAX.phqvoice" CACHE FILEPATH "KYRAX voice data shipped beside the app")
+configure_file("${PHOQER_KYRAX_FILE}" "${CMAKE_CURRENT_BINARY_DIR}/Voices/KYRAX.phqvoice" COPYONLY)
 
 # App icon. Windows takes a hand-built multi-size .ico (added below) so every size is drawn for its
 # size; elsewhere JUCE builds the icon from the 32 px and 256 px PNGs.
@@ -50,6 +56,7 @@ endif()
 
 juce_add_plugin(PHOQER
     COMPANY_NAME "LWNX DSP"
+    COMPANY_WEBSITE "https://lewonn.com/phoqer"
     BUNDLE_ID "io.github.lew0nn.phoqer"
     PLUGIN_MANUFACTURER_CODE Lwnx
     PLUGIN_CODE Phqr
@@ -65,6 +72,11 @@ juce_add_plugin(PHOQER
     VST3_CATEGORIES Instrument Synth
     COPY_PLUGIN_AFTER_BUILD FALSE)
 
+set(PHOQER_KEY_SOURCES
+    Source/LicenceKey.h
+    Source/ThirdParty/monocypher/monocypher.c
+    Source/ThirdParty/monocypher/monocypher-ed25519.c)
+
 set(PHOQER_ENGINE_SOURCES
     Source/Core/AudioBuffer.h
     Source/Core/FishSprite.h
@@ -78,8 +90,8 @@ set(PHOQER_ENGINE_SOURCES
     Source/Core/Random.h
     Source/Core/SealCharacter.h
     Source/DSP/BehaviourEngine.h
-    Source/DSP/CheapSpace.cpp
-    Source/DSP/CheapSpace.h
+    Source/DSP/FdnSpace.cpp
+    Source/DSP/FdnSpace.h
     Source/DSP/Chorus.h
     Source/DSP/FishSong.h
     Source/DSP/FofBank.cpp
@@ -92,18 +104,34 @@ set(PHOQER_ENGINE_SOURCES
     Source/DSP/SmoothedRandom.h
     Source/Voice/SealVoice.cpp
     Source/Voice/SealVoice.h
+    Source/Voice/Gestures.h
+    Source/Voice/LevelTables.h
     Source/Voice/VoicePersonality.h)
 
 target_sources(PHOQER PRIVATE
+    Source/Licence.cpp
+    Source/Licence.h
+    Source/Updates.cpp
+    Source/Updates.h
+    ${PHOQER_KEY_SOURCES}
+    Source/VoiceSelection.cpp
+    Source/VoiceSelection.h
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
     ${PHOQER_ENGINE_SOURCES}
     Source/UI/Editor.cpp
     Source/UI/Editor.h
+    Source/UI/EditorShared.h
+    Source/UI/EditorMenus.cpp
+    Source/UI/EditorDialogs.cpp
+    Source/UI/EditorVoices.cpp
+    Source/UI/EditorUpdates.cpp
     Source/UI/History.cpp
     Source/UI/History.h
     Source/UI/Knob.cpp
     Source/UI/Knob.h
+    Source/UI/Nitro98.cpp
+    Source/UI/Nitro98.h
     Source/UI/Logo.cpp
     Source/UI/Logo.h
     Source/UI/Portrait.cpp
@@ -118,7 +146,12 @@ target_sources(PHOQER PRIVATE
     Source/UI/Style.cpp
     Source/UI/Style.h
     Source/UI/Views.cpp
-    Source/UI/Views.h)
+    Source/UI/Views.h
+    Source/UI/Controls98.cpp
+    Source/UI/FishAndBlueScreen98.cpp
+    Source/UI/PianoView.cpp
+    Source/UI/Panels98.cpp
+    Source/UI/Dialog98.cpp)
 
 target_include_directories(PHOQER PRIVATE Source)
 
@@ -133,6 +166,7 @@ target_link_libraries(PHOQER PRIVATE
     PHOQER_UIAssets
     juce::juce_audio_utils
     juce::juce_dsp
+    juce::juce_cryptography
     PUBLIC
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
@@ -151,7 +185,7 @@ set(PHOQER_NOTICE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/LICENSES/Roboto-NOTICE.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/Fonts/OFL-Silkscreen.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/Fonts/OFL-PressStart2P.txt"
-    "${CMAKE_CURRENT_SOURCE_DIR}/vendor/JUCE/LICENSE.md")
+    "${PHOQER_JUCE_SOURCE}/LICENSE.md")
 
 add_custom_command(TARGET PHOQER_VST3 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -183,31 +217,38 @@ option(PHOQER_BUILD_VISUAL_ACCEPTANCE "Build the window-free UI acceptance rende
 option(PHOQER_BUILD_HOST_CHECKS "Build the automated VST3 host checks" OFF)
 if(PHOQER_BUILD_HOST_CHECKS)
     juce_add_console_app(PHOQERVst3HostChecks PRODUCT_NAME "PHOQER VST3 Host Checks")
-    target_sources(PHOQERVst3HostChecks PRIVATE Source/Diagnostics/Vst3HostChecks.cpp)
+    target_sources(PHOQERVst3HostChecks PRIVATE Tests/Vst3HostChecks.cpp)
+    target_include_directories(PHOQERVst3HostChecks PRIVATE Source)
     target_compile_definitions(PHOQERVst3HostChecks PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_LV2=0 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(PHOQERVst3HostChecks PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags)
 endif()
 if(PHOQER_BUILD_VISUAL_ACCEPTANCE)
     juce_add_console_app(PHOQERPluginChecks PRODUCT_NAME "PHOQER Plugin Checks")
-    target_sources(PHOQERPluginChecks PRIVATE Source/Diagnostics/PluginChecks.cpp)
+    target_sources(PHOQERPluginChecks PRIVATE Tests/PluginChecks.cpp)
     target_include_directories(PHOQERPluginChecks PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
     target_link_libraries(PHOQERPluginChecks PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp)
     if(MSVC)
         target_link_options(PHOQERPluginChecks PRIVATE /DEBUG)
     endif()
     juce_add_console_app(PHOQERUIAcceptance PRODUCT_NAME "PHOQER UI Acceptance")
-    target_sources(PHOQERUIAcceptance PRIVATE Source/Diagnostics/UiAcceptance.cpp)
+    target_sources(PHOQERUIAcceptance PRIVATE Tests/UiAcceptance.cpp)
     target_include_directories(PHOQERUIAcceptance PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
     target_link_libraries(PHOQERUIAcceptance PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp)
 endif()
 if(PHOQER_BUILD_SANITY)
-    add_executable(PHOQERPerformanceSanity Source/Diagnostics/PerformanceSanity.cpp ${PHOQER_ENGINE_SOURCES})
+    add_executable(PHOQERPerformanceSanity Tests/PerformanceSanity.cpp ${PHOQER_ENGINE_SOURCES})
     target_include_directories(PHOQERPerformanceSanity PRIVATE Source)
+    # Fails when the sound changes: compares every voice and mood with Tests/SoundPrints.txt (test-only code lives in Tests/, never in Source/).
+    add_executable(PHOQERSoundPrint Tests/SoundPrint.cpp ${PHOQER_ENGINE_SOURCES})
+    target_include_directories(PHOQERSoundPrint PRIVATE Source)
+    # Fails when a mood is not as loud as CALL: measures Source/Voice/LevelTables.h against the engine.
+    add_executable(PHOQERLevels Tests/Levels.cpp ${PHOQER_ENGINE_SOURCES})
+    target_include_directories(PHOQERLevels PRIVATE Source)
     add_executable(PHOQERCoreSanity
-        Source/Diagnostics/CoreSanity.h
-        Source/Diagnostics/CoreSanityMain.cpp
+        Tests/CoreSanity.h
+        Tests/CoreSanityMain.cpp
         Source/Core/PhoqerEngine.cpp
-        Source/DSP/CheapSpace.cpp
+        Source/DSP/FdnSpace.cpp
         Source/DSP/FofBank.cpp
         Source/Voice/SealVoice.cpp)
     target_include_directories(PHOQERCoreSanity PRIVATE Source)
@@ -218,3 +259,18 @@ if(PHOQER_BUILD_SANITY)
         target_compile_options(PHOQERCoreSanity PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 endif()
+
+
+
+
+juce_add_console_app(PHOQERTestChecks PRODUCT_NAME "PHOQER Test Checks")
+target_sources(PHOQERTestChecks PRIVATE Tests/TestBuildChecks.cpp)
+target_include_directories(PHOQERTestChecks PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
+target_link_libraries(PHOQERTestChecks PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp juce::juce_cryptography)
+
+add_custom_command(TARGET PHOQER_Standalone POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:PHOQER_Standalone>/Voices"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_BINARY_DIR}/Voices/KYRAX.phqvoice" "$<TARGET_FILE_DIR:PHOQER_Standalone>/Voices/KYRAX.phqvoice")
+add_custom_command(TARGET PHOQER_VST3 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:PHOQER_VST3>/../Resources/Voices"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_BINARY_DIR}/Voices/KYRAX.phqvoice" "$<TARGET_FILE_DIR:PHOQER_VST3>/../Resources/Voices/KYRAX.phqvoice")

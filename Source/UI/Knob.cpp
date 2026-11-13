@@ -1,4 +1,5 @@
 #include "Knob.h"
+#include "VoiceControls.h"
 
 #include "Style.h"
 
@@ -15,20 +16,21 @@ const juce::Colour lite2 { 0xffdfdfdf };
 
 // A value too wide for its box ("250 MS" in a small one) keeps the number at full size and sets
 // the unit at the pixel font's half size, on the same baseline, instead of being cut off.
-void drawValue(juce::Graphics& g, const juce::String& text, juce::Rectangle<float> box, juce::Colour ink)
+void drawValue(juce::Graphics& g, const juce::String& text, juce::Rectangle<float> box, juce::Colour ink, float size = 16.0f)
 {
-    const auto big = pixelFont(16.0f, true);
+    box = box.withTrimmedTop(3.0f);     // the white of the box, under its dark top edge
+    const auto big = pixelFont(size, true);
     const int split = text.lastIndexOfChar(' ');
     if (split <= 0 || juce::GlyphArrangement::getStringWidth(big, text) <= box.getWidth() - 4.0f)
         return drawText(g, text, box, big, ink, juce::Justification::centred);
 
-    const auto small = pixelFont(8.0f, true);
+    const auto small = pixelFont(size * 0.5f, true);
     const auto number = text.substring(0, split), unit = text.substring(split + 1);
     const float numberW = juce::GlyphArrangement::getStringWidth(big, number), unitW = juce::GlyphArrangement::getStringWidth(small, unit);
     const float x = std::round(box.getCentreX() - (numberW + 2.0f + unitW) * 0.5f);
-    const float top = std::round(box.getCentreY() - 8.0f), baseline = top + big.getAscent();
-    drawText(g, number, { x, top, numberW + 1.0f, 16.0f }, big, ink, juce::Justification::centredLeft);
-    drawText(g, unit, { x + numberW + 2.0f, baseline - small.getAscent(), unitW + 1.0f, 8.0f }, small, ink, juce::Justification::centredLeft);
+    const float top = std::round(box.getCentreY() - size * 0.5f), baseline = top + big.getAscent();
+    drawText(g, number, { x, top, numberW + 1.0f, size }, big, ink, juce::Justification::centredLeft);
+    drawText(g, unit, { x + numberW + 2.0f, baseline - small.getAscent(), unitW + 1.0f, size * 0.5f }, small, ink, juce::Justification::centredLeft);
 }
 }
 
@@ -59,7 +61,7 @@ juce::Image renderDial98(int character, float r, float proportion)
                 const float along = std::fmod(std::atan2(dy, dx) - arcStart + juce::MathConstants<float>::twoPi * 2.0f,
                                               juce::MathConstants<float>::twoPi);
                 if (along <= sweep)
-                    px = (proportion > 0.0f && along <= sweep * proportion) ? pal.accent : win98::shadow;
+                    px = (proportion > 0.0f && along <= sweep * proportion) ? (character==3 ? kyraxRamp(along / juce::jmax(sweep * proportion, 1.0e-6f)) : pal.accent) : win98::shadow;
             }
             // Face and the Win98 rim (light top-left, dark bottom-right): an outer and an inner band.
             else if (d < r - rimOuter - rimInner)
@@ -112,18 +114,18 @@ void PixelKnob::paint(juce::Graphics& g)
     g.drawImage(dial, juce::Rectangle<float>(static_cast<float>(dial.getWidth()), static_cast<float>(dial.getHeight())).withCentre(c));
 
     const auto valueText = spec.format ? spec.format(getValue()) : juce::String(getValue(), 2);
-    const auto valueInk = pal.accent.darker(0.6f);
+    const auto valueInk = character==3?approvedHoloColour(paletteFor(2).accent.darker(.6f)):pal.accent.darker(.6f);
     if (spec.layout == Layout::mixer)
     {
         const float w = static_cast<float>(getWidth());
         if (spec.big)
             drawText(g, spec.name, { 0.0f, 10.0f, w, 16.0f }, pixelFont(16.0f, true), juce::Colours::black, juce::Justification::centred);
         else
-            drawText(g, spec.name, { 0.0f, 111.0f, w, 10.0f }, pixelFont(8.0f, true), juce::Colours::black, juce::Justification::centred);
+            drawText(g, spec.name, { 0.0f, spec.nameY, w, 10.0f }, pixelFont(8.0f, true), juce::Colours::black, juce::Justification::centred);
         const float boxW = spec.big ? 68.0f : juce::jmin(58.0f, w - 4.0f);     // small boxes keep a gap between them
-        const juce::Rectangle<float> box { std::round((w - boxW) * 0.5f), 134.0f, boxW, 26.0f };
+        const juce::Rectangle<float> box { std::round((w - boxW) * 0.5f), spec.boxY, boxW, spec.boxH };
         sunken(g, box);
-        drawValue(g, valueText, box, valueInk);
+        drawValue(g, valueText, box, valueInk, spec.valueSize);
     }
     else
     {

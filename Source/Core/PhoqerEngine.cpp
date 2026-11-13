@@ -2,27 +2,20 @@
 #include "DspPrimitives.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace phoqer
 {
 PhoqerEngine::PhoqerEngine()
-    : voices {{
-        { 0x91e10da5u + 0u * 0x9e3779b9u, ageCounter },
-        { 0x91e10da5u + 1u * 0x9e3779b9u, ageCounter },
-        { 0x91e10da5u + 2u * 0x9e3779b9u, ageCounter },
-        { 0x91e10da5u + 3u * 0x9e3779b9u, ageCounter },
-        { 0x91e10da5u + 4u * 0x9e3779b9u, ageCounter },
-        { 0x91e10da5u + 5u * 0x9e3779b9u, ageCounter },
-        { 0x91e10da5u + 6u * 0x9e3779b9u, ageCounter },
-        { 0x91e10da5u + 7u * 0x9e3779b9u, ageCounter }
-    }}
+    : voices(makeVoices(ageCounter, std::make_index_sequence<voiceSlots> {}))
 {
     pitchWheels.fill(8192);
 }
 
-void PhoqerEngine::prepare(double sampleRate, int maximumBlockSize, int)
+void PhoqerEngine::prepare(double newSampleRate, int maximumBlockSize, int)
 {
+    sampleRate = newSampleRate;
     for (auto& voice : voices)
         voice.prepare(sampleRate, maximumBlockSize);
 
@@ -40,6 +33,11 @@ void PhoqerEngine::reset()
     for (auto& voice : voices)
         voice.hardReset();
     pitchWheels.fill(8192);
+    pending = {};
+    arpKeys = {};
+    arpKeyCount = 0; arpOrder = 0; arpStep = 0; arpGrid = 0.0;
+    arpNextAt = arpOffAt = -1; arpSounding = -1; arpWasActive = false;
+    yapBeats = 0.0;
     sustainDown.fill(false);
     sustained.fill(false);
     modWheel = 0.0f;
@@ -52,12 +50,35 @@ void PhoqerEngine::reset()
     telemetry.publishMeter(0.0f, 0.0f);
 }
 
-SealVoice* PhoqerEngine::findVoiceForNoteOn() noexcept
+// Eight notes sound at once. A ninth takes over the least important note: that one fades out over 3 ms in
+// its own slot while the new note starts in the spare one. Only if every slot is busy (a fade still running)
+// is a voice cut, the quietest fading one, with its short 32-sample tail.
+SealVoice* PhoqerEngine::findVoiceForNoteOn(int usableSlots, int playingLimit) noexcept
 {
-    for (auto& voice : voices)
-        if (! voice.isActive())
-            return &voice;
+    int playing = 0;
+    SealVoice* freeVoice = nullptr;
+    SealVoice* quietestFading = nullptr;
+    for (int slot = 0; slot < usableSlots; ++slot)
+    {
+        auto& voice = voices[static_cast<size_t>(slot)];
+        if (! voice.isActive()) { if (freeVoice == nullptr) freeVoice = &voice; }
+        else if (voice.isFading())
+        {
+            if (quietestFading == nullptr || voice.getEnvelopeLevel() < quietestFading->getEnvelopeLevel())
+                quietestFading = &voice;
+        }
+        else ++playing;
+    }
+    if (playing >= playingLimit)
+        if (auto* victim = leastImportantVoice(usableSlots))
+            victim->fadeOut();
+    return freeVoice != nullptr ? freeVoice : quietestFading;
+}
 
+// The note to give up first: the quietest released one, else the quietest held one, with a little
+// protection for notes just played.
+SealVoice* PhoqerEngine::leastImportantVoice(int usableSlots) noexcept
+{
     SealVoice* bestReleased = nullptr;
     SealVoice* bestActive = nullptr;
     float releasedLevel = std::numeric_limits<float>::max();
@@ -67,8 +88,11 @@ SealVoice* PhoqerEngine::findVoiceForNoteOn() noexcept
     for (const auto& voice : voices)
         newestAge = std::max(newestAge, voice.getAge());
 
-    for (auto& voice : voices)
+    for (int slot = 0; slot < usableSlots; ++slot)
     {
+        auto& voice = voices[static_cast<size_t>(slot)];
+        if (! voice.isActive() || voice.isFading())
+            continue;
         const auto level = voice.getEnvelopeLevel();
         if (voice.isReleasing())
         {
@@ -106,7 +130,7 @@ int PhoqerEngine::getActiveVoiceCount() const noexcept
     return count;
 }
 
-void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
+void PhoqerEngine::handleEvent(const MidiEvent& event, int sampleInBlock) noexcept
 {
     const auto channel = clamp(0, 15, event.channel);
     switch (event.type)
@@ -120,7 +144,18 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
             }
 
             telemetry.beginCall();
-            if (auto* voice = findVoiceForNoteOn())
+            const bool nitro = nitroActive();
+            int extras = 0;
+            float groupPower = 1.0f;
+            if (nitro)
+                for (int k = 0; k < nitroNotes; ++k)
+                    if (const int off = macros.nitro.offsets[static_cast<size_t>(k)]; off != 0 && event.note + off >= 0 && event.note + off <= 127)
+                    {
+                        const float level = clamp(0.0f, 1.0f, macros.nitro.levels[static_cast<size_t>(k)]);
+                        ++extras;
+                        groupPower += level * level;
+                    }
+            if (auto* voice = nitro ? nitroVoiceFor() : findVoiceForNoteOn(plainSlots, voiceCount))
             {
                 sustained[static_cast<size_t>(voice - voices.data())] = false;
                 if (voice->isActive())
@@ -136,6 +171,11 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
                                  clamp(0.0f, 1.0f, event.value), pitchWheels[static_cast<size_t>(channel)]);
                 if (from >= 0.0f) voice->glideFrom(from);
                 newestVoice = voice;
+                if (extras > 0)
+                {
+                    voice->setLevel(1.0f / std::sqrt(groupPower));     // the whole group as loud as the key alone
+                    queueNitro(channel, clamp(0, 127, event.note), clamp(0.0f, 1.0f, event.value), sampleInBlock);
+                }
             }
             break;
         }
@@ -147,7 +187,7 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
             break;
         case MidiEventType::belch:
             telemetry.beginCall();
-            if (auto* voice = findVoiceForNoteOn())
+            if (auto* voice = findVoiceForNoteOn(plainSlots, voiceCount))
             {
                 sustained[static_cast<size_t>(voice - voices.data())] = false;
                 if (voice->isActive())
@@ -167,6 +207,7 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
         }
         case MidiEventType::allNotesOff:
             sustainDown[static_cast<size_t>(channel)] = false;
+            for (auto& p : pending) if (p.channel == channel) p.used = false;
             for (size_t i = 0; i < voices.size(); ++i)
                 if (voices[i].matchesChannel(channel))
                 {
@@ -178,12 +219,16 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
         case MidiEventType::sustainPedal:
             sustainDown[static_cast<size_t>(channel)] = event.value >= 0.5f;
             if (! sustainDown[static_cast<size_t>(channel)])      // pedal up: let go of what it was holding
+            {
+                for (auto& p : pending)
+                    if (p.used && p.channel == channel && p.sustained) { p.sustained = false; p.released = true; }
                 for (size_t i = 0; i < voices.size(); ++i)
                     if (sustained[i] && voices[i].matchesChannel(channel))
                     {
                         voices[i].stopNote(true);
                         sustained[i] = false;
                     }
+            }
             break;
         case MidiEventType::modWheel:
             modWheel = clamp(0.0f, 1.0f, event.value);
@@ -194,8 +239,12 @@ void PhoqerEngine::handleEvent(const MidiEvent& event) noexcept
 // A key comes up: the voice is released, unless the sustain pedal is down, which holds it.
 void PhoqerEngine::releaseNote(int channel, int note) noexcept
 {
+    const bool pedal = sustainDown[static_cast<size_t>(channel)];
+    for (auto& p : pending)     // NITRO notes still waiting for their strum start: they end as soon as they start
+        if (p.used && p.channel == channel && p.root == note && ! p.released && ! p.sustained)
+            (pedal ? p.sustained : p.released) = true;
     for (size_t i = 0; i < voices.size(); ++i)
-        if (voices[i].matchesNote(channel, note))
+        if (voices[i].matchesNote(channel, note) || voices[i].matchesLayerOf(channel, note))
         {
             if (sustainDown[static_cast<size_t>(channel)]) sustained[i] = true;
             else voices[i].stopNote(true);
@@ -210,6 +259,225 @@ void PhoqerEngine::renderVoices(AudioBuffer& output, int startSample, int numSam
         voice.renderNextBlock(output, startSample, numSamples);
 }
 
+// A voice for a NITRO note. At the limit, the oldest extra note (a released one first) fades out to make room.
+SealVoice* PhoqerEngine::nitroVoiceFor() noexcept
+{
+    int playing = 0;
+    SealVoice* oldest = nullptr;
+    for (auto& voice : voices)
+    {
+        if (! voice.isActive() || voice.isFading()) continue;
+        ++playing;
+        if (voice.isExtra() && (oldest == nullptr || voice.isReleasing() > oldest->isReleasing()
+                                || (voice.isReleasing() == oldest->isReleasing() && voice.getAge() < oldest->getAge())))
+            oldest = &voice;
+    }
+    if (playing >= nitroVoiceLimit && oldest != nullptr) oldest->fadeOut();
+    return findVoiceForNoteOn(voiceSlots, nitroVoiceLimit);
+}
+
+bool PhoqerEngine::nitroActive() const noexcept
+{
+    if (! macros.nitro.on || macros.loadedVoice == nullptr) return false;
+    for (const auto off : macros.nitro.offsets) if (off != 0) return true;
+    return false;
+}
+
+// NITRO: the key's extra notes, spread across the width, detuned sharp and flat in turn, each started
+// strumMs after the one before. The group is level-matched to the key alone.
+void PhoqerEngine::queueNitro(int channel, int note, float velocity, int sampleInBlock) noexcept
+{
+    std::array<int, nitroNotes> slots {};
+    int n = 0;
+    float power = 1.0f;
+    for (int k = 0; k < nitroNotes; ++k)
+        if (const int off = macros.nitro.offsets[static_cast<size_t>(k)]; off != 0 && note + off >= 0 && note + off <= 127)
+        {
+            const float level = clamp(0.0f, 1.0f, macros.nitro.levels[static_cast<size_t>(k)]);
+            slots[static_cast<size_t>(n++)] = k;
+            power += level * level;
+        }
+    const float groupGain = 1.0f / std::sqrt(power);
+    const float width = clamp(0.0f, 1.0f, macros.nitro.width);
+    const double strum = clamp(0.0f, 100.0f, macros.nitro.strumMs) * 0.001 * sampleRate;
+    for (int i = 0; i < n; ++i)
+    {
+        const int k = slots[static_cast<size_t>(i)];
+        PendingNote* slot = nullptr;
+        for (auto& p : pending) if (! p.used) { slot = &p; break; }
+        if (slot == nullptr) return;     // ponytail: 64 waiting notes at most; a denser burst drops its extra notes
+        slot->used = true;
+        slot->released = slot->sustained = false;
+        slot->at = blockStart + sampleInBlock + static_cast<int64_t>(std::llround(strum * (i + 1)));
+        slot->channel = channel;
+        slot->root = note;
+        slot->note = note + macros.nitro.offsets[static_cast<size_t>(k)];
+        slot->velocity = velocity;
+        slot->gain = clamp(0.0f, 1.0f, macros.nitro.levels[static_cast<size_t>(k)]) * groupGain;
+        slot->pan = n == 1 ? 0.0f : width * (-1.0f + 2.0f * static_cast<float>(i) / static_cast<float>(n - 1));
+        slot->cents = clamp(0.0f, 50.0f, macros.nitro.detuneCents) * (i % 2 == 0 ? 1.0f : -1.0f);
+    }
+}
+
+void PhoqerEngine::renderTo(AudioBuffer& output, int& cursor, int target)
+{
+    for (;;)
+    {
+        PendingNote* due = nullptr;
+        for (auto& p : pending)
+            if (p.used && p.at - blockStart < target && (due == nullptr || p.at < due->at)) due = &p;
+        if (due == nullptr) break;
+        const int at = static_cast<int>(std::max<int64_t>(cursor, due->at - blockStart));
+        renderSegment(output, cursor, at - cursor);
+        cursor = at;
+        const auto p = *due;
+        due->used = false;
+        if (auto* voice = nitroVoiceFor())
+        {
+            sustained[static_cast<size_t>(voice - voices.data())] = p.sustained;
+            if (voice->isActive()) voice->stopNote(false);
+            voice->startNote(p.channel, p.note, p.velocity, pitchWheels[static_cast<size_t>(p.channel)]);
+            voice->setLayer(p.gain, p.pan, p.cents, p.channel, p.root);
+            if (p.released) voice->stopNote(true);
+        }
+    }
+    renderSegment(output, cursor, target - cursor);
+    cursor = target;
+}
+
+// ---------------------------------------------------------------------------------------------- ARP
+double PhoqerEngine::arpStepSamples() const noexcept
+{
+    static constexpr double beats[] { 1.0, 0.5, 0.25, 0.125, 1.0 / 3.0 };     // 1/4, 1/8, 1/16, 1/32, 1/8 triplets
+    return beats[clamp(0, 4, macros.arp.rate)] * 60.0 / static_cast<double>(macros.tempoBpm) * sampleRate;
+}
+
+// One cycle of the pattern: the keys (low to high, or in the order played), repeated an octave up per OCTAVES.
+int PhoqerEngine::arpSequence(std::array<int, 48>& out) const noexcept
+{
+    std::array<ArpKey, 16> keys {};
+    const int n = arpKeyCount;
+    std::copy(arpKeys.begin(), arpKeys.begin() + n, keys.begin());
+    const bool played = macros.arp.pattern == 4;
+    std::sort(keys.begin(), keys.begin() + n, [played](const ArpKey& a, const ArpKey& b) { return played ? a.order < b.order : a.note < b.note; });
+    int count = 0;
+    for (int o = 0; o < clamp(1, 3, macros.arp.octaves); ++o)
+        for (int k = 0; k < n; ++k)
+            if (const int note = keys[static_cast<size_t>(k)].note + 12 * o; note <= 127 && count < 48) out[static_cast<size_t>(count++)] = note;
+    if (macros.arp.pattern == 1) std::reverse(out.begin(), out.begin() + count);                // DOWN
+    if (macros.arp.pattern == 2 && count > 2)                                                    // UP + DOWN: back down without repeating the ends
+        for (int i = count - 2; i >= 1 && count < 48; --i) out[static_cast<size_t>(count++)] = out[static_cast<size_t>(i)];
+    return count;
+}
+
+void PhoqerEngine::arpKey(const MidiEvent& event, int sampleInBlock) noexcept
+{
+    const bool down = event.type == MidiEventType::noteOn && event.value > 0.0f;
+    const int channel = clamp(0, 15, event.channel);
+    int found = -1;
+    for (int k = 0; k < arpKeyCount; ++k) if (arpKeys[static_cast<size_t>(k)].note == event.note && arpKeys[static_cast<size_t>(k)].channel == channel) found = k;
+    if (down)
+    {
+        bool anyDown = false;
+        for (int k = 0; k < arpKeyCount; ++k) anyDown = anyDown || arpKeys[static_cast<size_t>(k)].down;
+        if (macros.arp.hold && ! anyDown && found < 0) arpKeyCount = 0;     // HOLD: a new chord after letting go replaces the held one
+        const bool wasIdle = arpKeyCount == 0;
+        if (found < 0 && arpKeyCount < static_cast<int>(arpKeys.size())) found = arpKeyCount++;
+        if (found < 0) return;
+        arpKeys[static_cast<size_t>(found)] = { event.note, channel, arpOrder++, clamp(0.0f, 1.0f, event.value), true };
+        if (wasIdle)     // the first key: the pattern starts on this sample
+        {
+            arpStep = 0;
+            arpGrid = static_cast<double>(blockStart + sampleInBlock);
+            arpNextAt = blockStart + sampleInBlock;
+        }
+        return;
+    }
+    if (found < 0) return;
+    arpKeys[static_cast<size_t>(found)].down = false;
+    if (! macros.arp.hold)
+    {
+        for (int k = found; k + 1 < arpKeyCount; ++k) arpKeys[static_cast<size_t>(k)] = arpKeys[static_cast<size_t>(k + 1)];
+        --arpKeyCount;
+        if (arpKeyCount == 0) arpNextAt = -1;     // all keys up: no new steps; the sounding one ends at its own time
+    }
+}
+
+void PhoqerEngine::arpClear(int sampleInBlock) noexcept
+{
+    if (arpSounding >= 0) handleEvent({ MidiEventType::noteOff, sampleInBlock, arpSoundingChannel, arpSounding, 0.0f }, sampleInBlock);
+    arpSounding = -1; arpKeyCount = 0; arpNextAt = arpOffAt = -1;
+}
+
+void PhoqerEngine::arpRun(AudioBuffer& output, int& cursor, int target)
+{
+    for (;;)
+    {
+        const int64_t never = std::numeric_limits<int64_t>::max();
+        const int64_t off = arpOffAt >= 0 ? arpOffAt : never, next = arpNextAt >= 0 ? arpNextAt : never;
+        const int64_t due = std::min(off, next);
+        if (due == never || due - blockStart >= target) break;
+        const int at = static_cast<int>(std::max<int64_t>(cursor, due - blockStart));
+        renderTo(output, cursor, at);
+        if (off <= next)     // the sounding step note ends
+        {
+            if (arpSounding >= 0) handleEvent({ MidiEventType::noteOff, at, arpSoundingChannel, arpSounding, 0.0f }, at);
+            arpSounding = -1; arpOffAt = -1;
+            continue;
+        }
+        if (! macros.arp.hold)     // HOLD switched off with keys only held by it: they go now
+        {
+            int kept = 0;
+            for (int k = 0; k < arpKeyCount; ++k) if (arpKeys[static_cast<size_t>(k)].down) arpKeys[static_cast<size_t>(kept++)] = arpKeys[static_cast<size_t>(k)];
+            arpKeyCount = kept;
+        }
+        std::array<int, 48> seq {};
+        const int count = arpSequence(seq);
+        if (count == 0) { arpNextAt = -1; continue; }
+        if (arpSounding >= 0) handleEvent({ MidiEventType::noteOff, at, arpSoundingChannel, arpSounding, 0.0f }, at);
+        int pick = arpStep % count;
+        if (macros.arp.pattern == 3) { arpRandom = arpRandom * 1664525u + 1013904223u; pick = static_cast<int>((arpRandom >> 8) % static_cast<uint32_t>(count)); }
+        const int note = seq[static_cast<size_t>(pick)];
+        const ArpKey* source = &arpKeys[0];     // the velocity and channel of the key this note comes from
+        for (int k = 0; k < arpKeyCount; ++k) if ((note - arpKeys[static_cast<size_t>(k)].note) % 12 == 0 && note >= arpKeys[static_cast<size_t>(k)].note) source = &arpKeys[static_cast<size_t>(k)];
+        const double step = arpStepSamples();
+        handleEvent({ MidiEventType::noteOn, at, source->channel, note, source->velocity }, at);
+        arpSounding = note; arpSoundingChannel = source->channel;
+        arpOffAt = due + std::max<int64_t>(1, static_cast<int64_t>(std::llround(clamp(0.05f, 1.0f, macros.arp.gate) * step)));
+        ++arpStep;
+        arpGrid += step;     // every second step is pushed late by SWING, up to a third of a step
+        const double late = (arpStep % 2 == 1) ? clamp(0.0f, 1.0f, macros.arp.swing) * step / 3.0 : 0.0;
+        arpNextAt = static_cast<int64_t>(std::llround(arpGrid + late));
+        if (arpOffAt > arpNextAt) arpOffAt = arpNextAt;     // never longer than the step
+    }
+    renderTo(output, cursor, target);
+}
+
+// YAP: VOWEL steps through a talking pattern on 8th notes at the tempo, round wherever the VOWEL knob is (low:
+// darker "oo" talk, high: brighter "ah" talk), eased (about 11 ms) so each step slides into the next. It starts
+// from the top whenever the seal has been quiet.
+void PhoqerEngine::renderSegment(AudioBuffer& output, int startSample, int numSamples)
+{
+    if (! yapActive()) { renderVoices(output, startSample, numSamples); return; }
+    static constexpr float pattern[] { 0.05f, 0.9f, 0.35f, 0.95f, 0.1f, 0.6f, 0.95f, 0.3f };
+    while (numSamples > 0)
+    {
+        const int n = std::min(numSamples, 64);
+        if (getActiveVoiceCount() == 0) { yapBeats = 0.0; yapVowel = macros.vowel; }
+        const auto step = static_cast<size_t>(static_cast<int64_t>(std::floor(yapBeats * 2.0)) % 8);
+        const float knob = macros.vowel, swing = clamp(0.25f, 0.45f, std::min(knob, 1.0f - knob));
+        const float target = clamp(0.0f, 1.0f, knob + (pattern[step] - 0.5f) * 2.0f * swing);
+        yapVowel += (target - yapVowel) * (1.0f - std::exp(-static_cast<float>(n / sampleRate) / 0.0114f));
+        yapBeats += n * static_cast<double>(macros.tempoBpm) / (60.0 * sampleRate);
+        auto moved = macros;
+        moved.vowel = yapVowel;
+        for (auto& voice : voices) voice.setMacros(moved);
+        renderVoices(output, startSample, n);
+        startSample += n;
+        numSamples -= n;
+    }
+}
+
 void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eventCount,
                            const MacroState& inputMacros, float outputDecibels)
 {
@@ -222,32 +490,39 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
     // cut off, which matters now that a note sustains for as long as it is held.
     activeCharacter = requestedCharacter;
 
-    const MacroState macros {
-        clamp(0.0f, 1.0f, inputMacros.boom),
-        clamp(0.0f, 1.0f, inputMacros.air),
-        clamp(0.0f, 1.0f, inputMacros.bark),
-        clamp(0.0f, 1.0f, inputMacros.vowel),
-        clamp(0.0f, 1.0f, inputMacros.space),
-        // the mod wheel adds expression on top of the TIDE knob, all the way to full
-        clamp(0.0f, 1.0f, inputMacros.tide + modWheel * (1.0f - inputMacros.tide)),
-        clamp(0.0f, 1.0f, inputMacros.detune),
-        activeCharacter,
-        inputMacros.behaviorMode,
-        clamp(20.0f, 400.0f, inputMacros.tempoBpm),
-        clamp(0.0f, 2000.0f, inputMacros.glideMs)
-    };
+    // A full copy, then each field that needs a limit set by name: a field added to MacroState later
+    // is carried through as it is, never silently reset to its default.
+    macros = inputMacros;
+    macros.boom = clamp(0.0f, 1.0f, inputMacros.boom);
+    macros.air = clamp(0.0f, 1.0f, inputMacros.air);
+    macros.bark = clamp(0.0f, 1.0f, inputMacros.bark);
+    macros.vowel = clamp(0.0f, 1.0f, inputMacros.vowel);
+    macros.space = clamp(0.0f, 1.0f, inputMacros.space);
+    // the mod wheel adds expression on top of the TIDE knob, all the way to full
+    macros.tide = clamp(0.0f, 1.0f, inputMacros.tide + modWheel * (1.0f - inputMacros.tide));
+    macros.detune = clamp(0.0f, 1.0f, inputMacros.detune);
+    macros.character = activeCharacter;
+    macros.tempoBpm = clamp(20.0f, 400.0f, inputMacros.tempoBpm);
+    macros.glideMs = clamp(0.0f, 2000.0f, inputMacros.glideMs);
+    macros.wailBend = clamp(0.0f, 24.0f, inputMacros.wailBend);
     for (auto& voice : voices)
         voice.setMacros(macros);
 
+    blockStart = clock;
     int cursor = 0;
+    if (arpWasActive && ! arpActive()) arpClear(0);     // ARP switched off: its note ends, the collected keys are forgotten
+    arpWasActive = arpActive();
     for (int index = 0; index < eventCount; ++index)
     {
         const auto eventSample = clamp(cursor, output.getNumSamples(), events[index].sampleOffset);
-        renderVoices(output, cursor, eventSample - cursor);
-        handleEvent(events[index]);
-        cursor = eventSample;
+        const auto& event = events[index];
+        if (arpActive()) arpRun(output, cursor, eventSample); else renderTo(output, cursor, eventSample);
+        if (event.type == MidiEventType::allNotesOff) arpClear(eventSample);
+        if (arpActive() && (event.type == MidiEventType::noteOn || event.type == MidiEventType::noteOff)) arpKey(event, eventSample);
+        else handleEvent(event, eventSample);
     }
-    renderVoices(output, cursor, output.getNumSamples() - cursor);
+    if (arpActive()) arpRun(output, cursor, output.getNumSamples()); else renderTo(output, cursor, output.getNumSamples());
+    clock += output.getNumSamples();
 
     chorusStage.process(output, macros.detune);
     spaceStage.process(output, macros.space);

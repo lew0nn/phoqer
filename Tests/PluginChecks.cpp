@@ -1,6 +1,6 @@
-#include "../PluginProcessor.h"
-#include "../UI/Editor.h"
-#include "../UI/Presets.h"
+#include "PluginProcessor.h"
+#include "UI/Editor.h"
+#include "UI/Presets.h"
 #include <juce_dsp/juce_dsp.h>
 #include <cmath>
 #include <iostream>
@@ -19,7 +19,7 @@ void stateAndControls()
 {
     auto owner = std::make_unique<PhoqerAudioProcessor>();
     auto& p = *owner;
-    phoqer::ui::PresetLibrary presets(p.getParameters());
+    phoqer::ui::PresetLibrary presets(p);
     presets.load(2);
     set(p, "output", -7); set(p, "standaloneTempo", 173);
     set(p, "metronomeEnabled", 1); set(p, "glide", 125);
@@ -85,6 +85,14 @@ void stateAndControls()
 
     for (const auto* id : { "standaloneTempo", "metronomeEnabled", "metronomeVolume", "metronomeBeats", "metronomeAccent", "metronomeSound", "countIn" })
         check(! p.getParameters().getParameter(id)->isAutomatable(), "a standalone-only setting is automatable in a DAW");
+    // KYRAX in a DAW's list: named KYRAX, and only YAP and NITRO can be automated.
+    for (const auto* id : { "yap", "nitro", "nitroNote1", "nitroNote2", "nitroNote3", "nitroLevel1", "nitroLevel2", "nitroLevel3", "nitroWidth", "nitroStrum", "nitroDetune",
+                            "arp", "arpRate", "arpPattern", "arpHold", "arpGate", "arpSwing", "arpOctaves" })
+    {
+        auto* kyrax = p.getParameters().getParameter(id);
+        check(kyrax->getName(64).startsWith("KYRAX "), "a KYRAX setting is not named KYRAX");
+        check(kyrax->isAutomatable() == (juce::String(id) == "yap" || juce::String(id) == "nitro" || juce::String(id) == "arp"), "the wrong KYRAX settings are automatable");
+    }
     // Strip the new parameters to simulate a pre-feature session loaded over edited state.
     auto oldState = p.getParameters().copyState();
     for (const auto* id : { "standaloneTempo", "glide", "metronomeEnabled" })
@@ -247,7 +255,7 @@ void metronomeAudio()
         check(countPeak > 0.05f, "count-in did not click with the metronome off");
         check(block.getMagnitude(0, 128) == 0, "click continued after the count-in with the metronome off");
         check(std::llround(q->getRecorder().seconds() * 48000) == 800 * 128 - 96000, "count-in was recorded or cut short");
-        q->getRecorder().stop().deleteFile();
+        q->getRecorder().stop().moveToTrash();
         q->releaseResources();
     }
     std::cout << "METRONOME_AUDIO_OK: timing matrix, tempo change, stop, ceiling, monitor and recording routing, "
@@ -296,7 +304,7 @@ void audit(const juce::File& folder)
     juce::Array<juce::var> results;
     auto bankOwner = std::make_unique<PhoqerAudioProcessor>();
     auto& bank = *bankOwner;
-    phoqer::ui::PresetLibrary library(bank.getParameters());
+    phoqer::ui::PresetLibrary library(bank);
     constexpr int block = 256;
     for (int preset = 0; preset < 16; ++preset)
     {
@@ -306,7 +314,7 @@ void audit(const juce::File& folder)
         {
             auto owner = std::make_unique<PhoqerAudioProcessor>();
             auto& p = *owner;
-            phoqer::ui::PresetLibrary presets(p.getParameters());
+            phoqer::ui::PresetLibrary presets(p);
             presets.load(preset);
             p.prepareToPlay(48000, block);
             const bool chord = scenario == 9;

@@ -3,6 +3,7 @@
 #include <PhoqerUIAssets.h>
 
 #include "Style.h"
+#include "VoiceControls.h"
 
 #include <cmath>
 #include <vector>
@@ -87,8 +88,11 @@ juce::Image renderOutrunWordmark(int character, bool onDarkBackground)
     const auto halo = shape.dilated();
     for (size_t i = 0; i < speed.bits.size(); ++i) if (halo.bits[i]) speed.bits[i] = 0;
 
+    // KYRAX: the website logo's letter colours, one per row, top to bottom.
+    // Rows 0-3 cream, then rose back down to violet.
+    const auto kyraxRow=[](int row){return juce::Colour(row<4?kyraxStops[kyraxCream]:kyraxStops[kyraxRose-juce::jlimit(0,kyraxRose,row-4)]);};
     juce::Image image(juce::Image::ARGB, shape.w, shape.h, true);
-    fill(image, halo.shifted(2, 1), pal.accent.darker(1.4f));
+    fill(image, halo.shifted(2, 1), character==3 ? juce::Colour(36,10,80) : pal.accent.darker(1.4f));
     fill(image, shape.outline(), darkInk);
     for (int y = 0; y < shape.h; ++y)
         for (int x = 0; x < shape.w; ++x)
@@ -97,9 +101,15 @@ juce::Image renderOutrunWordmark(int character, bool onDarkBackground)
                 const int r = y - pad;
                 auto c = r < 4 ? pal.secondary.interpolatedWith(juce::Colours::white, 0.55f) : r < 6 ? pal.secondary : pal.accent;
                 if (r == 6) c = pal.accent.interpolatedWith(juce::Colours::white, 0.35f);
+                if(character==3)c=kyraxRow(r);
                 image.setPixelAt(x, y, c);
             }
-    fill(image, speed, onDarkBackground ? pal.secondary : pal.accent.darker(0.2f));
+    if(character==3)
+    {
+        for(int y=0;y<shape.h;++y)for(int x=0;x<shape.w;++x)
+            if(speed.get(x,y))image.setPixelAt(x,y,y==lines[0][0]?kyraxRow(y-pad):kyraxRow(y-pad).withMultipliedBrightness(.82f));     // the top line in full cream
+    }
+    else fill(image,speed,onDarkBackground?pal.secondary:pal.accent.darker(.2f));
 
     // Crop to the drawn pixels.
     int x0 = image.getWidth(), y0 = image.getHeight(), x1 = -1, y1 = -1;

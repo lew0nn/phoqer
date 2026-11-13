@@ -2,6 +2,7 @@
 
 #include "FofFormant.h"
 #include "GlottalPulse.h"
+#include "BassUndertone.h"
 #include "../Core/CharacterPreset.h"
 #include "../Core/PhoqerTypes.h"
 #include "../Core/Random.h"
@@ -25,6 +26,8 @@ public:
     // The played note, so locked bands pick their harmonic from it and not from
     // wherever the onset scoop happens to be.
     void setNoteFrequency(double hz) noexcept { noteFrequency = hz; }
+    // The fundamental sine's pitch, set at each control point (it moves far slower than a sample).
+    void setFundamental(double hz) noexcept;
 
     float process(double frequencyHz, const CharacterPreset& preset,
                   const MacroState& macros, const VocalState& vocal,
@@ -33,16 +36,20 @@ public:
 private:
     FormantSpec shapeFormant(const FormantSpec& base, size_t index,
                              const MacroState& macros, const VocalState& vocal,
-                             double fundamentalHz) noexcept;
+                             double fundamentalHz, const CharacterPreset& preset) noexcept;
 
     std::array<FofFormant, formantBandCount> formants {};
     GlottalPulse pulse;
+    BassUndertone bass;
     // The harmonic each locked band sits on, chosen once per note (0: not yet).
     std::array<double, formantBandCount> lockedHarmonic {};
     double noteFrequency = 0.0;
+    static constexpr double highTuningFromHz = 262.0, highTuningFullHz = 600.0;     // C4, about D5
+    static constexpr float highTuningTrim = 0.45f;
 
     double sampleRate = 44100.0, inverseSampleRate = 1.0 / 44100.0;
-    double fundamentalPhase = 0.0;
+    float fundamentalCos = 1.0f, fundamentalSin = 0.0f;      // the fundamental, as a rotating unit vector
+    float fundamentalStepCos = 1.0f, fundamentalStepSin = 0.0f;
     float noiseLowPass = 0.0f;
     float noiseBody = 0.0f;
     float previousNoise = 0.0f;

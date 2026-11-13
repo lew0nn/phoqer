@@ -203,6 +203,13 @@ public:
         // Connected MIDI keyboards open straight away; there is no Options bar to enable them from.
         holder = std::make_unique<juce::StandalonePluginHolder>(properties.getUserSettings(), false, juce::String(), nullptr,
                                                                 juce::Array<juce::StandalonePluginHolder::PluginInOuts>(), true);
+        if (!properties.getUserSettings()->containsKey("filterState"))
+            if (auto* test = dynamic_cast<PhoqerAudioProcessor*>(holder->processor.get()))
+            {
+                test->getVoices().useLoadedVoice();
+                auto* space = test->getParameters().getParameter("space");
+                space->setValueNotifyingHost(0.0f);
+            }
         if (juce::Desktop::getInstance().getDisplays().displays.isEmpty()) return;
         splash = std::make_unique<BootSplash>();
         juce::Timer::callAfterDelay(juce::roundToInt(BootSplash::seconds * 1000.0) + 100, [this]

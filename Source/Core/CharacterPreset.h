@@ -38,6 +38,9 @@ inline constexpr std::size_t pitchContourPoints = 8;
 inline constexpr std::size_t formantBandCount = 5;
 using PitchContour = std::array<float, pitchContourPoints>;
 
+inline constexpr size_t articulationVowels=9;
+using ArticulationMap=std::array<std::array<FormantSpec,formantBandCount>,articulationVowels>;
+
 struct CharacterPreset
 {
     const char* id = "";
@@ -69,100 +72,146 @@ struct CharacterPreset
     float onsetPunch = 1.0f;             // the bark spike at the start of a call, 0 to 1
     float thump = 0.0f;                  // a kick-like low hit under the attack, 0 to 1
     float vowelOffset = 0.0f;            // the seal's own vowel colour, added to VOWEL
+    // An optional octave bass layer under the grains (KYRAX). Off at zero, as on the built-in seals.
+    // General engine features any voice file can use; no code here belongs to a paid voice.
+    float bassGain = 0.0f;
+    float bassDrive = 0.0f;
+    float bassDecaySeconds = 0.10f;
+    float bassSustain = 0.45f;
+    float spectralBodyGain = 1.0f;       // the grains' level when the bass layer is on
+    // An optional nine-vowel map: VOWEL then moves the formants across the whole map (KYRAX).
+    bool fullVowelMap = false;
+    ArticulationMap articulationMap {};
 };
+
+// The three built-in voices, each value set by name (a value can never land in the wrong field).
+// Built at compile time: no cost when the plugin runs.
+
+// ---- BURP (bass, red) ------------------------------------------------------
+// Reference fundamental about 82 Hz, calls about half a second long. Energy
+// sits flat from 600 Hz to 2.5 kHz and falls away above 3 kHz, with a small
+// lift near 6.4 kHz. Almost all voiced (HNR about +6 dB, spectral flatness
+// 0.013): the roughness is jitter and period doubling, not breath.
+inline constexpr CharacterPreset makeBurp() noexcept
+{
+    CharacterPreset p;
+    p.id = "burp";
+    p.displayName = "BURP";
+    p.formants = {{ {  640.0f, 180.0f, 1.00f, 0.50f },   // source
+                    { 1050.0f, 160.0f, 1.00f, 0.30f },   // F1
+                    { 1750.0f, 350.0f, 2.70f, 0.00f },   // F2
+                    { 2450.0f, 300.0f, 1.60f, 0.00f },   // F3, then the drop above 3 kHz
+                    { 6400.0f, 500.0f, 0.20f, 0.00f } }};
+    p.attackSkirtSeconds = 0.0030f;
+    p.noiseMix = 0.06f;              // a trace only
+    p.jitter = 0.010f;               // half the clip's, so it growls but stays a pitched note
+    p.shimmer = 0.06f;               // little period-to-period flicker, a clean tone
+    p.subharmonicChance = 0.040f;    // period doubling: the growl, a little rarer
+    p.subOctaveGain = 0.04f;         // a little sub for body
+    p.attackSeconds = 0.004f;        // tight: a hit, then hold steady
+    p.decaySeconds = 0.09f;
+    p.sustainLevel = 0.72f;
+    p.releaseSeconds = 0.12f;
+    p.outputTrim = 2.75f;            // back to its old loudness now the hiss is gone
+    p.gestureSeconds = 0.45f;
+    p.gestureDepth = 1.35f;          // so the default TIDE gives the measured contour
+    p.pitchContour = {{ +0.3f, 0.0f, +0.5f, +0.2f, 0.0f, -0.4f, -0.2f, 0.0f }};   // ends on the note
+    p.wobbleSemitones = 0.12f;       // a little life, not a pitch drift
+    p.wobbleRateHz = 10.0f;
+    p.flutterSemitones = 0.0f;
+    p.flutterRateHz = 12.5f;
+    p.squeakNoise = 0.0f;
+    p.onsetPunch = 0.45f;            // a firm bark
+    p.thump = 0.08f;                 // and only a trace of kick: more read as a thump
+    p.vowelOffset = 0.0f;            // its own rough "ah"
+    return p;
+}
+
+// ---- SQUEAL (purple) ---------------------------------------------------------
+// Short yelps, median 0.18 s, at about 530 Hz. Each starts high, about +7
+// semitones, drops, then lifts again; the pitch never holds (fast wobble
+// 1.5 semitones). Harmonics fall steadily, about 4 dB each, above 500 Hz.
+inline constexpr CharacterPreset makeSqueal() noexcept
+{
+    CharacterPreset p;
+    p.id = "squeal";
+    p.displayName = "SQUEAL";
+    p.formants = {{ {  560.0f, 150.0f, 0.90f, 1.00f },   // source, on the fundamental
+                    { 1050.0f, 250.0f, 1.50f, 0.60f },   // F1
+                    { 1650.0f, 450.0f, 2.50f, 0.50f },   // F2
+                    { 2700.0f, 250.0f, 0.90f, 0.00f },   // a nasal ring
+                    { 6000.0f, 600.0f, 0.15f, 0.00f } }};
+    p.attackSkirtSeconds = 0.0025f;
+    p.noiseMix = 0.04f;              // a trace only
+    p.jitter = 0.004f;               // next to none, so the yelp sits on the played note
+    p.shimmer = 0.03f;
+    p.subharmonicChance = 0.0f;      // no period doubling
+    p.subOctaveGain = 0.0f;
+    p.attackSeconds = 0.006f;        // tight yelps, a short release so they stay apart
+    p.decaySeconds = 0.06f;
+    p.sustainLevel = 0.65f;
+    p.releaseSeconds = 0.05f;
+    p.outputTrim = 1.48f;            // back to its old loudness
+    p.gestureSeconds = 0.14f;
+    p.gestureDepth = 1.35f;
+    p.pitchContour = {{ +3.0f, 0.0f, -0.7f, -0.7f, -0.3f, 0.0f, 0.0f, 0.0f }};   // the yelp's dip, landing on the note
+    p.wobbleSemitones = 0.0f;        // no random drift: an exact pitch
+    p.wobbleRateHz = 14.0f;
+    p.flutterSemitones = 0.0f;
+    p.flutterRateHz = 12.5f;
+    p.squeakNoise = 0.020f;          // the noisy squeak above the harmonics in each yelp
+    p.onsetPunch = 0.60f;
+    p.thump = 0.25f;
+    p.vowelOffset = 0.22f;           // brighter, toward "eh"
+    return p;
+}
+
+// ---- GROAN (high, ice) -------------------------------------------------------
+// Long calls, about 1.8 s, near 620 Hz, scooping up 3.5 semitones into the
+// note. Voiced dark and mellow (chosen by ear, 2026-10-06): the measured
+// singing formant at 1120 Hz with a 34 Hz bandwidth was so narrow it played
+// as a pure whistle and sounded cheap, so it is lower and wider here, the
+// top is softer, the onset rounder, and a slow vibrato replaces the clip's
+// fast 12.5 Hz flutter. A warm "ooh" moan.
+inline constexpr CharacterPreset makeGroan() noexcept
+{
+    CharacterPreset p;
+    p.id = "groan";
+    p.displayName = "GROAN";
+    p.formants = {{ {  620.0f, 100.0f, 1.60f, 1.00f },   // source, on the fundamental
+                    { 1050.0f,  95.0f, 1.40f, 0.90f },   // singing formant: lower and wider, a moan not a whistle
+                    { 1700.0f, 400.0f, 2.50f, 0.00f },
+                    { 2800.0f, 400.0f, 0.60f, 0.00f },
+                    { 6400.0f, 600.0f, 0.20f, 0.00f } }};
+    p.attackSkirtSeconds = 0.0050f;  // a wider skirt still: a soft, rounded onset
+    p.noiseMix = 0.008f;             // a trace only, the clip is clean between harmonics
+    p.jitter = 0.002f;
+    p.shimmer = 0.02f;
+    p.subharmonicChance = 0.0f;
+    p.subOctaveGain = 0.0f;
+    p.attackSeconds = 0.620f;        // a slow swell to a peak near 460 ms
+    p.decaySeconds = 0.40f;
+    p.sustainLevel = 0.55f;
+    p.releaseSeconds = 0.35f;
+    p.outputTrim = 1.00f;
+    p.gestureSeconds = 1.60f;
+    p.gestureDepth = 1.35f;
+    p.pitchContour = {{ -3.5f, -0.6f, 0.0f, 0.0f, 0.0f, +0.3f, +0.1f, 0.0f }};   // the scoop up, then on the note
+    p.wobbleSemitones = 0.06f;
+    p.wobbleRateHz = 8.0f;
+    p.flutterSemitones = 0.22f;      // a gentle slow vibrato (the clip's 12.5 Hz flutter read as a toy whistle)
+    p.flutterRateHz = 5.0f;
+    p.squeakNoise = 0.0f;
+    p.onsetPunch = 0.15f;
+    p.thump = 0.0f;
+    p.vowelOffset = 0.0f;            // its own, as measured (a darker colour turned it into a whistle)
+    return p;
+}
 
 // Index order is load-bearing: it matches both the JUCE AudioParameterChoice and
 // the UI colour themes (0 red, 1 purple, 2 ice). Do not reorder.
-inline constexpr std::array<CharacterPreset,
-                            static_cast<std::size_t>(SealCharacter::count)> characterPresets {{
-    // ---- 0: BURP (bass, red) ------------------------------------------------
-    // Reference fundamental about 82 Hz, calls about half a second long. Energy
-    // sits flat from 600 Hz to 2.5 kHz and falls away above 3 kHz, with a small
-    // lift near 6.4 kHz. Almost all voiced (HNR about +6 dB, spectral flatness
-    // 0.013): the roughness is jitter and period doubling, not breath.
-    {
-        "burp", "BURP",
-        {{ {  640.0f, 180.0f, 1.00f, 0.50f },   // source
-           { 1050.0f, 160.0f, 1.00f, 0.30f },   // F1
-           { 1750.0f, 350.0f, 2.70f, 0.00f },   // F2
-           { 2450.0f, 300.0f, 1.60f, 0.00f },   // F3, then the drop above 3 kHz
-           { 6400.0f, 500.0f, 0.20f, 0.00f } }},
-        0.0030f,   // skirt
-        0.06f,     // noise: a trace only
-        0.010f,    // jitter: half the clip's, so it growls but stays a pitched note
-        0.06f,     // shimmer: little period-to-period flicker, a clean tone
-        0.040f,    // period doubling: the growl, a little rarer
-        0.04f,     // a little sub for body
-        0.004f, 0.09f, 0.72f, 0.12f,   // tight: a hit, then hold steady
-        2.75f,     // trim: back to its old loudness now the hiss is gone
-        0.45f, 1.35f,   // depth 1.35 so the default TIDE gives the measured contour
-        {{ +0.3f, 0.0f, +0.5f, +0.2f, 0.0f, -0.4f, -0.2f, 0.0f }},   // ends on the note
-        0.12f, 10.0f,   // wobble: a little life, not a pitch drift
-        0.0f, 12.5f, 0.0f,
-        0.45f,          // a firm bark
-        0.08f,          // and only a trace of kick: more read as a thump
-        0.0f            // vowel: its own rough "ah"
-    },
-    // ---- 1: SQUEAL (purple) -----------------------------------------------
-    // Short yelps, median 0.18 s, at about 530 Hz. Each starts high, about +7
-    // semitones, drops, then lifts again; the pitch never holds (fast wobble
-    // 1.5 semitones). Harmonics fall steadily, about 4 dB each, above 500 Hz.
-    {
-        "squeal", "SQUEAL",
-        {{ {  560.0f, 150.0f, 0.90f, 1.00f },   // source, on the fundamental
-           { 1050.0f, 250.0f, 1.50f, 0.60f },   // F1
-           { 1650.0f, 450.0f, 2.50f, 0.50f },   // F2
-           { 2700.0f, 250.0f, 0.90f, 0.00f },   // a nasal ring
-           { 6000.0f, 600.0f, 0.15f, 0.00f } }},
-        0.0025f,   // skirt
-        0.04f,     // noise: a trace only
-        0.004f,    // jitter: next to none, so the yelp sits on the played note
-        0.03f,
-        0.0f,      // no period doubling
-        0.0f,
-        0.006f, 0.06f, 0.65f, 0.05f,   // tight yelps, a short release so they stay apart
-        1.48f,     // trim: back to its old loudness
-        0.14f, 1.35f,
-        {{ +3.0f, 0.0f, -0.7f, -0.7f, -0.3f, 0.0f, 0.0f, 0.0f }},   // the yelp's dip, landing on the note
-        0.0f, 14.0f,    // no random drift: an exact pitch
-        0.0f, 12.5f,
-        0.020f,         // the noisy squeak above the harmonics in each yelp
-        0.60f,
-        0.25f,
-        0.22f           // vowel: brighter, toward "eh"
-    },
-    // ---- 2: GROAN (high, ice) ----------------------------------------------
-    // Long calls, about 1.8 s, near 620 Hz, scooping up 3.5 semitones into the
-    // note. Voiced dark and mellow (chosen by ear, 2026-10-06): the measured
-    // singing formant at 1120 Hz with a 34 Hz bandwidth was so narrow it played
-    // as a pure whistle and sounded cheap, so it is lower and wider here, the
-    // top is softer, the onset rounder, and a slow vibrato replaces the clip's
-    // fast 12.5 Hz flutter. A warm "ooh" moan.
-    {
-        "groan", "GROAN",
-        {{ {  620.0f, 100.0f, 1.60f, 1.00f },   // source, on the fundamental
-           { 1050.0f,  95.0f, 1.40f, 0.90f },   // singing formant: lower and wider, a moan not a whistle
-           { 1700.0f, 400.0f, 2.50f, 0.00f },
-           { 2800.0f, 400.0f, 0.60f, 0.00f },
-           { 6400.0f, 600.0f, 0.20f, 0.00f } }},
-        0.0050f,   // a wider skirt still: a soft, rounded onset
-        0.008f,    // noise: a trace only, the clip is clean between harmonics
-        0.002f,
-        0.02f,
-        0.0f,
-        0.0f,
-        0.620f, 0.40f, 0.55f, 0.35f,   // a slow swell to a peak near 460 ms
-        1.00f,
-        1.60f, 1.35f,
-        {{ -3.5f, -0.6f, 0.0f, 0.0f, 0.0f, +0.3f, +0.1f, 0.0f }},   // the scoop up, then on the note
-        0.06f, 8.0f,
-        0.22f, 5.0f,    // a gentle slow vibrato (the clip's 12.5 Hz flutter read as a toy whistle)
-        0.0f,
-        0.15f,
-        0.0f,
-        0.0f            // vowel: its own, as measured (a darker colour turned it into a whistle)
-    }
-}};
+inline constexpr std::array<CharacterPreset, static_cast<std::size_t>(SealCharacter::count)> characterPresets {{
+    makeBurp(), makeSqueal(), makeGroan() }};
 
 inline constexpr const CharacterPreset& characterPreset(SealCharacter character) noexcept
 {

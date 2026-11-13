@@ -1,72 +1,15 @@
 #include "SealVoice.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace phoqer
 {
-namespace
-{
-// What each behaviour does to a held note over time: a gain, a pitch offset in
-// semitones, a push on the vowel, and an extra bark kick. CALL is one call;
-// the others keep moving for as long as the key is held.
-struct ModeMotion
-{
-    float gain = 1.0f, semitones = 0.0f, vowel = 0.0f, kick = 0.0f;
-    float muffle = 0.0f;    // 0 open, 1 a closed-mouth hum (MURMUR)
-};
-
-ModeMotion modeMotion(BehaviourMode mode, double beats, float bpm) noexcept
-{
-    ModeMotion m;
-    const auto beatHz = bpm / 60.0f;      // the modes keep time with the song
-    const auto cycle = [beats, beatHz](float multiple)
-    {
-        const auto p = beats * multiple;
-        return static_cast<float>((p - std::floor(p)) / (beatHz * multiple));
-    };
-    switch (mode)
-    {
-        case BehaviourMode::honk:      // separate honks on 1/8 notes: a nasal hit that drops away to near silence
-        {
-            const auto c = cycle(2.0f);
-            const auto hit = fastExp(-c / 0.07f) * std::min(1.0f, c / 0.006f);
-            m.gain = 0.05f + 0.95f * hit;
-            m.semitones = 2.5f * fastExp(-c / 0.04f);
-            m.vowel = -0.25f + 0.20f * fastExp(-c / 0.06f);
-            m.kick = 0.30f * fastExp(-c / 0.025f);
-            m.muffle = 0.45f;                                 // half-closed: a nasal honk, not a bark
-            break;
-        }
-        case BehaviourMode::bark:      // separate hard barks on 1/4 notes, silence between
-        {
-            const auto c = cycle(1.0f);
-            // a fast rise, a full 60 ms, then the fall: a bark, not a punch
-            const auto open = std::min(1.0f, c / 0.006f) * (c < 0.06f ? 1.0f : fastExp(-(c - 0.06f) / 0.08f));
-            const auto shut = 1.0f - std::min(1.0f, std::max(0.0f, (c - 0.16f) / 0.04f));
-            m.gain = 0.03f + 0.97f * open * shut;
-            m.semitones = 2.5f * fastExp(-c / 0.04f);
-            m.kick = 0.25f * fastExp(-c / 0.025f);
-            m.vowel = 0.15f;                                  // wide open: a bark, not a honk
-            break;
-        }
-        case BehaviourMode::wail:      // a long glide: up two and a half semitones and back, over two bars
-        {
-            const auto s = fastSin2Pi(beats / 8.0);
-            m.semitones = 2.4f * s;
-            m.vowel = 0.35f * std::max(0.0f, s);              // the mouth opens as it climbs
-            m.gain = 0.90f + 0.25f * std::max(0.0f, s);       // and it sings out at the top
-            break;
-        }
-        case BehaviourMode::murmur:    // a closed-mouth "mmm"; the voice adds the muttered syllables
-            m.vowel = -0.35f;
-            m.muffle = 1.0f;
-            break;
-        case BehaviourMode::call:
-            break;
-    }
-    return m;
-}
-}
+using gestures::modeMotion;
+using gestures::belchPitch;
+using gestures::belchGain;
+using gestures::belchSeconds;
+using levels::modeTrimDb;
 
 SealVoice::SealVoice(uint32_t seed, uint64_t& globalAgeCounter) noexcept
     : random(seed), ageCounter(globalAgeCounter)
@@ -76,7 +19,20 @@ SealVoice::SealVoice(uint32_t seed, uint64_t& globalAgeCounter) noexcept
     const auto panPosition = random.range(-0.6f, 0.6f);
     panLeft = std::sqrt(0.5f * (1.0f - panPosition));
     panRight = std::sqrt(0.5f * (1.0f + panPosition));
+    homePanLeft = panLeft;
+    homePanRight = panRight;
     detuneOffsetSemitones = random.bipolar();
+}
+
+void SealVoice::setLayer(float gain, float panPosition, float cents, int channel, int note) noexcept
+{
+    layerGain = gain;
+    panPosition = clamp(-1.0f, 1.0f, panPosition);
+    panLeft = std::sqrt(0.5f * (1.0f - panPosition));
+    panRight = std::sqrt(0.5f * (1.0f + panPosition));
+    layerSemitones = cents * 0.01f;
+    parentChannel = channel;
+    parentNote = note;
 }
 
 void SealVoice::prepare(double newSampleRate, int)
@@ -119,6 +75,7 @@ void SealVoice::resetDsp() noexcept
     fofBank.reset();
     previousOutput = 0.0f;
     polish = 0.0f;
+    muffled = 0.0f;
     telemetry = {};
 }
 
@@ -127,6 +84,7 @@ void SealVoice::deactivate() noexcept
     resetDsp();
     active = false;
     releasing = false;
+    fading = false;
 }
 
 void SealVoice::hardReset() noexcept
@@ -142,28 +100,54 @@ void SealVoice::hardReset() noexcept
 void SealVoice::startNote(int midiChannel, int midiNoteNumber, float velocity,
                           int currentPitchWheelPosition)
 {
+    // A silent voice's knob smoothers never moved (they only step while it plays), so a knob turned
+    // between notes would otherwise start the next note on its old value and slide.
+    if (! active)
+    {
+        smoothBoom.setCurrentAndTargetValue(macros.boom);
+        smoothAir.setCurrentAndTargetValue(macros.air);
+        smoothBark.setCurrentAndTargetValue(macros.bark);
+        smoothVowel.setCurrentAndTargetValue(macros.vowel);
+        smoothTide.setCurrentAndTargetValue(macros.tide);
+        smoothDetune.setCurrentAndTargetValue(macros.detune);
+    }
     resetDsp();
     belch = false;
+    fading = false;
     mouthGate = 0.0f;
     currentMidiChannel = midiChannel;
     currentMidiNote = midiNoteNumber;
     currentVelocity = clamp(0.0f, 1.0f, velocity);
+    panLeft = homePanLeft;
+    panRight = homePanRight;
+    layerGain = 1.0f;
+    layerSemitones = 0.0f;
+    parentChannel = parentNote = -1;
     personality = VoicePersonality::create(random);
-    preset = &characterPreset(macros.character);
+    if (macros.loadedVoice != nullptr)
+    {
+        capturedPreset = *macros.loadedVoice;
+        preset = &capturedPreset;
+    }
+    else preset = &characterPreset(macros.character);
+    levelSlot = macros.loadedVoice != nullptr ? 3 : std::min(2, static_cast<int>(macros.character));
     wobble.prepare(sampleRate, preset->wobbleRateHz, &random);
     flutterDrift.prepare(sampleRate, 7.0f, &random);
     mutter.prepare(sampleRate, 7.0f, &random);
     muffled = 0.0f;
     muffleAmount = macros.behaviorMode == BehaviourMode::murmur ? 1.0f : 0.0f;
     flutterPhase = random.nextFloat();
+    wailHoldAmount = macros.wailHold ? 1.0f : 0.0f;     // a note started with the lock on is locked from the start
     thumpPhase = 0.0;
     // BARK scales the punch and the kick, 0.15x to 2.6x (1x at the default 0.35).
     barkScale = 0.15f + 2.43f * macros.bark;
     vibratoPhase = 0.0;
     behaviour.start(currentVelocity, macros, personality, preset->onsetPunch * barkScale);
-    controlTo = {};
-    controlTo.amplitudeShape = 0.0f;     // silent at the very start, as the attack gate is
+    held = {};
+    toShape = 0.0f;     // silent at the very start, as the attack gate is
+    toBark = 0.0f;
     controlCountdown = 0;
+    controlFresh = true;
 
     baseFrequency = midiNoteToHz(static_cast<float>(currentMidiNote));
     renderedPitchNote = static_cast<float>(currentMidiNote);
@@ -207,39 +191,13 @@ void SealVoice::startBelch(int midiNoteNumber, float velocity)
     belch = true;
 }
 
-namespace
+void SealVoice::fadeOut() noexcept
 {
-constexpr float belchSeconds = 1.75f;
-
-float belchPitch(float t) noexcept
-{
-    if (t < 0.3f) return 12.0f - 9.0f * std::min(1.0f, t / 0.12f);           // the gulp, at the fed pitch
-    return -4.0f * (t - 0.3f) / 1.45f;                                          // the belch sags
-}
-
-float belchGain(float t) noexcept
-{
-    if (t < 0.18f) return 0.8f;
-    if (t < 0.3f) return 0.05f;                                                 // a breath before it comes up
-    const auto rattle = 0.55f + 0.45f * std::sin(6.2831853f * 21.0f * t);       // the burp's rattle
-    return 1.4f * std::min(1.0f, (t - 0.3f) / 0.08f) * std::max(0.0f, 1.0f - (t - 0.3f) / 1.45f) * rattle;
-}
-
-float treatPitch(float t) noexcept
-{
-    if (t < 0.12f) return -9.0f * t / 0.12f;                                   // the gulp
-    if (t < 0.18f) return -9.0f;
-    const auto u = clamp(0.0f, 1.0f, (t - 0.18f) / 0.44f);                     // the squeak
-    return 7.0f + 12.0f * std::sqrt(u) - 4.0f * u * u * u
-         + static_cast<float>(std::sin(twoPi<double> * 9.0 * t)) * (0.4f + 0.8f * u);
-}
-
-float treatGain(float t) noexcept
-{
-    if (t < 0.12f) return 0.8f;
-    if (t < 0.18f) return 0.8f - 0.7f * std::sin(3.14159265f * (t - 0.12f) / 0.06f);  // the gap
-    return 1.0f;
-}
+    if (! active)
+        return;
+    amplitudeEnvelope.releaseIn(0.003f);
+    releasing = true;
+    fading = true;
 }
 
 void SealVoice::stopNote(bool allowTailOff)
@@ -278,127 +236,33 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
     const auto dt = static_cast<float>(1.0 / sampleRate);
     const auto beatStep = static_cast<double>(macros.tempoBpm) / (60.0 * sampleRate);
     const auto channelCount = output.getNumChannels();
+    auto& c = held;
 
     for (int offset = 0; offset < numSamples; ++offset)
     {
-        const MacroState sampleMacros {
-            smoothBoom.getNextValue(), smoothAir.getNextValue(), smoothBark.getNextValue(),
-            smoothVowel.getNextValue(), macros.space, smoothTide.getNextValue(),
-            smoothDetune.getNextValue(), macros.character, macros.behaviorMode, macros.tempoBpm
-        };
-
-        const auto envelope = amplitudeEnvelope.getNextSample();
+        // Every sample: the envelope, the note's age and the random streams, which draw on the same
+        // samples whatever the control rate (the grains and the breath share their generator).
+        c.envelope = amplitudeEnvelope.getNextSample();
+        ageNote(dt, beatStep);
+        const auto wobbleNow = wobble.next();
+        const auto flutterNow = preset->flutterSemitones > 0.0f ? flutterDrift.next() : 0.0f;
         if (controlCountdown == 0)
         {
-            controlFrom = controlTo;
-            controlTo = behaviour.process(dt * controlStep, sampleMacros, envelope, 0.0f);
+            updateControl(dt * controlStep, wobbleNow, flutterNow);
             controlCountdown = controlStep;
         }
         const auto blend = 1.0f - static_cast<float>(--controlCountdown) / controlStep;
-        auto vocal = controlTo;
-        vocal.amplitudeShape = lerp(blend, controlFrom.amplitudeShape, controlTo.amplitudeShape);
-        vocal.barkTransient = lerp(blend, controlFrom.barkTransient, controlTo.barkTransient);
-
-        // The onset pitch gesture comes from the character preset table, which
-        // holds the contour measured from the reference recordings. It settles
-        // to its last value and holds, so a sustained note stays in tune.
-        noteAgeSeconds += dt;
-        noteBeats += beatStep;
-        if (belch && ! releasing && noteAgeSeconds > belchSeconds)
-            stopNote(true);
-        // TIDE is expression: 0 plays a dead-straight note, the default 0.25 the
-        // measured call, 1 more than twice as much movement plus a vibrato.
-        const auto tide = sampleMacros.tide;
-        const auto expression = tide < 0.25f ? tide * 4.0f : 1.0f + (tide - 0.25f) * 1.6f;
-        const auto gestureLength = preset->gestureSeconds > 0.0f ? preset->gestureSeconds : 0.25f;
-        const auto contourSemitones = belch ? belchPitch(noteAgeSeconds)
-                                    : pitchContourAt(preset->pitchContour, noteAgeSeconds / gestureLength)
-                                    * preset->gestureDepth * 0.74f * expression;
-        vocal.pitchLift = clamp(0.0f, 1.0f, (contourSemitones + 2.0f) * 0.25f);
-
-        const auto detune = detuneOffsetSemitones * sampleMacros.detune * 0.35f;
-        // The measured calls never hold a pitch: a smoothed random drift on top
-        // of the contour, deepest on SQUEAL.
-        auto drift = wobble.next() * preset->wobbleSemitones * expression;
-        // GROAN's flutter: about 12.5 Hz, its rate and depth drifting a little.
-        if (preset->flutterSemitones > 0.0f)
-        {
-            const auto d = flutterDrift.next();
-            flutterPhase += preset->flutterRateHz * (1.0f + 0.30f * d) * dt;
-            flutterPhase -= std::floor(flutterPhase);
-            drift += fastSin2Pi(flutterPhase)
-                   * preset->flutterSemitones * (0.75f + 0.55f * d) * std::min(1.0f, expression);
-        }
-        if (tide > 0.4f)    // a singer's vibrato, 5.5 Hz, fading in after the attack
-        {
-            vibratoPhase += 5.5 * dt;
-            vibratoPhase -= std::floor(vibratoPhase);
-            const auto fadeIn = clamp(0.0f, 1.0f, (noteAgeSeconds - 0.25f) / 0.35f);
-            drift += fastSin2Pi(vibratoPhase)
-                   * 0.45f * (tide - 0.4f) / 0.6f * fadeIn;
+        c.frequency = fromFrequency + static_cast<double>(blend) * (toFrequency - fromFrequency);
+        c.vocal.amplitudeShape = lerp(blend, fromShape, toShape);
+        c.vocal.barkTransient = lerp(blend, fromBark, toBark);
+        c.modeGain = lerp(blend, fromGain, toGain);
+        if (c.motion.muffle > 0.0f)    // the mutter: random syllables, about seven a second, as deep as the mouth is closed
+        {                              // (all the way on MURMUR, about half on HONK's half-closed mouth)
+            const auto syllable = 0.15f + 0.85f * clamp(0.0f, 1.0f, 0.55f + 0.9f * mutter.next());
+            c.modeGain *= c.motion.muffle >= 1.0f ? syllable : 1.0f - c.motion.muffle * (1.0f - syllable);
         }
 
-        // The behaviour mode keeps moving the held note (see modeMotion).
-        const auto motion = modeMotion(belch ? BehaviourMode::call : sampleMacros.behaviorMode,
-                                       noteBeats, sampleMacros.tempoBpm);
-        vocal.vowelMorph = clamp(0.0f, 1.0f, vocal.vowelMorph + motion.vowel + preset->vowelOffset);
-        if (belch)     // a closed "oo" gulp; the belch comes up as a wide "aw"
-            vocal.vowelMorph = noteAgeSeconds < 0.18f ? 0.05f : 0.45f;
-        auto modeGain = motion.gain * (belch ? belchGain(noteAgeSeconds) : 1.0f);
-        if (motion.muffle > 0.0f)    // MURMUR mutters: random syllables, about seven a second
-            modeGain *= 0.15f + 0.85f * clamp(0.0f, 1.0f, 0.55f + 0.9f * mutter.next());
-        vocal.barkTransient += motion.kick * barkScale;
-        drift += motion.semitones;
-        const auto pitchNote = smoothNote.getNextValue();
-        if (pitchNote != renderedPitchNote)
-        {
-            renderedPitchNote = pitchNote;
-            baseFrequency = midiNoteToHz(pitchNote);
-        }
-        const auto frequency = static_cast<double>(baseFrequency)
-            * fastExp2((contourSemitones + smoothBend.getNextValue() + detune + drift) / 12.0f);
-
-        auto value = fofBank.process(frequency, *preset, sampleMacros, vocal, random);
-        const auto attackPunch = 1.0f + 1.20f * vocal.barkTransient;
-        // Headroom: one note at full velocity peaks near -10 dBFS, so eight
-        // voices sum to just under full scale and the limiter only catches the
-        // coherent worst case rather than working on every chord.
-        value *= envelope * vocal.amplitudeShape * attackPunch * modeGain
-               * (0.05f + 0.13f * currentVelocity);
-
-        // The kick: a short sine that drops from twice the note to the note in
-        // about 15 ms and dies in about 40, under the attack only. It starts at
-        // zero phase, so it adds a hit without a click.
-        if (preset->thump > 0.0f && noteAgeSeconds < 0.25f)
-        {
-            const auto sweep = 1.0f + fastExp(-noteAgeSeconds / 0.015f);
-            thumpPhase += baseFrequency * sweep * dt;
-            thumpPhase -= std::floor(thumpPhase);
-            value += fastSin2Pi(thumpPhase)
-                   * preset->thump * barkScale * fastExp(-noteAgeSeconds / 0.040f)
-                   * (0.05f + 0.13f * currentVelocity) * 1.6f;
-        }
-
-        polish += polishCoefficient * (value - polish);
-        value = polish;
-        // MURMUR's closed mouth: a second, much lower roll-off (about 900 Hz), eased in
-        muffleAmount += 0.002f * (motion.muffle - muffleAmount);
-        muffled += muffleCoefficient * (value - muffled);
-        value = lerp(muffleAmount, value, muffled * 1.6f);
-
-        if (stolenTailSamples > 0)
-        {
-            value += stolenTail * static_cast<float>(stolenTailSamples) / 32.0f;
-            --stolenTailSamples;
-        }
-
-        if (! std::isfinite(value))
-        {
-            value = 0.0f;
-            resetDsp();
-        }
-
-        previousOutput = value;
+        const auto value = nextSample(c, dt) * layerGain;
         const auto sampleIndex = startSample + offset;
         if (channelCount > 1)
         {
@@ -414,14 +278,216 @@ void SealVoice::renderNextBlock(AudioBuffer& output, int startSample, int numSam
 
         // The face follows the mode's rhythm: each hit opens the mouth and it closes over ~180 ms,
         // long enough for a 30 Hz screen to show a 70 ms honk.
-        mouthGate = std::max(clamp(0.0f, 1.0f, motion.gain), mouthGate - dt / 0.18f);
-        vocal.mouthOpen *= mouthGate;
-        telemetry.vocal = vocal;
-        telemetry.envelope = envelope;
-        telemetry.active = true;
+        mouthGate = std::max(clamp(0.0f, 1.0f, c.motion.gain), mouthGate - dt / 0.18f);
+        if (! amplitudeEnvelope.isActive())     // the note has ended: stop on this sample, not at the end of the block,
+            break;                              // so the output and the random draws don't depend on the host's block size
     }
+    // The face reads the voice once a block.
+    telemetry.vocal = c.vocal;
+    telemetry.vocal.mouthOpen *= mouthGate;
+    telemetry.envelope = c.envelope;
+    telemetry.active = true;
 
     if (! amplitudeEnvelope.isActive())
         deactivate();
+}
+
+// The note's motion at this control point: the smoothed knobs, the call's shape, its pitch, mouth and
+// level, into held. Everything here is control; nothing makes sound, and nothing draws a random number
+// (the random values it needs are drawn every sample, in renderNextBlock). controlDt: the control
+// step, in seconds.
+void SealVoice::updateControl(float controlDt, float wobbleNow, float flutterNow) noexcept
+{
+    auto& c = held;
+    c.macros = smoothedMacros();
+    // Key force growls: a hard key pushes BARK up, a soft one pulls it down, all through the note (0.6 is the
+    // middle; owner-approved by ear on 12 Nov 2026). The onset bark already scales with velocity in BehaviourEngine.
+    c.macros.bark = clamp(0.0f, 1.0f, c.macros.bark + (currentVelocity - 0.6f) * 0.6f);
+    c.vocal = behaviour.process(controlDt, c.macros, c.envelope, 0.0f);
+    // TIDE is expression: 0 plays a dead-straight note, the default 0.25 the
+    // measured call, 1 more than twice as much movement plus a vibrato.
+    const auto tide = c.macros.tide;
+    const auto expression = tide < 0.25f ? tide * 4.0f : 1.0f + (tide - 0.25f) * 1.6f;
+    auto pitch = pitchMotion(c, controlDt, expression, wobbleNow, flutterNow);
+    c.motion = moodMotion(c.macros, controlDt);
+    mouthShape(c);
+    c.vocal.barkTransient += c.motion.kick * barkScale;
+    pitch.drift += c.motion.semitones;
+    modeSemitones = c.motion.semitones;
+
+    fromShape = toShape;           toShape = c.vocal.amplitudeShape;
+    fromBark = toBark;             toBark = c.vocal.barkTransient;
+    fromGain = toGain;             toGain = moodLevel(c);
+    fromFrequency = toFrequency;   toFrequency = noteFrequency(pitch);
+    fofBank.setFundamental(toFrequency);
+    if (controlFresh)    // the first point of a note: pitch and level start where they are
+    {
+        fromGain = toGain;
+        fromFrequency = toFrequency;
+        controlFresh = false;
+    }
+}
+
+// The knobs at this control point, each set by name; the smoothers step a whole control step.
+MacroState SealVoice::smoothedMacros() noexcept
+{
+    auto m = macros;
+    m.boom = smoothBoom.skip(controlStep);
+    m.air = smoothAir.skip(controlStep);
+    m.bark = smoothBark.skip(controlStep);
+    m.vowel = smoothVowel.skip(controlStep);
+    m.tide = smoothTide.skip(controlStep);
+    m.detune = smoothDetune.skip(controlStep);
+    return m;
+}
+
+void SealVoice::ageNote(float dt, double beatStep) noexcept
+{
+    noteAgeSeconds += dt;
+    noteBeats += beatStep;
+    if (belch && ! releasing && noteAgeSeconds > belchSeconds)
+        stopNote(true);
+}
+
+// Where the pitch is, before the mood moves it: the onset gesture, DETUNE, and the drift on top.
+SealVoice::PitchParts SealVoice::pitchMotion(SampleControl& c, float dt, float expression, float wobbleNow, float flutterNow) noexcept
+{
+    PitchParts p;
+    // The onset pitch gesture comes from the character preset table, which
+    // holds the contour measured from the reference recordings. It settles
+    // to its last value and holds, so a sustained note stays in tune.
+    const auto gestureLength = preset->gestureSeconds > 0.0f ? preset->gestureSeconds : 0.25f;
+    p.contour = belch ? belchPitch(noteAgeSeconds)
+                      : pitchContourAt(preset->pitchContour, noteAgeSeconds / gestureLength)
+                      * preset->gestureDepth * 0.74f * expression;
+    c.vocal.pitchLift = clamp(0.0f, 1.0f, (p.contour + 2.0f) * 0.25f);
+
+    p.detune = detuneOffsetSemitones * c.macros.detune * 0.35f;
+    // The measured calls never hold a pitch: a smoothed random drift on top
+    // of the contour, deepest on SQUEAL.
+    p.drift = wobbleNow * preset->wobbleSemitones * expression;
+    // GROAN's flutter: about 12.5 Hz, its rate and depth drifting a little.
+    if (preset->flutterSemitones > 0.0f)
+    {
+        const auto d = flutterNow;
+        flutterPhase += preset->flutterRateHz * (1.0f + 0.30f * d) * dt;
+        flutterPhase = wrapPhase(flutterPhase);
+        p.drift += fastSin2Pi(flutterPhase)
+                 * preset->flutterSemitones * (0.75f + 0.55f * d) * std::min(1.0f, expression);
+    }
+    const auto tide = c.macros.tide;
+    if (tide > 0.4f)    // a singer's vibrato, 5.5 Hz, fading in after the attack
+    {
+        vibratoPhase += 5.5 * dt;
+        vibratoPhase = wrapPhase(vibratoPhase);
+        const auto fadeIn = clamp(0.0f, 1.0f, (noteAgeSeconds - 0.25f) / 0.35f);
+        p.drift += fastSin2Pi(vibratoPhase)
+                 * 0.45f * (tide - 0.4f) / 0.6f * fadeIn;
+    }
+    return p;
+}
+
+// What the mood does to the held note right now (see Gestures.h). The WAIL lock eases over 150 ms
+// when it is pressed or released during a note.
+gestures::ModeMotion SealVoice::moodMotion(const MacroState& m, float dt) noexcept
+{
+    const auto holdTarget = m.wailHold ? 1.0f : 0.0f;
+    if (wailHoldAmount != holdTarget)
+        wailHoldAmount = holdTarget > wailHoldAmount ? std::min(holdTarget, wailHoldAmount + dt / 0.15f)
+                                                     : std::max(holdTarget, wailHoldAmount - dt / 0.15f);
+    return modeMotion(belch ? BehaviourMode::call : m.behaviorMode,
+                      noteBeats, m.tempoBpm, m.wailBend, wailHoldAmount);
+}
+
+// The mouth: the call's vowel moved by the mood and the voice's own colour, or the vowel map's.
+void SealVoice::mouthShape(SampleControl& c) noexcept
+{
+    auto& vocal = c.vocal;
+    vocal.vowelMorph = clamp(0.0f, 1.0f, vocal.vowelMorph + c.motion.vowel + preset->vowelOffset);
+    if(preset->fullVowelMap && !belch)
+        vocal.vowelMorph=clamp(0.0f,1.0f,c.macros.vowel);
+    if (belch)     // a closed "oo" gulp; the belch comes up as a wide "aw"
+        vocal.vowelMorph = noteAgeSeconds < 0.18f ? 0.05f : 0.45f;
+}
+
+// How loud the mood makes the note: its own shape and the measured trim against CALL (MURMUR's mutter
+// is added every sample, in renderNextBlock).
+float SealVoice::moodLevel(const SampleControl& c) noexcept
+{
+    auto gain = c.motion.gain * (belch ? belchGain(noteAgeSeconds) : 1.0f);
+    if (!belch)
+    {
+        const auto mode = static_cast<int>(c.macros.behaviorMode);
+        if (mode != trimMode || levelSlot != trimSlot)     // the mood's trim, worked out once per mood
+        {
+            trimMode = mode;
+            trimSlot = levelSlot;
+            trimGain = fastExp2(modeTrimDb[levelSlot][mode] / 6.0206f);
+        }
+        gain *= trimGain;
+    }
+    return gain;
+}
+
+// The note's frequency: the played note (gliding when GLIDE is on), the gesture, the pitch wheel,
+// DETUNE and the drift.
+double SealVoice::noteFrequency(const PitchParts& p) noexcept
+{
+    const auto pitchNote = smoothNote.skip(controlStep);
+    if (pitchNote != renderedPitchNote)
+    {
+        renderedPitchNote = pitchNote;
+        baseFrequency = midiNoteToHz(pitchNote);
+    }
+    return static_cast<double>(baseFrequency)
+        * fastExp2((p.contour + smoothBend.skip(controlStep) + p.detune + p.drift + layerSemitones) / 12.0f);
+}
+
+// One sample of sound from that control: the grains, the note's level, the kick, the roll-offs.
+float SealVoice::nextSample(const SampleControl& c, float dt) noexcept
+{
+    const auto& vocal = c.vocal;
+    auto value = fofBank.process(c.frequency, *preset, c.macros, vocal, random);
+    const auto attackPunch = 1.0f + 1.20f * vocal.barkTransient;
+    // Headroom: one note at full velocity peaks near -10 dBFS, so eight
+    // voices sum to just under full scale and the limiter only catches the
+    // coherent worst case rather than working on every chord.
+    value *= c.envelope * vocal.amplitudeShape * attackPunch * c.modeGain
+           * (0.05f + 0.13f * currentVelocity);
+
+    // The kick: a short sine that drops from twice the note to the note in
+    // about 15 ms and dies in about 40, under the attack only. It starts at
+    // zero phase, so it adds a hit without a click.
+    if (preset->thump > 0.0f && noteAgeSeconds < 0.25f)
+    {
+        const auto sweep = 1.0f + fastExp(-noteAgeSeconds / 0.015f);
+        thumpPhase += baseFrequency * sweep * dt;
+        thumpPhase = wrapPhase(thumpPhase);
+        value += fastSin2Pi(thumpPhase)
+               * preset->thump * barkScale * fastExp(-noteAgeSeconds / 0.040f)
+               * (0.05f + 0.13f * currentVelocity) * 1.6f;
+    }
+
+    polish += polishCoefficient * (value - polish);
+    value = polish;
+    // MURMUR's closed mouth: a second, much lower roll-off (about 900 Hz), eased in
+    muffleAmount += 0.002f * (c.motion.muffle - muffleAmount);
+    muffled += muffleCoefficient * (value - muffled);
+    value = lerp(muffleAmount, value, muffled * 1.6f);
+
+    if (stolenTailSamples > 0)
+    {
+        value += stolenTail * static_cast<float>(stolenTailSamples) / 32.0f;
+        --stolenTailSamples;
+    }
+
+    if (! isFiniteSample(value))
+    {
+        value = 0.0f;
+        resetDsp();
+    }
+
+    previousOutput = value;
+    return value;
 }
 }

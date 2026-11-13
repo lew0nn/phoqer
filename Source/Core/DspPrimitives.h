@@ -7,6 +7,30 @@
 
 namespace phoqer
 {
+// The per-sample helpers below are small and called from the hottest loops; MSVC would otherwise
+// leave them as calls.
+#if defined(_MSC_VER)
+ #define PHOQER_HOT_INLINE __forceinline
+#else
+ #define PHOQER_HOT_INLINE inline __attribute__((always_inline))
+#endif
+
+// x - floor(x), without the library call (exact for |x| below 2^63).
+PHOQER_HOT_INLINE double wrapPhase(double x) noexcept
+{
+    auto whole = static_cast<double>(static_cast<long long>(x));
+    if (whole > x) whole -= 1.0;
+    return x - whole;
+}
+
+// std::isfinite without the library call: false for infinities and NaN.
+PHOQER_HOT_INLINE bool isFiniteSample(float x) noexcept
+{
+    uint32_t bits;
+    std::memcpy(&bits, &x, sizeof bits);
+    return (bits & 0x7f800000u) != 0x7f800000u;
+}
+
 template <typename Type>
 constexpr Type clamp(Type minimum, Type maximum, Type value) noexcept
 {
@@ -27,7 +51,7 @@ constexpr Type twoPi = static_cast<Type>(2) * pi<Type>;
 
 // Fast 2^x, e^x and sin for the per-sample paths. They agree with the library functions to
 // about one part in ten million, below what a 24-bit file can hold, at a fraction of the cost.
-inline float fastExp2(float x) noexcept
+PHOQER_HOT_INLINE float fastExp2(float x) noexcept
 {
     if (x < -126.0f) return 0.0f;
     x = std::min(x, 127.0f);
@@ -41,10 +65,10 @@ inline float fastExp2(float x) noexcept
     return fraction * scale;
 }
 
-inline float fastExp(float x) noexcept { return fastExp2(x * 1.44269504f); }
+PHOQER_HOT_INLINE float fastExp(float x) noexcept { return fastExp2(x * 1.44269504f); }
 
 // sin(2 pi cycles), for a phase counted in cycles.
-inline float fastSin2Pi(double cycles) noexcept
+PHOQER_HOT_INLINE float fastSin2Pi(double cycles) noexcept
 {
     auto whole = static_cast<double>(static_cast<long long>(cycles));
     if (whole > cycles) whole -= 1.0;
@@ -93,6 +117,16 @@ public:
     }
 
     float getCurrentValue() const noexcept { return current; }
+
+    // Steps count samples (at least 1) and returns the value after them.
+    float skip(int count) noexcept
+    {
+        if (remaining <= 0)
+            return current;
+        for (int i = 1; i < count; ++i)
+            getNextValue();
+        return getNextValue();
+    }
 
     float getNextValue() noexcept
     {
@@ -148,6 +182,16 @@ public:
         state = State::idle;
         level = 0.0f;
         step = 0.0f;
+    }
+
+    // Release from wherever it is, over this many seconds (a stolen voice's quick fade).
+    void releaseIn(float seconds) noexcept
+    {
+        if (state == State::idle)
+            return;
+        parameters.release = seconds;
+        state = State::release;
+        updateStep();
     }
 
     bool isActive() const noexcept { return state != State::idle; }
