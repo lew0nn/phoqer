@@ -262,6 +262,8 @@ void activationChecks(){
     {juce::MemoryBlock d;voiceCopy.loadFileAsData(d);static_cast<uint8_t*>(d.getData())[d.getSize()-10]^=0x20;voiceCopy.replaceWithData(d.getData(),d.getSize());}
     require(licence::serverVoiceText().isEmpty(),"A damaged voice copy was used");
     require(licence::enter(buy).isEmpty()&&S.voicesSent==2&&licence::serverVoiceText()==S.voiceText,"A damaged voice was not fetched again");
+    voiceCopy.deleteFile();{licence::Online online;licence::renewInBackground(online);}
+    require(licence::serverVoiceText()==S.voiceText&&S.voicesSent==3,"An unlocked computer without the voice didn't fetch it at start");
     licence::deactivate();require(!voiceCopy.exists(),"REMOVE KEY left the voice behind");
     S.voiceText.clear();licence::remove();S.slots.clear();
 }

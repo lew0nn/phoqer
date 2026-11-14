@@ -297,9 +297,9 @@ void renewInBackground(Online& online)
         const auto record = juce::JSON::parse(unlockFile().loadFileAsString());
         const auto s = status();
         if (! keys::keyBody(record["key"].toString().toStdString()) || s.lockedElsewhere || (! s.unlocked && ! s.paused)) return;
-        // A fresh ticket covers 14 days: renew once it's a day old.
+        // A fresh ticket covers 14 days: renew once it's a day old, or at once while KYRAX's voice is missing here.
         const auto expiry = ticketExpiry(record["ticket"].toString(), record["keyId"].toString(), record["ticketMachine"].toString());
-        if (expiry - now() > (offlineDays - 1) * 86400) return;
+        if (expiry - now() > (offlineDays - 1) * 86400 && serverVoiceText().isNotEmpty()) return;
         const auto reply = call("/activate", activationRequest(record["key"].toString()));
         if (! reply.isObject()) return;                                 // offline: the ticket keeps counting down
         if (static_cast<bool>(reply["ok"]) && ticketExpiry(reply["ticket"].toString(), reply["id"].toString(), machine()) > now())
