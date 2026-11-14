@@ -26,7 +26,7 @@ jobs:
 
       - name: Sign (ad hoc) and package
         run: |
-          VERSION=$(sed -n 's/^project(PHOQER VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          VERSION=$(sed -n 's/^set(PHOQER_VERSION "\([0-9.]*\)".*/\1/p' CMakeLists.txt)
           ART=build/PHOQER_artefacts/Release
           mkdir -p dist
           for b in "$ART/AU/PHOQER.component" "$ART/VST3/PHOQER.vst3" "$ART/Standalone/PHOQER.app"; do
