@@ -270,7 +270,14 @@ void activationChecks(){
     require(licence::enter(buy).isEmpty()&&S.voicesSent==2&&licence::serverVoiceText()==S.voiceText,"A damaged voice was not fetched again");
     voiceCopy.deleteFile();{licence::Online online;licence::renewInBackground(online);}
     require(licence::serverVoiceText()==S.voiceText&&S.voicesSent==3,"An unlocked computer without the voice didn't fetch it at start");
-    licence::deactivate();require(!voiceCopy.exists(),"REMOVE KEY left the voice behind");
+    {   // A new KYRAX version replaces the old one, and the old one stays for songs made with it (offline too).
+        const auto oldText=S.voiceText;const auto oldHash=juce::SHA256(oldText.toRawUTF8(),oldText.getNumBytesAsUTF8()).toHexString();
+        S.voiceText=oldText.replace("kyrax.test","kyrax.test2");
+        require(licence::enter(buy).isEmpty()&&S.voicesSent==4&&licence::serverVoiceText()==S.voiceText,"The new KYRAX version was not stored");
+        require(licence::keptVoice(oldHash)==oldText,"The KYRAX version it replaced was not kept for songs");
+    }
+    licence::deactivate();
+    require(!licence::folder().getChildFile("Voices/kept").exists(),"REMOVE KEY left kept KYRAX versions behind");require(!voiceCopy.exists(),"REMOVE KEY left the voice behind");
     S.voiceText.clear();licence::remove();S.slots.clear();
 }
 // Ed25519 as published (RFC 8032, test 1), then every kind of key the player can paste.

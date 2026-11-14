@@ -74,6 +74,8 @@ bool storeVoice(const juce::var& voice)
     const auto size = text.getNumBytesAsUTF8();
     if (size < 64 || size > 65536 || hashOf(text) != voice["sha256"].toString() || juce::JSON::parse(text)["format"].toString() != "PHQVOICE")
         return false;                                                   // damaged on the way: the next check asks again
+    const auto old = serverVoiceText();                                 // the version it replaces stays for songs made with it
+    if (old.isNotEmpty() && hashOf(old) != hashOf(text)) keepVoice(old);
     return writeScrambled(voiceFile(), text);
 }
 juce::String readScrambled(const juce::File& file)
