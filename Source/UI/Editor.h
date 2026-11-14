@@ -156,8 +156,10 @@ private:
     FloatingWindow98 nitroWindow { "NITRO.EXE" };
     std::unique_ptr<NitroKeys98> nitroKeys;
     std::array<LevelSlider98, 3> nitroLevels;
-    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> nitroAttachments;
+    // The knobs before their attachments: members are destroyed in reverse order, and an attachment
+    // detaches from its knob on the way out (the other order crashed on quit on macOS).
     std::vector<std::unique_ptr<PixelKnob>> nitroKnobs;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> nitroAttachments;
     std::vector<std::unique_ptr<juce::ParameterAttachment>> nitroWatch;
     juce::ComboBox stackBox;
     ActionButton98 nitroOk { "OK" };
