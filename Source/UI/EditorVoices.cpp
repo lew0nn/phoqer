@@ -68,12 +68,14 @@ void PhoqerView::refreshVoiceControls()
     }
     voiceRows[3]->setTooltip(licence::describe(status));
     const bool lockedKyrax=browserVoice==3&&!unlocked;
-    const bool missingKyrax=browserVoice==3&&!installed;     // KYRAX always shows; without its file it offers LOAD VOICE
-    tryOnlineButton.setVisible(lockedKyrax&&!missingKyrax);  // only a locked KYRAX has a button beside USE
-    loadVoiceButton.setVisible(missingKyrax);
-    loadVoiceButton.setBounds(lockedKyrax?juce::Rectangle<int>(10,247,104,22):juce::Rectangle<int>(10,247,218,22));
+    // KYRAX always shows. Its voice comes with the key, so a locked KYRAX offers ENTER KEY; LOAD VOICE only shows in the
+    // rare case of an unlocked computer that still has no voice (dropping a .phqvoice on the window works too).
+    const bool missingKyrax=browserVoice==3&&!installed;
+    tryOnlineButton.setVisible(lockedKyrax&&!missingKyrax);  // only a locked, installed KYRAX has a button beside ENTER KEY
+    loadVoiceButton.setVisible(missingKyrax&&unlocked);
+    loadVoiceButton.setBounds(10,247,218,22);
     useVoiceButton.setVisible(!(missingKyrax&&unlocked));
-    useVoiceButton.setBounds(lockedKyrax?juce::Rectangle<int>(122,247,106,22):juce::Rectangle<int>(10,247,218,22));
+    useVoiceButton.setBounds(lockedKyrax&&!missingKyrax?juce::Rectangle<int>(122,247,106,22):juce::Rectangle<int>(10,247,218,22));
     useVoiceButton.setButtonText(lockedKyrax?"ENTER KEY":"USE");
     keyButton.setVisible(browserVoice==3);
     keyButton.setButtonText(unlocked?"REMOVE KEY":"GET ON ITCH");

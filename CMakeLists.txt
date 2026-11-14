@@ -37,12 +37,14 @@ juce_add_binary_data(PHOQER_UIAssets
 # (Resources/Voices/), never compiled into PHOQER: AGPL code and the paid data stay separate works.
 # It lives outside the public source tree; PHOQER_KYRAX_FILE picks which file (a test build can carry a changed voice).
 set(PHOQER_KYRAX_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../Voices/KYRAX.phqvoice" CACHE FILEPATH "KYRAX voice data shipped beside the app")
-# Without the file (a public build, e.g. on GitHub), PHOQER builds without it: KYRAX then offers LOAD VOICE.
-if(EXISTS "${PHOQER_KYRAX_FILE}")
+# KYRAX's voice now comes from the activation server with the key, so builds leave it out. A test build can still
+# bundle it (-DPHOQER_BUNDLE_KYRAX_VOICE=ON); without the file it is left out either way.
+option(PHOQER_BUNDLE_KYRAX_VOICE "Copy KYRAX.phqvoice beside the app and into the VST3 (test builds only)" OFF)
+if(PHOQER_BUNDLE_KYRAX_VOICE AND EXISTS "${PHOQER_KYRAX_FILE}")
     configure_file("${PHOQER_KYRAX_FILE}" "${CMAKE_CURRENT_BINARY_DIR}/Voices/KYRAX.phqvoice" COPYONLY)
     set(PHOQER_BUNDLE_KYRAX ON)
 else()
-    message(STATUS "No KYRAX voice at ${PHOQER_KYRAX_FILE}: building without it (load it with LOAD VOICE)")
+    message(STATUS "KYRAX voice not bundled: it comes from the activation server with the key")
     set(PHOQER_BUNDLE_KYRAX OFF)
 endif()
 

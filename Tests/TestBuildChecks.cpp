@@ -190,6 +190,7 @@ juce::String keyText(const char* name);
 // A stand-in for lewonn.com's activation server: up to 3 computers a key, tickets stamped with the TEST ticket key.
 struct FakeServer{
     std::map<juce::String,std::set<juce::String>> slots;std::set<juce::String> banned;bool online=true;uint8_t secret[64]{};
+    juce::String voiceText;int voicesSent=0;     // KYRAX's voice, sent with an unlock when the computer's copy is missing or different
     struct Made{juce::String id,kind;int serial;juce::String name;};std::map<std::string,Made> made;   // the keys this server has made, by their random part
     FakeServer(){
         juce::MemoryOutputStream der;juce::Base64::convertFromBase64(der,juce::File(juce::SystemStats::getEnvironmentVariable("PHOQER_TEST_KEYS",{})).getChildFile("TEST-ticket-secret.txt").loadFileAsString().trim());
@@ -213,7 +214,11 @@ struct FakeServer{
         auto& used=slots[id];if(!used.count(machine)&&used.size()>=3){r->setProperty("ok",false);r->setProperty("code","full");return reply;}
         used.insert(machine);r->setProperty("ok",true);r->setProperty("used",static_cast<int>(used.size()));r->setProperty("max",3);
         r->setProperty("id",id);r->setProperty("kind",key->kind);r->setProperty("serial",key->serial);r->setProperty("name",key->name);
-        r->setProperty("ticket",ticket(id,machine,juce::Time::currentTimeMillis()/1000+14*86400));return reply;}
+        r->setProperty("ticket",ticket(id,machine,juce::Time::currentTimeMillis()/1000+14*86400));
+        const auto hash=juce::SHA256(voiceText.toRawUTF8(),voiceText.getNumBytesAsUTF8()).toHexString();
+        if(body.hasProperty("phoqer")&&voiceText.isNotEmpty()&&body["voice"].toString()!=hash){
+            auto* v=new juce::DynamicObject;v->setProperty("data",voiceText);v->setProperty("sha256",hash);v->setProperty("label","KYRAX TEST");r->setProperty("voice",juce::var(v));++voicesSent;}
+        return reply;}
 };
 FakeServer& server(){static FakeServer s;return s;}
 // The activation server's rules as PHOQER sees them: 3 computers, offline, blocked, the 14-day ticket and its renewal.
@@ -246,7 +251,19 @@ void activationChecks(){
     S.banned.insert("1-B-137");withTicket(S.ticket("1-B-137",me,now+8*86400));
     {licence::Online online;licence::renewInBackground(online);}licence::reload();s=licence::status();
     require(!s.unlocked&&s.paused&&!s.ticketRanOut,"A blocked key kept playing after going online");S.banned={"1-B-136"};
-    licence::remove();S.slots.clear();
+    // KYRAX's voice comes with the unlock: kept unreadable, not sent twice, fetched again when damaged, gone with REMOVE KEY.
+    licence::remove();S.slots.clear();S.voicesSent=0;
+    S.voiceText=R"({"format":"PHQVOICE","version":1,"id":"kyrax.test","name":"KYRAX","parameters":{"note":"a test voice, long enough"}})";
+    require(licence::enter(buy).isEmpty()&&S.voicesSent==1,"The unlock didn't bring KYRAX's voice");
+    require(licence::serverVoiceText()==S.voiceText,"The server's voice was not kept");
+    const auto voiceCopy=licence::folder().getChildFile("Voices/KYRAX.voice");
+    require(voiceCopy.existsAsFile()&&!voiceCopy.loadFileAsString().contains("PHQVOICE"),"The voice was stored readable");
+    require(licence::enter(buy).isEmpty()&&S.voicesSent==1,"The voice was sent again to a computer that has it");
+    {juce::MemoryBlock d;voiceCopy.loadFileAsData(d);static_cast<uint8_t*>(d.getData())[d.getSize()-10]^=0x20;voiceCopy.replaceWithData(d.getData(),d.getSize());}
+    require(licence::serverVoiceText().isEmpty(),"A damaged voice copy was used");
+    require(licence::enter(buy).isEmpty()&&S.voicesSent==2&&licence::serverVoiceText()==S.voiceText,"A damaged voice was not fetched again");
+    licence::deactivate();require(!voiceCopy.exists(),"REMOVE KEY left the voice behind");
+    S.voiceText.clear();licence::remove();S.slots.clear();
 }
 // Ed25519 as published (RFC 8032, test 1), then every kind of key the player can paste.
 void keyChecks(){

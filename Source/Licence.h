@@ -48,6 +48,9 @@ int generation();                              // goes up each time the unlock m
 juce::String describe(const Status&);          // "A GIFT FROM LEWONN TO BOB", "LICENSED - KEY #0137"
 juce::String keyId(const keys::Key&);          // the server's name for a key: "1-B-137", "1-G-4"
 juce::File folder();
+// KYRAX's voice as the activation server sent it to this computer, or empty. It is kept scrambled with a key
+// made from this computer's ID, so a copy taken to another computer doesn't open there.
+juce::String serverVoiceText();
 
 // The activation server's answer to POST path + JSON body; a void var when it can't be reached.
 // Checks replace it with a stand-in; PHOQER_ACTIVATION_URL points the real one elsewhere (a local test server).

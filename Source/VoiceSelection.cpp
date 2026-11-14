@@ -44,10 +44,15 @@ juce::File VoiceSelection::installedVoiceFile()
     return phoqer::licence::folder().getChildFile("Voices/KYRAX.phqvoice");
 }
 
+// KYRAX's voice: the copy the activation server sent this computer first, then one added with LOAD VOICE, then a test
+// build's bundled file.
 phoqer::VoiceData VoiceSelection::bundledVoice()
 {
     phoqer::VoiceData data;
     juce::String error;
+    const auto fromServer=phoqer::licence::serverVoiceText();
+    if(fromServer.isNotEmpty()&&phoqer::VoiceData::parse(fromServer,data,error)&&data.name=="KYRAX") return data;
+    data={};
     if(!phoqer::VoiceData::read(installedVoiceFile(),data,error)) phoqer::VoiceData::read(bundledVoiceFile(),data,error);
     return data;
 }
@@ -96,6 +101,9 @@ void VoiceSelection::refreshLicence()
         keptSelection=selection;
     }
     voiceUnlocked.store(now);
+    // The first unlock brings KYRAX's voice with it: take it now. A newer voice later waits for the next start, so a
+    // voice never changes under a song that is playing.
+    if(now&&!voiceAvailable.load()) setVoiceData(bundledVoice());
     if(!now) loadedSelected.store(false);
     if(was!=now) notifyVoiceChange();
 }

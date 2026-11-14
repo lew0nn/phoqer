@@ -1,6 +1,8 @@
 #include "Licence.h"
 #include "ThirdParty/monocypher/monocypher-ed25519.h"
+#include "ThirdParty/monocypher/monocypher.h"
 #include <atomic>
+#include <cstring>
 
 #include <mutex>
 
@@ -43,6 +45,31 @@ juce::String device() { return hashed(juce::SystemStats::getUniqueDeviceID(), "|
 juce::String computerName() { return hashed(juce::SystemStats::getComputerName(), "|PHOQER-KYRAX-NAME"); }
 
 juce::File unlockFile() { return folder().getChildFile("KYRAX.unlock"); }
+juce::File voiceFile() { return folder().getChildFile("Voices/KYRAX.voice"); }
+
+// KYRAX's voice from the server, stored as "PHQV1" + a 24-byte nonce + the SHA-256 of the text (so damage shows)
+// + the text scrambled with XChaCha20, keyed
+// by this computer's ID: a copy taken elsewhere decodes to garbage and PHOQER asks the server again.
+juce::MemoryBlock voiceKey() { return juce::SHA256(("PHQVOICE1|" + machine()).toUTF8()).getRawData(); }
+juce::String hashOf(const juce::String& text) { return juce::SHA256(text.toRawUTF8(), text.getNumBytesAsUTF8()).toHexString(); }
+bool storeVoice(const juce::var& voice)
+{
+    const auto text = voice["data"].toString();
+    const auto size = text.getNumBytesAsUTF8();
+    if (size < 64 || size > 65536 || hashOf(text) != voice["sha256"].toString() || juce::JSON::parse(text)["format"].toString() != "PHQVOICE")
+        return false;                                                   // damaged on the way: the next check asks again
+    uint8_t nonce[24];
+    juce::Random random(juce::Random::getSystemRandom().nextInt64() ^ juce::Time::getHighResolutionTicks());
+    for (auto& b : nonce) b = static_cast<uint8_t>(random.nextInt(256));
+    std::vector<uint8_t> scrambled(size);
+    const auto key = voiceKey();
+    crypto_chacha20_x(scrambled.data(), reinterpret_cast<const uint8_t*>(text.toRawUTF8()), size, static_cast<const uint8_t*>(key.getData()), nonce, 0);
+    juce::MemoryBlock out("PHQV1", 5);
+    out.append(nonce, 24);
+    out.append(juce::SHA256(text.toRawUTF8(), size).getRawData().getData(), 32);
+    out.append(scrambled.data(), size);
+    return voiceFile().getParentDirectory().createDirectory() && voiceFile().replaceWithData(out.getData(), out.getSize());
+}
 
 // The ticket travels with the ID the server stamped it for ("ticketMachine"), so a quiet ID update keeps it. The
 // key's name on the server ("keyId" 1-B-137), its kind, serial and gift name come from the server's answer.
@@ -169,6 +196,9 @@ juce::var activationRequest(const juce::String& key)
    #else
     body->setProperty("os", "Windows");
    #endif
+    body->setProperty("phoqer", JucePlugin_VersionString);              // the server sends KYRAX's voice only to a PHOQER that can play it
+    const auto voice = serverVoiceText();                               // and only when this computer's copy is missing or not the current one
+    body->setProperty("voice", voice.isEmpty() ? juce::String() : hashOf(voice));
     return juce::var(body);
 }
 
@@ -246,6 +276,7 @@ juce::String enter(const juce::String& text, int* used)
     const auto ticket = reply["ticket"].toString();
     if (ticketExpiry(ticket, reply["id"].toString(), machine()) <= now()) return "THE ACTIVATION SERVER'S ANSWER WAS NOT GENUINE.";
     if (! writeRecord(text.trim(), ticket, machine(), reply)) return "COULD NOT SAVE THE UNLOCK.";
+    if (reply["voice"].isObject()) storeVoice(reply["voice"]);
     if (used != nullptr) *used = static_cast<int>(reply["used"]);
     {
         const std::lock_guard<std::mutex> guard(lock);
@@ -272,7 +303,10 @@ void renewInBackground(Online& online)
         const auto reply = call("/activate", activationRequest(record["key"].toString()));
         if (! reply.isObject()) return;                                 // offline: the ticket keeps counting down
         if (static_cast<bool>(reply["ok"]) && ticketExpiry(reply["ticket"].toString(), reply["id"].toString(), machine()) > now())
+        {
             writeRecord(record["key"].toString(), reply["ticket"].toString(), machine(), reply);
+            if (reply["voice"].isObject()) storeVoice(reply["voice"]);     // a new KYRAX voice: used from PHOQER's next start
+        }
         else if (reply["code"].toString() == "banned")
             writeRecord(record["key"].toString(), {}, {}, record);      // blocked: the ticket goes, KYRAX pauses
         forget();
@@ -296,6 +330,7 @@ void deactivate()
 void remove()
 {
     unlockFile().deleteFile();
+    voiceFile().deleteFile();
     const std::lock_guard<std::mutex> guard(lock);
     cached = {};
     loaded = true;
@@ -325,6 +360,22 @@ void checkForChanges()
 }
 
 int generation() { return changes.load(); }
+
+juce::String serverVoiceText()
+{
+    juce::MemoryBlock data;
+    constexpr size_t head = 5 + 24 + 32;
+    if (! voiceFile().loadFileAsData(data) || data.getSize() < head + 64 || data.getSize() > head + 65536 || std::memcmp(data.getData(), "PHQV1", 5) != 0)
+        return {};
+    const auto* bytes = static_cast<const uint8_t*>(data.getData());
+    const size_t size = data.getSize() - head;
+    std::vector<char> plain(size);
+    const auto key = voiceKey();
+    crypto_chacha20_x(reinterpret_cast<uint8_t*>(plain.data()), bytes + head, size, static_cast<const uint8_t*>(key.getData()), bytes + 5, 0);
+    // Another computer's copy, or a damaged one: the text doesn't match the fingerprint stored with it.
+    if (std::memcmp(juce::SHA256(plain.data(), size).getRawData().getData(), bytes + 29, 32) != 0) return {};
+    return juce::String::fromUTF8(plain.data(), static_cast<int>(size));
+}
 
 juce::String describe(const Status& s)
 {
