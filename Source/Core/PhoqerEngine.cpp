@@ -36,7 +36,7 @@ void PhoqerEngine::reset()
     pending = {};
     arpKeys = {};
     arpKeyCount = 0; arpOrder = 0; arpStep = 0; arpGrid = 0.0;
-    arpLastBeat = -1.0e9; arpNextBeat = 0.0; arpWasSynced = false; arpLastStepAt = -1;
+    arpLastBeat = -1.0e9; arpNextBeat = 0.0; arpWasSynced = false; arpLastStepAt = -1; arpNextStep = 0; arpLane = -1;
     arpNextAt = arpOffAt = -1; arpSounding = -1; arpWasActive = false;
     yapBeats = 0.0;
     sustainDown.fill(false);
@@ -369,7 +369,7 @@ int64_t PhoqerEngine::arpSyncedNext() noexcept
     const double length = arpStepBeats(), now = macros.songBeats;
     auto step = static_cast<int64_t>(std::floor(std::max(now, arpLastBeat) / length)) - 1;
     while (arpBeatOf(step) <= arpLastBeat + 1.0e-9 || arpBeatOf(step) < now - 1.0e-9) ++step;
-    arpNextBeat = arpBeatOf(step);
+    arpNextBeat = arpBeatOf(step); arpNextStep = step;
     return blockStart + static_cast<int64_t>(std::llround((arpNextBeat - now) * 60.0 * sampleRate / static_cast<double>(macros.tempoBpm)));
 }
 
@@ -417,7 +417,7 @@ void PhoqerEngine::arpKey(const MidiEvent& event, int sampleInBlock) noexcept
                 const auto step = static_cast<int64_t>(std::floor(at / length));
                 if (at >= arpBeatOf(step) && at - arpBeatOf(step) <= length * 0.25)
                 {
-                    arpNextBeat = arpBeatOf(step); arpLastBeat = arpNextBeat - 1.0e-6;
+                    arpNextBeat = arpBeatOf(step); arpNextStep = step; arpLastBeat = arpNextBeat - 1.0e-6;
                     arpNextAt = blockStart + sampleInBlock;
                 }
                 else
@@ -440,14 +440,14 @@ void PhoqerEngine::arpKey(const MidiEvent& event, int sampleInBlock) noexcept
     {
         for (int k = found; k + 1 < arpKeyCount; ++k) arpKeys[static_cast<size_t>(k)] = arpKeys[static_cast<size_t>(k + 1)];
         --arpKeyCount;
-        if (arpKeyCount == 0) arpNextAt = -1;     // all keys up: no new steps; the sounding one ends at its own time
+        if (arpKeyCount == 0) { arpNextAt = -1; arpLane = -1; }     // all keys up: no new steps; the sounding one ends at its own time
     }
 }
 
 void PhoqerEngine::arpClear(int sampleInBlock) noexcept
 {
     if (arpSounding >= 0) handleEvent({ MidiEventType::noteOff, sampleInBlock, arpSoundingChannel, arpSounding, 0.0f }, sampleInBlock);
-    arpSounding = -1; arpKeyCount = 0; arpNextAt = arpOffAt = -1;
+    arpSounding = -1; arpKeyCount = 0; arpNextAt = arpOffAt = -1; arpLane = -1;
 }
 
 void PhoqerEngine::arpRun(AudioBuffer& output, int& cursor, int target)
@@ -474,7 +474,7 @@ void PhoqerEngine::arpRun(AudioBuffer& output, int& cursor, int target)
         }
         std::array<int, 48> seq {};
         const int count = arpSequence(seq);
-        if (count == 0) { arpNextAt = -1; continue; }
+        if (count == 0) { arpNextAt = -1; arpLane = -1; continue; }
         if (arpSounding >= 0) handleEvent({ MidiEventType::noteOff, at, arpSoundingChannel, arpSounding, 0.0f }, at);
         int pick = arpStep % count;
         if (macros.arp.pattern == 3) { arpRandom = arpRandom * 1664525u + 1013904223u; pick = static_cast<int>((arpRandom >> 8) % static_cast<uint32_t>(count)); }
@@ -482,9 +482,18 @@ void PhoqerEngine::arpRun(AudioBuffer& output, int& cursor, int target)
         const ArpKey* source = &arpKeys[0];     // the velocity and channel of the key this note comes from
         for (int k = 0; k < arpKeyCount; ++k) if ((note - arpKeys[static_cast<size_t>(k)].note) % 12 == 0 && note >= arpKeys[static_cast<size_t>(k)].note) source = &arpKeys[static_cast<size_t>(k)];
         const double step = arpStepSamples();
-        handleEvent({ MidiEventType::noteOn, at, source->channel, note, source->velocity }, at);
-        arpSounding = note; arpSoundingChannel = source->channel; arpLastStepAt = blockStart + at;
-        arpOffAt = due + std::max<int64_t>(1, static_cast<int64_t>(std::llround(clamp(0.05f, 1.0f, macros.arp.gate) * step)));
+        // The step lanes: 16 steps that loop on the song's bar while it plays (from the first key otherwise),
+        // each with its loudness, its length (times GATE) or a rest.
+        arpLane = static_cast<int>((macros.songPlaying ? arpNextStep : static_cast<int64_t>(arpStep)) & (arpLaneSteps - 1));
+        const auto& lane = macros.arp.lanes[static_cast<size_t>(arpLane)];
+        arpLastStepAt = blockStart + at;
+        if (lane.rest) { arpSounding = -1; arpOffAt = -1; }
+        else
+        {
+            handleEvent({ MidiEventType::noteOn, at, source->channel, note, source->velocity * clamp(0.02f, 1.0f, lane.velocity) }, at);
+            arpSounding = note; arpSoundingChannel = source->channel;
+            arpOffAt = due + std::max<int64_t>(1, static_cast<int64_t>(std::llround(clamp(0.05f, 1.0f, macros.arp.gate) * clamp(0.05f, 1.0f, lane.gate) * step)));
+        }
         ++arpStep;
         if (macros.songPlaying)     // the next step on the song's grid (SWING there follows the song's beats)
         {
@@ -497,7 +506,7 @@ void PhoqerEngine::arpRun(AudioBuffer& output, int& cursor, int target)
             const double late = (arpStep % 2 == 1) ? clamp(0.0f, 1.0f, macros.arp.swing) * step / 3.0 : 0.0;
             arpNextAt = static_cast<int64_t>(std::llround(arpGrid + late));
         }
-        if (arpOffAt > arpNextAt) arpOffAt = arpNextAt;     // never longer than the step
+        if (arpOffAt > arpNextAt && arpNextAt >= 0) arpOffAt = arpNextAt;     // never longer than the step
     }
     renderTo(output, cursor, target);
 }

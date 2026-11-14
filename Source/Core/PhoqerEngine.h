@@ -60,8 +60,11 @@ private:
     double arpLastBeat = -1.0e9, arpNextBeat = 0.0;
     bool arpWasSynced = false;
     int64_t arpLastStepAt = -1;                   // when the last step started, samples since prepare (for the checks)
+    int64_t arpNextStep = 0;                      // the song-grid number of the step due next (its lane: & 15)
+    int arpLane = -1;                             // the lane step playing now, -1 when the ARP is idle
 public:
     int64_t getLastArpStepAt() const noexcept { return arpLastStepAt; }
+    int getArpLane() const noexcept { return arpLane; }     // for ARP.EXE: the step lit pink
 private:
     struct ArpKey { int note = 0, channel = 0, order = 0; float velocity = 0; bool down = false; };
     std::array<ArpKey, 16> arpKeys {};

@@ -76,6 +76,7 @@ void PresetLibrary::refresh()
     {
         Preset p;
         p.name = b.name;
+        p.arpLanes = PhoqerAudioProcessor::canonicalArpLanes({});
         p.values = { { "character", static_cast<float>(b.voice) }, { "behavior", static_cast<float>(b.mode) }, { "boom", b.boom },
                      { "air", b.air }, { "bark", b.bark }, { "space", b.space }, { "vowel", b.vowel }, { "detune", b.detune }, { "tide", b.tide } };
         presets.push_back(p);
@@ -86,6 +87,7 @@ void PresetLibrary::refresh()
             Preset p;
             p.name = b.name;
             p.voiceSelection = R"({"selected":true})";     // the installed KYRAX
+            p.arpLanes = PhoqerAudioProcessor::canonicalArpLanes({});
             p.values = { { "character", 2.0f }, { "behavior", static_cast<float>(b.mode) }, { "boom", b.boom }, { "air", b.air },
                          { "bark", b.bark }, { "space", b.space }, { "vowel", b.vowel }, { "detune", b.detune }, { "tide", b.tide },
                          { "glide", b.glide }, { "yap", b.yap ? 1.0f : 0.0f }, { "nitro", b.nitro ? 1.0f : 0.0f },
@@ -103,6 +105,7 @@ void PresetLibrary::refresh()
             p.name = xml->getStringAttribute("name", f.getFileNameWithoutExtension()).toUpperCase();
             p.file = f;
             p.voiceSelection=xml->getStringAttribute("loadedVoiceSelection");
+            p.arpLanes = PhoqerAudioProcessor::canonicalArpLanes(xml->getStringAttribute("arpLanes"));
             for (auto* e : xml->getChildWithTagNameIterator("PARAM"))
                 p.values[e->getStringAttribute("id")] = static_cast<float>(e->getDoubleAttribute("value"));
             presets.push_back(p);
@@ -117,6 +120,7 @@ Preset PresetLibrary::capture(const juce::String& name) const
     Preset p;
     p.name = name;
     p.voiceSelection=processor.getVoices().captureVoiceSelection();
+    p.arpLanes = processor.saveArpLanes();
     for (const auto& id : parameterIds())
         if (auto* param = state.getParameter(id))
             p.values[id] = param->convertFrom0to1(param->getValue());
@@ -142,6 +146,7 @@ void PresetLibrary::apply(const Preset& p)
             param->setValueNotifyingHost(param->convertTo0to1(value));
             param->endChangeGesture();
         }
+    processor.loadArpLanes(p.arpLanes);     // a preset without lanes (older, or a built-in): all full
     // The voice last, as a song restores it: a locked paid voice names the preset's own free voice
     // as the stand-in, not the one that was playing before.
     processor.getVoices().restoreVoiceSelection(p.voiceSelection);
@@ -171,6 +176,7 @@ bool PresetLibrary::loadFile(const juce::File& f)
     p.name = xml->getStringAttribute("name", f.getFileNameWithoutExtension()).toUpperCase();
     p.file = f;
     p.voiceSelection=xml->getStringAttribute("loadedVoiceSelection");
+    p.arpLanes = PhoqerAudioProcessor::canonicalArpLanes(xml->getStringAttribute("arpLanes"));
     for (auto* e : xml->getChildWithTagNameIterator("PARAM"))
         p.values[e->getStringAttribute("id")] = static_cast<float>(e->getDoubleAttribute("value"));
     apply(p);
@@ -222,6 +228,7 @@ bool PresetLibrary::save(const juce::String& rawName)
     xml.setAttribute("name", name);
     xml.setAttribute("version", 1);
     xml.setAttribute("loadedVoiceSelection",p.voiceSelection);
+    xml.setAttribute("arpLanes", p.arpLanes);
     for (const auto& [id, value] : p.values)
     {
         auto* e = xml.createNewChildElement("PARAM");
@@ -254,6 +261,7 @@ bool PresetLibrary::isDirty() const
     }
     if(parsedSelected!=(processor.getVoices().getVisualVoice()==3))return true;
     if(processor.getVoices().getVisualVoice()==3&&parsedHash.isNotEmpty()&&parsedHash!=processor.getVoices().loadedVoiceHash())return true;     // no hash: the installed KYRAX (a built-in)
+    if (loaded.arpLanes.isNotEmpty() && loaded.arpLanes != processor.saveArpLanes()) return true;
     for (const auto& [id, value] : loaded.values)
         if (auto* param = state.getParameter(id); param != nullptr && ! same(param->convertFrom0to1(param->getValue()), value))
             return true;

@@ -23,9 +23,19 @@ struct NitroSettings
     float detuneCents = 0.0f;    // the extra notes pushed sharp and flat in turn
 };
 
+// ARP's step lanes: 16 steps, each with how loud it plays, how long (times GATE), or a rest. New: all full.
+constexpr int arpLaneSteps = 16;
+struct ArpLaneStep
+{
+    float velocity = 1.0f;
+    float gate = 1.0f;
+    bool rest = false;
+};
+
 // ARP (KYRAX only): the held keys are played one at a time at the tempo instead of together.
 struct ArpSettings
 {
+    std::array<ArpLaneStep, arpLaneSteps> lanes {};
     bool on = false;
     int rate = 2;               // 0 1/4, 1 1/8, 2 1/16, 3 1/32, 4 1/8 triplets
     int pattern = 0;            // 0 UP, 1 DOWN, 2 UP + DOWN, 3 RANDOM, 4 AS PLAYED

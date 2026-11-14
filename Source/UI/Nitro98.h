@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "../Core/PhoqerTypes.h"
 
 #include <array>
 #include <functional>
@@ -56,14 +57,33 @@ public:
     void clicked() override { if (onPick) onPick(); }
 };
 
-// ARP.EXE's step preview: what a C-E-G chord plays with the chosen PATTERN and OCTAVES, one lit cell per step
-// on a dark grid, low notes at the bottom. RANDOM shows a fixed example.
-class ArpSteps98 final : public juce::Component
+// ARP.EXE's step lanes: 16 steps on one grid, every other beat shaded, one tall lane that shows and edits each step's
+// VEL (how loud) or GATE (how long, times the GATE knob), picked by the VEL | GATE switch under it. Drag to draw,
+// right-click for a rest (or back), double-click for full again. The step sounding now is pink.
+class ArpLanes98 final : public juce::Component
 {
 public:
-    std::function<int()> pattern, octaves;
+    static constexpr int steps = phoqer::arpLaneSteps;
+    std::function<phoqer::ArpLaneStep(int)> get;
+    std::function<void(int, phoqer::ArpLaneStep)> set;
+    std::function<void()> edited;      // a drag or click finished
+    std::function<int()> playing;      // the step sounding now, -1 none
+    bool gateMode = false;
+
     void paint(juce::Graphics&) override;
-    static constexpr int steps = 12;
+    void mouseMove(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override;
+    juce::Rectangle<int> cell(int step) const;     // a step's column, in this component
+    int stepAt(int x) const;
+
+private:
+    void draw(const juce::MouseEvent&);
+    int hover = -1;
+    bool dragging = false;
 };
 
 // A level slider in its note's colour: a dark track that fills up to the value, and a Win98 thumb.

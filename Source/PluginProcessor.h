@@ -67,6 +67,17 @@ public:
     int getMetronomeBeatsPerBar() const noexcept { return 2 + static_cast<int>(metronomeBeatsPerBar->load(std::memory_order_relaxed)); }
     int getCountInBars() const noexcept { return static_cast<int>(countIn->load(std::memory_order_relaxed)); }
 
+    // ARP.EXE's step lanes (VEL, GATE and rests per step). They live in the state as the text "arpLanes", so songs
+    // and presets keep them; the audio thread reads a lock-free copy. canonicalArpLanes: any text (empty = all full)
+    // in the one form saveArpLanes() writes, so two texts compare equal exactly when the lanes are the same.
+    phoqer::ArpLaneStep getArpLane(int step) const noexcept;
+    void setArpLane(int step, phoqer::ArpLaneStep) noexcept;
+    void arpLanesEdited();                                   // an edit finished: the host marks the song as changed
+    void loadArpLanes(const juce::String& text);
+    juce::String saveArpLanes() const;
+    static juce::String canonicalArpLanes(const juce::String& text);
+    int getPlayingArpLane() const noexcept { return playingArpLane.load(std::memory_order_relaxed); }
+
     // KYRAX: the paid voice, its unlock, songs' snapshots and undo tokens (VoiceSelection.h).
     VoiceSelection& getVoices() noexcept { return voices; }
     const VoiceSelection& getVoices() const noexcept { return voices; }
@@ -88,6 +99,9 @@ private:
     std::atomic<int> lastNote { -1 }, lastVelocity { 0 };
     std::atomic<bool> singing { false };
     bool wasCountingIn = false;                     // audio thread only
+    // Each step packed: VEL and GATE in thousandths (10 bits each), then the rest bit. 1000 | 1000 << 10 = full.
+    std::array<std::atomic<uint32_t>, phoqer::arpLaneSteps> arpLanes {};
+    std::atomic<int> playingArpLane { -1 };
 
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float>* boom = nullptr;

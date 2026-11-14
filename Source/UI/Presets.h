@@ -15,6 +15,7 @@ struct Preset
     juce::String name;
     std::map<juce::String, float> values;      // parameter ID -> real value
     juce::String voiceSelection;
+    juce::String arpLanes;                     // ARP's step lanes, canonical (PhoqerAudioProcessor::canonicalArpLanes)
     juce::File file;                           // empty for the built-ins
 };
 

@@ -144,31 +144,133 @@ void SegmentButton98::paintButton(juce::Graphics& g, bool, bool down)
     drawText(g, getButtonText(), r, pixelFont(8.0f, true), on ? juce::Colour(90, 40, 170) : juce::Colours::black, juce::Justification::centred);
 }
 
-void ArpSteps98::paint(juce::Graphics& g)
+namespace
 {
-    const auto r = getLocalBounds().toFloat();
-    sunken(g, r, juce::Colour(16, 6, 29));
-    const auto grid = r.reduced(2.0f);
-    const int p = pattern ? pattern() : 0, oct = juce::jlimit(1, 3, octaves ? octaves() : 1);
-    std::vector<int> seq;     // C-E-G as rows 0, 1, 2, an octave up 3, 4, 5, ...
-    for (int o = 0; o < oct; ++o) for (int k = 0; k < 3; ++k) seq.push_back(o * 3 + k);
-    if (p == 1) std::reverse(seq.begin(), seq.end());
-    if (p == 2 && seq.size() > 2) for (int i = static_cast<int>(seq.size()) - 2; i >= 1; --i) seq.push_back(seq[static_cast<size_t>(i)]);
-    if (p == 3) seq = { 0, 4, 1, 3, 5, 2, 4, 0, 3, 1, 5, 2 };
-    if (p == 4) seq = { 1, 0, 2 };     // AS PLAYED: E, C, G as an example order
-    const int rows = 3 * oct;
-    const float cw = grid.getWidth() / steps, rh = grid.getHeight() / static_cast<float>(rows);
-    g.setColour(juce::Colour(52, 30, 90));
-    for (int c = 1; c < steps; ++c) g.fillRect(std::round(grid.getX() + c * cw), grid.getY(), 1.0f, grid.getHeight());
-    for (int row = 1; row < rows; ++row) g.fillRect(grid.getX(), std::round(grid.getY() + row * rh), grid.getWidth(), 1.0f);
-    for (int c = 0; c < steps; ++c)
+constexpr int lanePad = 4, laneGap = 3;     // inside the sunken frame: the same padding on every side, 3 px between steps
+const juce::Colour laneGlass { 16, 6, 29 }, laneShade { 26, 14, 46 }, laneBar { 150, 96, 255 }, lanePlaying { 255, 109, 184 },
+                   laneHover { 196, 160, 255 }, laneRest { 60, 40, 96 };
+}
+
+juce::Rectangle<int> ArpLanes98::cell(int step) const
+{
+    const auto inner = getLocalBounds().reduced(2 + lanePad);
+    const int w = (inner.getWidth() - laneGap * (steps - 1)) / steps, used = w * steps + laneGap * (steps - 1);
+    const int left = inner.getX() + (inner.getWidth() - used) / 2;     // the leftover split evenly: centred
+    return { left + step * (w + laneGap), inner.getY(), w, inner.getHeight() };
+}
+
+int ArpLanes98::stepAt(int x) const
+{
+    const auto first = cell(0);
+    return juce::jlimit(0, steps - 1, (x - first.getX() + laneGap / 2) / (first.getWidth() + laneGap));
+}
+
+void ArpLanes98::paint(juce::Graphics& g)
+{
+    sunken(g, getLocalBounds().toFloat(), laneGlass);
+    const auto inner = getLocalBounds().reduced(2);
+    g.setColour(laneShade);     // every other beat shaded, framing whole steps
+    for (int beat = 1; beat < steps / 4; beat += 2)
     {
-        const int row = seq[static_cast<size_t>(c) % seq.size()] % rows;
-        const juce::Rectangle<float> cell { std::round(grid.getX() + c * cw) + 2.0f, std::round(grid.getBottom() - (row + 1) * rh) + 2.0f,
-                                            std::round(cw * 0.8f) - 2.0f, std::round(rh) - 3.0f };
-        g.setColour(juce::Colour(150, 96, 255));
-        g.fillRect(cell);
+        const auto a = cell(beat * 4), b = cell(beat * 4 + 3);
+        g.fillRect(juce::Rectangle<int>::leftTopRightBottom(a.getX() - laneGap / 2 - 1, inner.getY(), b.getRight() + laneGap / 2 + 1, inner.getBottom()));
     }
+    const int now = playing ? playing() : -1;
+    for (int i = 0; i < steps; ++i)
+    {
+        const auto c = cell(i);
+        const auto step = get ? get(i) : phoqer::ArpLaneStep {};
+        if (step.rest)
+        {
+            g.setColour(laneRest);
+            g.drawRect(c.withTop(c.getBottom() - 3), 1);
+            continue;
+        }
+        const float value = gateMode ? step.gate : step.velocity;
+        const int h = juce::jmax(2, juce::roundToInt(static_cast<float>(c.getHeight()) * value));
+        g.setColour(i == now ? lanePlaying : (i == hover ? laneHover : laneBar));
+        g.fillRect(c.withTop(c.getBottom() - h));
+    }
+    if (hover >= 0 && (dragging || isMouseOver()))     // a Win98 tooltip with the value
+    {
+        const auto step = get ? get(hover) : phoqer::ArpLaneStep {};
+        const auto text = step.rest ? juce::String("REST")
+                                    : juce::String(gateMode ? "GATE " : "VEL ") + juce::String(juce::roundToInt((gateMode ? step.gate : step.velocity) * 100.0f)) + "%";
+        const auto font = pixelFont(8.0f);
+        const int w = juce::roundToInt(font.getStringWidthFloat(text)) + 8;
+        const int x = juce::jlimit(inner.getX(), inner.getRight() - w, cell(hover).getX() - 2);
+        const juce::Rectangle<int> tip { x, inner.getY() + 1, w, 11 };
+        g.setColour(juce::Colour(255, 255, 225)); g.fillRect(tip);
+        g.setColour(juce::Colours::black); g.drawRect(tip, 1);
+        drawText(g, text, tip.toFloat(), font, juce::Colours::black, juce::Justification::centred);
+    }
+}
+
+void ArpLanes98::draw(const juce::MouseEvent& e)
+{
+    const int i = stepAt(e.x);
+    const auto c = cell(i);
+    const float value = juce::jlimit(0.05f, 1.0f, std::round(static_cast<float>(c.getBottom() - e.y) / static_cast<float>(c.getHeight()) * 100.0f) / 100.0f);
+    auto step = get ? get(i) : phoqer::ArpLaneStep {};
+    (gateMode ? step.gate : step.velocity) = value;
+    step.rest = false;     // drawing on a rest brings the step back
+    if (set) set(i, step);
+    hover = i;
+    repaint();
+}
+
+void ArpLanes98::mouseMove(const juce::MouseEvent& e)
+{
+    if (const int i = stepAt(e.x); i != hover) { hover = i; repaint(); }
+}
+
+void ArpLanes98::mouseExit(const juce::MouseEvent&)
+{
+    if (! dragging) { hover = -1; repaint(); }
+}
+
+void ArpLanes98::mouseDown(const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu())     // right-click: a rest, or the step back
+    {
+        const int i = stepAt(e.x);
+        auto step = get ? get(i) : phoqer::ArpLaneStep {};
+        step.rest = ! step.rest;
+        if (set) set(i, step);
+        if (edited) edited();
+        hover = i;
+        repaint();
+        return;
+    }
+    dragging = true;
+    draw(e);
+}
+
+void ArpLanes98::mouseDrag(const juce::MouseEvent& e)
+{
+    if (dragging) draw(e);
+}
+
+void ArpLanes98::mouseUp(const juce::MouseEvent& e)
+{
+    if (! dragging) return;
+    dragging = false;
+    if (edited) edited();
+    if (! isMouseOver()) hover = -1;
+    repaint();
+    juce::ignoreUnused(e);
+}
+
+void ArpLanes98::mouseDoubleClick(const juce::MouseEvent& e)
+{
+    if (e.mods.isPopupMenu()) return;
+    const int i = stepAt(e.x);
+    auto step = get ? get(i) : phoqer::ArpLaneStep {};
+    (gateMode ? step.gate : step.velocity) = 1.0f;
+    step.rest = false;
+    if (set) set(i, step);
+    if (edited) edited();
+    repaint();
 }
 
 void LevelSlider98::paint(juce::Graphics& g)

@@ -16,6 +16,7 @@ PhoqerAudioProcessor::PhoqerAudioProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       parameters(*this, nullptr, "PHOQER_STATE", createParameterLayout())
 {
+    for (auto& lane : arpLanes) lane.store(1000u | (1000u << 10), std::memory_order_relaxed);     // every step full
     boom = requireParameter(parameters, "boom");
     air = requireParameter(parameters, "air");
     bark = requireParameter(parameters, "bark");
@@ -337,8 +338,11 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     phoqer::AudioBuffer outputBuffer(const_cast<float**>(buffer.getArrayOfWritePointers()),
                                      buffer.getNumChannels(),
                                      buffer.getNumSamples());
+    for (int i = 0; i < phoqer::arpLaneSteps; ++i)
+        macros.arp.lanes[static_cast<size_t>(i)] = getArpLane(i);
     engine.process(outputBuffer, midiEvents.data(), midiEventCount, macros,
                    output->load(std::memory_order_relaxed));
+    playingArpLane.store(engine.getArpLane(), std::memory_order_relaxed);
     midiEventCount = 0;
     singing.store(engine.getActiveVoiceCount() > 0, std::memory_order_relaxed);
     // A count-in starts the click from beat 1 in the same block the recorder starts skipping it.
@@ -355,6 +359,78 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     metronome.process(outputBuffer, standalone && (countingIn || metronomeEnabled->load(std::memory_order_relaxed) >= 0.5f),
                       standaloneTempo->load(std::memory_order_relaxed), settings);
     metronomeBeats.store(static_cast<float>(metronome.getBeats()), std::memory_order_relaxed);
+}
+
+namespace
+{
+uint32_t packLane(phoqer::ArpLaneStep s) noexcept
+{
+    const auto thousandths = [](float v) { return static_cast<uint32_t>(std::lround(juce::jlimit(0.0f, 1.0f, v) * 1000.0f)); };
+    return thousandths(s.velocity) | (thousandths(s.gate) << 10) | (s.rest ? (1u << 20) : 0u);
+}
+phoqer::ArpLaneStep unpackLane(uint32_t bits) noexcept
+{
+    return { static_cast<float>(bits & 1023u) / 1000.0f, static_cast<float>((bits >> 10) & 1023u) / 1000.0f, (bits & (1u << 20)) != 0 };
+}
+std::array<phoqer::ArpLaneStep, phoqer::arpLaneSteps> parseLanes(const juce::String& text)
+{
+    std::array<phoqer::ArpLaneStep, phoqer::arpLaneSteps> lanes {};     // anything missing or broken: full
+    const auto steps = juce::StringArray::fromTokens(text, ";", "");
+    for (int i = 0; i < juce::jmin(steps.size(), phoqer::arpLaneSteps); ++i)
+    {
+        const auto parts = juce::StringArray::fromTokens(steps[i], ",", "");
+        if (parts.size() != 3) continue;
+        auto& s = lanes[static_cast<size_t>(i)];
+        s.velocity = juce::jlimit(0.05f, 1.0f, parts[0].getFloatValue());
+        s.gate = juce::jlimit(0.05f, 1.0f, parts[1].getFloatValue());
+        s.rest = parts[2].getIntValue() != 0;
+    }
+    return lanes;
+}
+juce::String formatLanes(const std::array<phoqer::ArpLaneStep, phoqer::arpLaneSteps>& lanes)
+{
+    juce::StringArray steps;
+    for (const auto& s : lanes)
+        steps.add(juce::String(s.velocity, 2) + "," + juce::String(s.gate, 2) + "," + (s.rest ? "1" : "0"));
+    return steps.joinIntoString(";");
+}
+}
+
+phoqer::ArpLaneStep PhoqerAudioProcessor::getArpLane(int step) const noexcept
+{
+    return unpackLane(arpLanes[static_cast<size_t>(juce::jlimit(0, phoqer::arpLaneSteps - 1, step))].load(std::memory_order_relaxed));
+}
+
+void PhoqerAudioProcessor::setArpLane(int step, phoqer::ArpLaneStep s) noexcept
+{
+    s.velocity = juce::jlimit(0.05f, 1.0f, s.velocity);
+    s.gate = juce::jlimit(0.05f, 1.0f, s.gate);
+    arpLanes[static_cast<size_t>(juce::jlimit(0, phoqer::arpLaneSteps - 1, step))].store(packLane(s), std::memory_order_relaxed);
+    parameters.state.setProperty("arpLanes", saveArpLanes(), nullptr);
+}
+
+void PhoqerAudioProcessor::arpLanesEdited()
+{
+    updateHostDisplay(juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
+}
+
+void PhoqerAudioProcessor::loadArpLanes(const juce::String& text)
+{
+    const auto lanes = parseLanes(text);
+    for (size_t i = 0; i < lanes.size(); ++i) arpLanes[i].store(packLane(lanes[i]), std::memory_order_relaxed);
+    parameters.state.setProperty("arpLanes", formatLanes(lanes), nullptr);
+}
+
+juce::String PhoqerAudioProcessor::saveArpLanes() const
+{
+    std::array<phoqer::ArpLaneStep, phoqer::arpLaneSteps> lanes {};
+    for (int i = 0; i < phoqer::arpLaneSteps; ++i) lanes[static_cast<size_t>(i)] = getArpLane(i);
+    return formatLanes(lanes);
+}
+
+juce::String PhoqerAudioProcessor::canonicalArpLanes(const juce::String& text)
+{
+    return formatLanes(parseLanes(text));
 }
 
 void PhoqerAudioProcessor::getStateInformation(juce::MemoryBlock& destinationData)
@@ -391,6 +467,7 @@ void PhoqerAudioProcessor::setStateInformation(const void* data, int sizeInBytes
                     restored.addChild(child, -1, nullptr);
                 }
             parameters.replaceState(restored);
+            loadArpLanes(restored.getProperty("arpLanes").toString());     // older songs have none: all full
             // The standalone reopens at no more than 0 dB OUTPUT, so a loud last session can't blast on start.
             // Lower settings are kept; a DAW session restores exactly what it saved.
             if (wrapperType == wrapperType_Standalone)

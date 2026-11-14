@@ -219,9 +219,21 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     arpButton.onRightClick = [this] { openArp(); };
     addAndMakeVisible(arpButton);
     arpSteps.setComponentID("arpSteps");
-    arpSteps.pattern = [this] { return juce::roundToInt(processor.getParameters().getRawParameterValue("arpPattern")->load()); };
-    arpSteps.octaves = [this] { return juce::roundToInt(processor.getParameters().getRawParameterValue("arpOctaves")->load()); };
+    arpSteps.get = [this](int i) { return processor.getArpLane(i); };
+    arpSteps.set = [this](int i, phoqer::ArpLaneStep step) { processor.setArpLane(i, step); };
+    arpSteps.edited = [this] { processor.arpLanesEdited(); };
+    arpSteps.playing = [this] { return processor.getPlayingArpLane(); };
     arpWindow.addAndMakeVisible(arpSteps);
+    for (int i = 0; i < 2; ++i)
+    {
+        auto& b = arpLaneModes[static_cast<size_t>(i)];
+        b = std::make_unique<SegmentButton98>(i == 0 ? "VEL" : "GATE");
+        b->setComponentID(i == 0 ? "arpLaneVel" : "arpLaneGate");
+        b->setTooltip(i == 0 ? "VEL: HOW LOUD EACH STEP PLAYS. DRAG TO DRAW, RIGHT-CLICK FOR A REST"
+                             : "GATE: HOW LONG EACH STEP PLAYS, TIMES THE GATE KNOB. DRAG TO DRAW, RIGHT-CLICK FOR A REST");
+        b->onPick = [this, i] { arpSteps.gateMode = i == 1; refreshArp(); };
+        arpWindow.addAndMakeVisible(*b);
+    }
     const auto setArp = [this](const char* id, float value)
     {
         auto& p = parameterFor(processor.getParameters(), id);
@@ -286,10 +298,6 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     arpWindow.setComponentID("arpWindow");
     arpWindow.paintContent = [this](juce::Graphics& g, juce::Rectangle<float> c)
     {
-        const auto steps = arpSteps.getBounds().toFloat();
-        drawText(g, "1", { steps.getX(), steps.getBottom() + 2.0f, 20.0f, 8.0f }, pixelFont(8.0f), win98::shadow);
-        drawText(g, juce::String(ArpSteps98::steps), { steps.getRight() - 20.0f, steps.getBottom() + 2.0f, 20.0f, 8.0f }, pixelFont(8.0f),
-                 win98::shadow, juce::Justification::centredRight);
         const auto font = pixelFont(10.0f, true);
         drawText(g, "RATE", { c.getX() + nitroMargin, arpRates[0]->getBounds().toFloat().getY(), 44.0f, 17.0f }, font, juce::Colours::black);
         drawText(g, "HOLD", { c.getX() + nitroMargin, arpHolds[0]->getBounds().toFloat().getY(), 44.0f, 17.0f }, font, juce::Colours::black);
@@ -693,7 +701,7 @@ void PhoqerView::openArp()
     arpWindow.toFront(false);
 }
 
-// ARP.EXE, NITRO.EXE's size: the step preview, RATE, HOLD, the three dials, PATTERN and OK.
+// ARP.EXE, NITRO.EXE's size: the step lanes and their VEL | GATE switch, RATE, HOLD, the three dials, PATTERN and OK.
 void PhoqerView::layoutArp()
 {
     if (arpWindow.getWidth() == 0)
@@ -706,13 +714,15 @@ void PhoqerView::layoutArp()
     const float x0 = c.getX() + nitroMargin, w = c.getWidth() - 2.0f * nitroMargin;
     arpSteps.setBounds(juce::Rectangle<float>(x0, c.getY() + 8.0f, w, 46.0f).toNearestInt());
     const float bx = x0 + 46.0f, bw = std::floor((x0 + w - bx - 12.0f) / 5.0f);
+    for (size_t i = 0; i < arpLaneModes.size(); ++i)     // VEL | GATE: right under the lanes, flush with their right edge
+        arpLaneModes[i]->setBounds(juce::Rectangle<float>(x0 + w - 2.0f * bw - 3.0f + static_cast<float>(i) * (bw + 3.0f), c.getY() + 58.0f, bw, 15.0f).toNearestInt());
     for (size_t i = 0; i < arpRates.size(); ++i)
-        arpRates[i]->setBounds(juce::Rectangle<float>(bx + static_cast<float>(i) * (bw + 3.0f), c.getY() + 66.0f, bw, 17.0f).toNearestInt());
+        arpRates[i]->setBounds(juce::Rectangle<float>(bx + static_cast<float>(i) * (bw + 3.0f), c.getY() + 82.0f, bw, 17.0f).toNearestInt());
     for (size_t i = 0; i < arpHolds.size(); ++i)
-        arpHolds[i]->setBounds(juce::Rectangle<float>(bx + static_cast<float>(i) * (bw + 3.0f), c.getY() + 89.0f, bw, 17.0f).toNearestInt());
+        arpHolds[i]->setBounds(juce::Rectangle<float>(bx + static_cast<float>(i) * (bw + 3.0f), c.getY() + 105.0f, bw, 17.0f).toNearestInt());
     const float cell = w / 3.0f;
     for (size_t k = 0; k < arpKnobs.size(); ++k)
-        arpKnobs[k]->setBounds(juce::Rectangle<float>(x0 + static_cast<float>(k) * cell, c.getY() + 114.0f, cell, 72.0f).toNearestInt());
+        arpKnobs[k]->setBounds(juce::Rectangle<float>(x0 + static_cast<float>(k) * cell, c.getY() + 128.0f, cell, 72.0f).toNearestInt());
     arpPatternBox.setBounds(juce::Rectangle<float>(x0 + 58.0f, c.getBottom() - 28.0f, 104.0f, 16.0f).toNearestInt());
     arpOk.setBounds(juce::Rectangle<float>(c.getRight() - nitroMargin - 56.0f, c.getBottom() - 29.0f, 56.0f, 18.0f).toNearestInt());
 }
@@ -726,6 +736,8 @@ void PhoqerView::refreshArp()
         if (arpRates[i] != nullptr) arpRates[i]->setToggleState(static_cast<int>(i) == rate, juce::dontSendNotification);
     if (arpHolds[0] != nullptr) arpHolds[0]->setToggleState(! hold, juce::dontSendNotification);
     if (arpHolds[1] != nullptr) arpHolds[1]->setToggleState(hold, juce::dontSendNotification);
+    for (size_t i = 0; i < arpLaneModes.size(); ++i)
+        if (arpLaneModes[i] != nullptr) arpLaneModes[i]->setToggleState((i == 1) == arpSteps.gateMode, juce::dontSendNotification);
     arpSteps.repaint();
 }
 
@@ -947,6 +959,12 @@ void PhoqerView::timerCallback()
 void PhoqerView::tick(double now)
 {
     updateTick();
+    if (arpWindow.isVisible())     // the step sounding now, lit pink, follows the ARP
+    {
+        const int lane = processor.getPlayingArpLane();
+        auto lanes = processor.saveArpLanes();     // a song or preset loaded while the window is open
+        if (lane != shownArpLane || lanes != shownArpLanes) { shownArpLane = lane; shownArpLanes = std::move(lanes); arpSteps.repaint(); }
+    }
     if(character!=processor.getVoices().getVisualVoice())applyCharacter(processor.getVoices().getVisualVoice());
     refreshVoiceControls();
     const auto& telemetry = processor.getTelemetry();

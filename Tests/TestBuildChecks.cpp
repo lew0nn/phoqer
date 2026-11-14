@@ -67,6 +67,25 @@ void arpGridChecks(const phoqer::CharacterPreset& kyrax){
         require(s.size()>=3&&s[0]==at(10.3)&&s[1]==at(10.8)&&s[2]==at(11.3),"ARP: the free-running timing changed");
     }
 }
+// ARP's step lanes: free-running, the steps walk the lanes from the first key; while the song plays, the lanes sit on
+// its bar (the 8th at beat 10.5 is the bar's 6th step); a rest plays nothing; quieter and shorter steps reach the voice.
+void arpLaneChecks(const phoqer::CharacterPreset& kyrax){
+    constexpr int sr=48000,bs=64;const double spb=sr*60.0/120.0;
+    auto run=[&](bool playing,std::array<phoqer::ArpLaneStep,phoqer::arpLaneSteps> lanes,std::vector<int>& seen){
+        auto e=std::make_unique<phoqer::PhoqerEngine>();e->prepare(sr,bs,2);phoqer::CharacterPreset snap=kyrax;
+        phoqer::MacroState m;m.loadedVoice=&snap;m.arp.on=true;m.arp.rate=1;m.arp.lanes=lanes;m.tempoBpm=120;
+        phoqer::AudioBuffer buf(2,bs);int most=0;int64_t last=-1;const auto press=static_cast<int64_t>(std::llround(.3*spb));
+        for(int64_t s=0;s<static_cast<int64_t>(3*spb);s+=bs){
+            m.songPlaying=playing;m.songBeats=10.0+static_cast<double>(s)/spb;std::vector<phoqer::MidiEvent> ev;
+            if(press>=s&&press<s+bs)for(int n:{60,64,67})ev.push_back({phoqer::MidiEventType::noteOn,static_cast<int>(press-s),0,n,.8f});
+            e->process(buf,ev.data(),static_cast<int>(ev.size()),m,0);most=std::max(most,e->getActiveVoiceCount());
+            if(e->getLastArpStepAt()!=last){last=e->getLastArpStepAt();seen.push_back(e->getArpLane());}
+        }return most;};
+    std::array<phoqer::ArpLaneStep,phoqer::arpLaneSteps> full{},rests{};for(auto& r:rests)r.rest=true;
+    std::vector<int> seen;require(run(false,full,seen)>0&&seen.size()>=4&&seen[0]==0&&seen[1]==1&&seen[2]==2&&seen[3]==3,"ARP lanes: free-running steps don't walk the lanes from the key");
+    seen.clear();run(true,full,seen);require(seen.size()>=2&&seen[0]==5&&seen[1]==6,"ARP lanes: not on the song's bar");
+    seen.clear();require(run(false,rests,seen)==0&&seen.size()>=4,"ARP lanes: a rest still played");
+}
 void snapshot(juce::Component& component,const juce::File& file){require(!file.existsAsFile(),"Snapshot output already exists");juce::FileOutputStream o(file);require(o.openedOk(),"Snapshot stream failed");require(juce::PNGImageFormat().writeImageToStream(component.createComponentSnapshot(component.getLocalBounds(),true,2),o),"Snapshot failed");juce::FileOutputStream one(file.getSiblingFile(file.getFileNameWithoutExtension()+"-1x.png"));require(juce::PNGImageFormat().writeImageToStream(component.createComponentSnapshot(component.getLocalBounds(),true,1),one),"Native1x snapshot failed");}
 void renderViews(const juce::File& voice,const juce::File& folder){
     juce::String error;auto ui=std::make_unique<PhoqerAudioProcessor>();ui->getVoices().loadVoiceFile(voice,error);std::unique_ptr<juce::AudioProcessorEditor> base(ui->createEditor());auto* editor=dynamic_cast<phoqer::ui::PhoqerEditor*>(base.get());require(editor,"Editor type");
@@ -96,6 +115,8 @@ void renderViews(const juce::File& voice,const juce::File& folder){
             require(juce::roundToInt(ui->getParameters().getRawParameterValue("arpRate")->load())==1&&rateButton->getToggleState(),"ARP RATE 1/8 did not take");
             auto* hold=dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpHoldOn"));hold->onPick();
             require(ui->getParameters().getRawParameterValue("arpHold")->load()>0.5f&&hold->getToggleState(),"ARP HOLD ON did not take");
+            auto* gateMode=dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpLaneGate"));auto* velMode=dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpLaneVel"));
+            require(gateMode!=nullptr&&velMode!=nullptr&&velMode->getToggleState(),"ARP VEL | GATE switch missing");gateMode->onPick();require(gateMode->getToggleState()&&!velMode->getToggleState(),"ARP GATE view did not take");velMode->onPick();
             editor->tick(1011);snapshot(v,folder.getChildFile("ui-arp.png"));
             a->setVisible(false);arpB->setToggleState(false,juce::sendNotificationSync);dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpHoldOff"))->onPick();
             dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpRate2"))->onPick();
@@ -441,6 +462,15 @@ int main(int argc,char** argv){try{
     for(int i=0;i<3;++i)require(choice->convertFrom0to1(i*.5f)==static_cast<float>(i),"Automation mapping changed");
     require(p->getVoices().loadVoiceFile(voice,error),"Processor voice load failed");require(p->getVoices().getVisualVoice()==3,"Loaded selection missing");
     p->getParameters().state.setProperty("voiceQuickMask",11,nullptr);
+    {   // ARP's step lanes: saved in the song, back after reopening; a fresh PHOQER starts all full
+        require(p->getArpLane(3).velocity==1.0f&&p->getArpLane(3).gate==1.0f&&!p->getArpLane(3).rest,"ARP lanes don't start full");
+        p->setArpLane(3,{.5f,.4f,true});p->setArpLane(7,{.25f,1.0f,false});juce::MemoryBlock lanesState;p->getStateInformation(lanesState);
+        auto back=std::make_unique<PhoqerAudioProcessor>();back->setStateInformation(lanesState.getData(),static_cast<int>(lanesState.getSize()));
+        const auto a3=back->getArpLane(3),a7=back->getArpLane(7);
+        require(a3.velocity==.5f&&a3.gate==.4f&&a3.rest&&a7.velocity==.25f&&!a7.rest&&back->getArpLane(0).velocity==1.0f,"ARP lanes not kept in the song");
+        require(back->saveArpLanes()==p->saveArpLanes()&&PhoqerAudioProcessor::canonicalArpLanes({})!=p->saveArpLanes(),"ARP lanes text differs");
+        p->loadArpLanes({});require(p->getArpLane(3).velocity==1.0f&&!p->getArpLane(3).rest,"ARP lanes did not reset to full");
+    }
     juce::MemoryBlock state;p->getStateInformation(state);
     folder.getChildFile("kyrax-state.bin").replaceWithData(state.getData(),state.getSize());
     auto recalled=std::make_unique<PhoqerAudioProcessor>();recalled->setStateInformation(state.getData(),static_cast<int>(state.getSize()));
@@ -527,6 +557,7 @@ int main(int argc,char** argv){try{
     for(int c=0;c<3;++c)wav(folder.getChildFile(juce::String("free-")+juce::String(c)+".wav"),articulation(nullptr,c,"original"));
     require(articulation(&data.preset,0,"held")==articulation(&data.preset,0,"held",true),"Loaded preset changed a held note");
     arpGridChecks(data.preset);
+    arpLaneChecks(data.preset);
     // Preset-file recall, then a released factory preset must return to its free voice.
     phoqer::ui::PresetLibrary library(*p);juce::XmlElement preset("PHOQERPRESET");preset.setAttribute("name","KYRAX QA");preset.setAttribute("loadedVoiceSelection",p->getVoices().captureVoiceSelection());auto* parameter=preset.createNewChildElement("PARAM");parameter->setAttribute("id","character");parameter->setAttribute("value",1);const auto presetFile=folder.getChildFile("kyrax.phqpreset");preset.writeTo(presetFile);p->getVoices().selectFreeVoice(0);require(library.loadFile(presetFile)&&p->getVoices().getVisualVoice()==3,"Paid preset recall failed");library.load(0);require(p->getVoices().getVisualVoice()==0,"Free preset did not clear loaded selection");
     {   // KYRAX's own presets, once unlocked: all five listed, and one sets KYRAX, YAP, NITRO and GLIDE, unchanged after loading.

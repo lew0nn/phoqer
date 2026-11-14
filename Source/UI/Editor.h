@@ -168,7 +168,10 @@ private:
     IconToggle98 arpButton { IconToggle98::Icon::notes };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> arpAttachment;
     FloatingWindow98 arpWindow { "ARP.EXE" };
-    ArpSteps98 arpSteps;
+    ArpLanes98 arpSteps;
+    std::array<std::unique_ptr<SegmentButton98>, 2> arpLaneModes;     // VEL, GATE: what the step lanes show and edit
+    int shownArpLane = -2;
+    juce::String shownArpLanes;
     std::array<std::unique_ptr<SegmentButton98>, 5> arpRates;
     std::array<std::unique_ptr<SegmentButton98>, 2> arpHolds;     // OFF, ON
     std::vector<std::unique_ptr<PixelKnob>> arpKnobs;
