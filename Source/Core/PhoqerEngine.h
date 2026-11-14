@@ -52,6 +52,17 @@ private:
     void arpClear(int sampleInBlock) noexcept;                     // ARP switched off or panic: the step note ends, keys forgotten
     int arpSequence(std::array<int, 48>& out) const noexcept;      // the notes one cycle plays, from the keys, pattern and octaves
     double arpStepSamples() const noexcept;
+    double arpStepBeats() const noexcept;
+    // While the song plays, the steps sit on its beat grid: a step's place in the song (SWING pushes every odd
+    // step late), and the next step after the last one played, in samples since prepare.
+    double arpBeatOf(int64_t step) const noexcept;
+    int64_t arpSyncedNext() noexcept;
+    double arpLastBeat = -1.0e9, arpNextBeat = 0.0;
+    bool arpWasSynced = false;
+    int64_t arpLastStepAt = -1;                   // when the last step started, samples since prepare (for the checks)
+public:
+    int64_t getLastArpStepAt() const noexcept { return arpLastStepAt; }
+private:
     struct ArpKey { int note = 0, channel = 0, order = 0; float velocity = 0; bool down = false; };
     std::array<ArpKey, 16> arpKeys {};
     int arpKeyCount = 0, arpOrder = 0, arpStep = 0;

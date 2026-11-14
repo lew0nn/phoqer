@@ -65,6 +65,8 @@ struct MacroState
     SealCharacter character = defaultSealCharacter;
     BehaviourMode behaviorMode = BehaviourMode::call;
     float tempoBpm = 120.0f;     // the host's tempo; HONK, BARK and WAIL keep time with it
+    bool songPlaying = false;    // the host is playing: ARP and YAP lock to the song's beat grid
+    double songBeats = 0.0;      // where this block starts in the song, in quarter notes (while songPlaying)
     float glideMs = 0.0f;        // a note played over a held one slides in from its pitch
     float wailBend = 2.4f;       // how far WAIL sweeps up and down, in semitones
     bool wailHold = false;       // WAIL rises to the bend and stays there instead of swinging

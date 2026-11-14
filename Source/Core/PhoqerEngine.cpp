@@ -36,6 +36,7 @@ void PhoqerEngine::reset()
     pending = {};
     arpKeys = {};
     arpKeyCount = 0; arpOrder = 0; arpStep = 0; arpGrid = 0.0;
+    arpLastBeat = -1.0e9; arpNextBeat = 0.0; arpWasSynced = false; arpLastStepAt = -1;
     arpNextAt = arpOffAt = -1; arpSounding = -1; arpWasActive = false;
     yapBeats = 0.0;
     sustainDown.fill(false);
@@ -346,10 +347,30 @@ void PhoqerEngine::renderTo(AudioBuffer& output, int& cursor, int target)
 }
 
 // ---------------------------------------------------------------------------------------------- ARP
-double PhoqerEngine::arpStepSamples() const noexcept
+double PhoqerEngine::arpStepBeats() const noexcept
 {
     static constexpr double beats[] { 1.0, 0.5, 0.25, 0.125, 1.0 / 3.0 };     // 1/4, 1/8, 1/16, 1/32, 1/8 triplets
-    return beats[clamp(0, 4, macros.arp.rate)] * 60.0 / static_cast<double>(macros.tempoBpm) * sampleRate;
+    return beats[clamp(0, 4, macros.arp.rate)];
+}
+
+double PhoqerEngine::arpStepSamples() const noexcept
+{
+    return arpStepBeats() * 60.0 / static_cast<double>(macros.tempoBpm) * sampleRate;
+}
+
+double PhoqerEngine::arpBeatOf(int64_t step) const noexcept
+{
+    const double length = arpStepBeats();
+    return static_cast<double>(step) * length + ((step & 1) != 0 ? clamp(0.0f, 1.0f, macros.arp.swing) * length / 3.0 : 0.0);
+}
+
+int64_t PhoqerEngine::arpSyncedNext() noexcept
+{
+    const double length = arpStepBeats(), now = macros.songBeats;
+    auto step = static_cast<int64_t>(std::floor(std::max(now, arpLastBeat) / length)) - 1;
+    while (arpBeatOf(step) <= arpLastBeat + 1.0e-9 || arpBeatOf(step) < now - 1.0e-9) ++step;
+    arpNextBeat = arpBeatOf(step);
+    return blockStart + static_cast<int64_t>(std::llround((arpNextBeat - now) * 60.0 * sampleRate / static_cast<double>(macros.tempoBpm)));
 }
 
 // One cycle of the pattern: the keys (low to high, or in the order played), repeated an octave up per OCTAVES.
@@ -385,11 +406,31 @@ void PhoqerEngine::arpKey(const MidiEvent& event, int sampleInBlock) noexcept
         if (found < 0 && arpKeyCount < static_cast<int>(arpKeys.size())) found = arpKeyCount++;
         if (found < 0) return;
         arpKeys[static_cast<size_t>(found)] = { event.note, channel, arpOrder++, clamp(0.0f, 1.0f, event.value), true };
-        if (wasIdle)     // the first key: the pattern starts on this sample
+        if (wasIdle)     // the first key: the pattern starts on this sample, or on the song's grid while it plays
         {
             arpStep = 0;
-            arpGrid = static_cast<double>(blockStart + sampleInBlock);
-            arpNextAt = blockStart + sampleInBlock;
+            if (macros.songPlaying)
+            {
+                // A chord up to a quarter of a step late still starts on its step (played now); later than that,
+                // it waits for the next step, so every note lands on the grid.
+                const double length = arpStepBeats(), at = macros.songBeats + sampleInBlock * static_cast<double>(macros.tempoBpm) / (60.0 * sampleRate);
+                const auto step = static_cast<int64_t>(std::floor(at / length));
+                if (at >= arpBeatOf(step) && at - arpBeatOf(step) <= length * 0.25)
+                {
+                    arpNextBeat = arpBeatOf(step); arpLastBeat = arpNextBeat - 1.0e-6;
+                    arpNextAt = blockStart + sampleInBlock;
+                }
+                else
+                {
+                    arpLastBeat = at;
+                    arpNextAt = arpSyncedNext();
+                }
+            }
+            else
+            {
+                arpGrid = static_cast<double>(blockStart + sampleInBlock);
+                arpNextAt = blockStart + sampleInBlock;
+            }
         }
         return;
     }
@@ -442,12 +483,20 @@ void PhoqerEngine::arpRun(AudioBuffer& output, int& cursor, int target)
         for (int k = 0; k < arpKeyCount; ++k) if ((note - arpKeys[static_cast<size_t>(k)].note) % 12 == 0 && note >= arpKeys[static_cast<size_t>(k)].note) source = &arpKeys[static_cast<size_t>(k)];
         const double step = arpStepSamples();
         handleEvent({ MidiEventType::noteOn, at, source->channel, note, source->velocity }, at);
-        arpSounding = note; arpSoundingChannel = source->channel;
+        arpSounding = note; arpSoundingChannel = source->channel; arpLastStepAt = blockStart + at;
         arpOffAt = due + std::max<int64_t>(1, static_cast<int64_t>(std::llround(clamp(0.05f, 1.0f, macros.arp.gate) * step)));
         ++arpStep;
-        arpGrid += step;     // every second step is pushed late by SWING, up to a third of a step
-        const double late = (arpStep % 2 == 1) ? clamp(0.0f, 1.0f, macros.arp.swing) * step / 3.0 : 0.0;
-        arpNextAt = static_cast<int64_t>(std::llround(arpGrid + late));
+        if (macros.songPlaying)     // the next step on the song's grid (SWING there follows the song's beats)
+        {
+            arpLastBeat = arpNextBeat;
+            arpNextAt = arpSyncedNext();
+        }
+        else
+        {
+            arpGrid += step;     // every second step is pushed late by SWING, up to a third of a step
+            const double late = (arpStep % 2 == 1) ? clamp(0.0f, 1.0f, macros.arp.swing) * step / 3.0 : 0.0;
+            arpNextAt = static_cast<int64_t>(std::llround(arpGrid + late));
+        }
         if (arpOffAt > arpNextAt) arpOffAt = arpNextAt;     // never longer than the step
     }
     renderTo(output, cursor, target);
@@ -464,7 +513,9 @@ void PhoqerEngine::renderSegment(AudioBuffer& output, int startSample, int numSa
     {
         const int n = std::min(numSamples, 64);
         if (getActiveVoiceCount() == 0) { yapBeats = 0.0; yapVowel = macros.vowel; }
-        const auto step = static_cast<size_t>(static_cast<int64_t>(std::floor(yapBeats * 2.0)) % 8);
+        // while the song plays, the talking pattern sits on its 8th notes; otherwise it counts from the note
+        const double beats = macros.songPlaying ? macros.songBeats + startSample * static_cast<double>(macros.tempoBpm) / (60.0 * sampleRate) : yapBeats;
+        const auto step = static_cast<size_t>(((static_cast<int64_t>(std::floor(beats * 2.0)) % 8) + 8) % 8);
         const float knob = macros.vowel, swing = clamp(0.25f, 0.45f, std::min(knob, 1.0f - knob));
         const float target = clamp(0.0f, 1.0f, knob + (pattern[step] - 0.5f) * 2.0f * swing);
         yapVowel += (target - yapVowel) * (1.0f - std::exp(-static_cast<float>(n / sampleRate) / 0.0114f));
@@ -512,6 +563,17 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
     int cursor = 0;
     if (arpWasActive && ! arpActive()) arpClear(0);     // ARP switched off: its note ends, the collected keys are forgotten
     arpWasActive = arpActive();
+    if (arpActive() && arpNextAt >= 0)
+    {
+        if (macros.songPlaying)     // every block: a tempo, RATE or SWING change, or a jump in the song, never pulls it off the grid
+        {
+            if (arpLastBeat > macros.songBeats + arpStepBeats() * 0.5) arpLastBeat = -1.0e9;     // the song jumped back (a loop)
+            arpNextAt = arpSyncedNext();
+        }
+        else if (arpWasSynced)      // the song stopped: carry on freely from the step that was due
+            arpGrid = static_cast<double>(arpNextAt);
+    }
+    arpWasSynced = macros.songPlaying;
     for (int index = 0; index < eventCount; ++index)
     {
         const auto eventSample = clamp(cursor, output.getNumSamples(), events[index].sampleOffset);

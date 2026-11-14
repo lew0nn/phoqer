@@ -321,10 +321,18 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     macros.arp.octaves = juce::jlimit(1, 3, static_cast<int>(std::lround(arpOctaves->load(std::memory_order_relaxed))));
     if (wrapperType == wrapperType_Standalone || wrapperType == wrapperType_Undefined)
         macros.tempoBpm = standaloneTempo->load(std::memory_order_relaxed);
+    macros.songPlaying = false;
     if (auto* head = getPlayHead())                       // hosted tempo takes priority over the standalone BPM field
         if (const auto position = head->getPosition())
+        {
             if (const auto bpm = position->getBpm())
                 macros.tempoBpm = static_cast<float>(*bpm);
+            if (const auto beats = position->getPpqPosition(); beats && position->getIsPlaying())
+            {
+                macros.songPlaying = true;                // ARP and YAP follow the song's beat grid
+                macros.songBeats = *beats;
+            }
+        }
 
     phoqer::AudioBuffer outputBuffer(const_cast<float**>(buffer.getArrayOfWritePointers()),
                                      buffer.getNumChannels(),

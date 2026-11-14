@@ -41,6 +41,32 @@ std::vector<float> articulation(const phoqer::CharacterPreset* loaded,int charac
         for(int i=0;i<block;++i)for(int c=0;c<2;++c)out.push_back(b.getReadPointer(c)[i]);
     }return out;
 }
+// ARP while the song plays: every step on the song's beat grid, to the sample. A chord up to a quarter step late starts
+// on its step at once; later than that it waits for the next step. SWING pushes the song's offbeats. Stopped: as before.
+std::vector<int64_t> arpSteps(const phoqer::CharacterPreset& kyrax,bool playing,double pressBeat,float swing,int blockSize){
+    constexpr int sr=48000;const double spb=sr*60.0/120.0;auto e=std::make_unique<phoqer::PhoqerEngine>();e->prepare(sr,blockSize,2);
+    phoqer::CharacterPreset snap=kyrax;phoqer::MacroState m;m.loadedVoice=&snap;m.arp.on=true;m.arp.rate=1;m.arp.swing=swing;m.arp.gate=.5f;m.tempoBpm=120;
+    phoqer::AudioBuffer buf(2,blockSize);std::vector<int64_t> steps;const auto press=static_cast<int64_t>(std::llround((pressBeat-10.0)*spb));
+    for(int64_t s=0;s<static_cast<int64_t>(3*spb);s+=blockSize){
+        m.songPlaying=playing;m.songBeats=10.0+static_cast<double>(s)/spb;std::vector<phoqer::MidiEvent> ev;
+        if(press>=s&&press<s+blockSize)for(int n:{60,64,67})ev.push_back({phoqer::MidiEventType::noteOn,static_cast<int>(press-s),0,n,.8f});
+        e->process(buf,ev.data(),static_cast<int>(ev.size()),m,0);
+        if(e->getLastArpStepAt()>=0&&(steps.empty()||steps.back()!=e->getLastArpStepAt()))steps.push_back(e->getLastArpStepAt());
+    }return steps;
+}
+void arpGridChecks(const phoqer::CharacterPreset& kyrax){
+    const double spb=48000*60.0/120.0;auto at=[&](double beat){return static_cast<int64_t>(std::llround((beat-10.0)*spb));};
+    for(int blockSize:{32,512,4096}){
+        auto s=arpSteps(kyrax,true,10.1,0,blockSize);     // a fifth of a step late: starts at once, then on the grid
+        require(s.size()>=4&&s[0]==at(10.1)&&s[1]==at(10.5)&&s[2]==at(11.0)&&s[3]==at(11.5),"ARP: a slightly late chord did not land on the song's grid");
+        s=arpSteps(kyrax,true,10.3,0,blockSize);          // more than a quarter late: waits for the next step
+        require(s.size()>=3&&s[0]==at(10.5)&&s[1]==at(11.0)&&s[2]==at(11.5),"ARP: a late chord did not wait for the next step");
+        s=arpSteps(kyrax,true,10.3,.6f,blockSize);        // SWING on the song's offbeats (odd 8ths): a tenth of a beat late
+        require(s.size()>=3&&s[0]==at(10.6)&&s[1]==at(11.0)&&s[2]==at(11.6),"ARP: SWING did not follow the song's offbeats");
+        s=arpSteps(kyrax,false,10.3,0,blockSize);         // stopped: from the key, every half beat, as before
+        require(s.size()>=3&&s[0]==at(10.3)&&s[1]==at(10.8)&&s[2]==at(11.3),"ARP: the free-running timing changed");
+    }
+}
 void snapshot(juce::Component& component,const juce::File& file){require(!file.existsAsFile(),"Snapshot output already exists");juce::FileOutputStream o(file);require(o.openedOk(),"Snapshot stream failed");require(juce::PNGImageFormat().writeImageToStream(component.createComponentSnapshot(component.getLocalBounds(),true,2),o),"Snapshot failed");juce::FileOutputStream one(file.getSiblingFile(file.getFileNameWithoutExtension()+"-1x.png"));require(juce::PNGImageFormat().writeImageToStream(component.createComponentSnapshot(component.getLocalBounds(),true,1),one),"Native1x snapshot failed");}
 void renderViews(const juce::File& voice,const juce::File& folder){
     juce::String error;auto ui=std::make_unique<PhoqerAudioProcessor>();ui->getVoices().loadVoiceFile(voice,error);std::unique_ptr<juce::AudioProcessorEditor> base(ui->createEditor());auto* editor=dynamic_cast<phoqer::ui::PhoqerEditor*>(base.get());require(editor,"Editor type");
@@ -500,6 +526,7 @@ int main(int argc,char** argv){try{
     for(const auto* kind:{"stops","sweep","low","hits"})wav(folder.getChildFile(juce::String("kyrax-")+kind+".wav"),articulation(&data.preset,0,kind));
     for(int c=0;c<3;++c)wav(folder.getChildFile(juce::String("free-")+juce::String(c)+".wav"),articulation(nullptr,c,"original"));
     require(articulation(&data.preset,0,"held")==articulation(&data.preset,0,"held",true),"Loaded preset changed a held note");
+    arpGridChecks(data.preset);
     // Preset-file recall, then a released factory preset must return to its free voice.
     phoqer::ui::PresetLibrary library(*p);juce::XmlElement preset("PHOQERPRESET");preset.setAttribute("name","KYRAX QA");preset.setAttribute("loadedVoiceSelection",p->getVoices().captureVoiceSelection());auto* parameter=preset.createNewChildElement("PARAM");parameter->setAttribute("id","character");parameter->setAttribute("value",1);const auto presetFile=folder.getChildFile("kyrax.phqpreset");preset.writeTo(presetFile);p->getVoices().selectFreeVoice(0);require(library.loadFile(presetFile)&&p->getVoices().getVisualVoice()==3,"Paid preset recall failed");library.load(0);require(p->getVoices().getVisualVoice()==0,"Free preset did not clear loaded selection");
     {   // KYRAX's own presets, once unlocked: all five listed, and one sets KYRAX, YAP, NITRO and GLIDE, unchanged after loading.
