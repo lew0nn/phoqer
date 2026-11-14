@@ -57,7 +57,10 @@ jobs:
           part au "$ART/AU/PHOQER.component" /Library/Audio/Plug-Ins/Components
           part vst3 "$ART/VST3/PHOQER.vst3" /Library/Audio/Plug-Ins/VST3
           productbuild --synthesize --package pkgs/app.pkg --package pkgs/au.pkg --package pkgs/vst3.pkg dist.xml
-          sed -i '' -e 's/customize="never"/customize="allow"/' -e "s|<installer-gui-script minSpecVersion=\"[0-9]*\">|&<title>PHOQER $VERSION</title>|" dist.xml
+          sed -i '' -e 's/customize="never"/customize="allow"/' -e "s|<installer-gui-script minSpecVersion=\"[0-9]*\">|&<title>PHOQER $VERSION</title>|" \
+            -e 's|id="com.lewonn.phoqer.app" visible="false"|id="com.lewonn.phoqer.app" visible="true" title="PHOQER app" description="The standalone app, in Applications."|' \
+            -e 's|id="com.lewonn.phoqer.au" visible="false"|id="com.lewonn.phoqer.au" visible="true" title="Audio Unit (AU)" description="For Logic, GarageBand and other AU hosts."|' \
+            -e 's|id="com.lewonn.phoqer.vst3" visible="false"|id="com.lewonn.phoqer.vst3" visible="true" title="VST3" description="For Ableton Live, FL Studio, Reaper, Cubase and others."|' dist.xml
           cat dist.xml
           productbuild --distribution dist.xml --package-path pkgs "dmg/Install PHOQER.pkg"
           printf '%s\n' "1. Double-click Install PHOQER.pkg." \
