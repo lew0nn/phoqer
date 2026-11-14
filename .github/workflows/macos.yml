@@ -39,10 +39,39 @@ jobs:
           ditto -c -k --keepParent "$ART/Standalone/PHOQER.app" "dist/PHOQER-$VERSION-macOS-Standalone.zip"
           ls -la dist
 
+      # One installer for all three (app, AU, VST3; Customize can leave any out), in a .dmg. Files a .pkg installs
+      # aren't quarantined, so no Terminal step is needed. Unsigned: macOS asks once (Privacy & Security, Open Anyway).
+      - name: Installer (.pkg in a .dmg)
+        run: |
+          VERSION=$(sed -n 's/^set(PHOQER_VERSION "\([0-9.]*\)".*/\1/p' CMakeLists.txt)
+          ART=build/PHOQER_artefacts/Release
+          mkdir -p pkgs dmg
+          part() {  # name, bundle, install folder
+            mkdir -p "root/$1"; ditto "$2" "root/$1/$(basename "$2")"
+            pkgbuild --analyze --root "root/$1" "$1.plist"
+            plutil -replace 0.BundleIsRelocatable -bool NO "$1.plist"   # always into the standard folder, never "found" elsewhere
+            pkgbuild --root "root/$1" --component-plist "$1.plist" --identifier "com.lewonn.phoqer.$1" --version "$VERSION" \
+                     --install-location "$3" "pkgs/$1.pkg"
+          }
+          part app "$ART/Standalone/PHOQER.app" /Applications
+          part au "$ART/AU/PHOQER.component" /Library/Audio/Plug-Ins/Components
+          part vst3 "$ART/VST3/PHOQER.vst3" /Library/Audio/Plug-Ins/VST3
+          productbuild --synthesize --package pkgs/app.pkg --package pkgs/au.pkg --package pkgs/vst3.pkg dist.xml
+          sed -i '' -e 's/customize="never"/customize="allow"/' -e "s|<installer-gui-script minSpecVersion=\"[0-9]*\">|&<title>PHOQER $VERSION</title>|" dist.xml
+          cat dist.xml
+          productbuild --distribution dist.xml --package-path pkgs "dmg/Install PHOQER.pkg"
+          printf '%s\n' "1. Double-click Install PHOQER.pkg." \
+            "2. If macOS says it can't check it: open System Settings > Privacy & Security, scroll down, press Open Anyway." \
+            "3. The installer puts PHOQER in Applications and the AU and VST3 plug-ins in /Library/Audio/Plug-Ins." > "dmg/READ ME.txt"
+          hdiutil create -volname "PHOQER $VERSION" -srcfolder dmg -ov -format UDZO "dist/PHOQER-$VERSION-macOS.dmg"
+          ls -la dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: PHOQER-macOS
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.dmg
 
       - name: Validate the AU (auval)
         run: |
