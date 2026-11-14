@@ -51,6 +51,12 @@ juce::File folder();
 // KYRAX's voice as the activation server sent it to this computer, or empty. It is kept scrambled with a key
 // made from this computer's ID, so a copy taken to another computer doesn't open there.
 juce::String serverVoiceText();
+// Every KYRAX version this computer has played, kept scrambled the same way, so songs reopen offline.
+// Songs save only a version's fingerprint; keptVoice finds it here, fetchVoice asks the server (blocking: off the
+// message thread) for a computer this key is unlocked on. REMOVE KEY (deactivate) deletes them all.
+void keepVoice(const juce::String& text);
+juce::String keptVoice(const juce::String& sha256);
+juce::String fetchVoice(const juce::String& sha256);
 
 // The activation server's answer to POST path + JSON body; a void var when it can't be reached.
 // Checks replace it with a stand-in; PHOQER_ACTIVATION_URL points the real one elsewhere (a local test server).

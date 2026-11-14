@@ -191,6 +191,7 @@ juce::String keyText(const char* name);
 struct FakeServer{
     std::map<juce::String,std::set<juce::String>> slots;std::set<juce::String> banned;bool online=true;uint8_t secret[64]{};
     juce::String voiceText;int voicesSent=0;     // KYRAX's voice, sent with an unlock when the computer's copy is missing or different
+    std::map<juce::String,juce::String> history;  // every KYRAX version, by fingerprint, for songs (POST /voice)
     struct Made{juce::String id,kind;int serial;juce::String name;};std::map<std::string,Made> made;   // the keys this server has made, by their random part
     FakeServer(){
         juce::MemoryOutputStream der;juce::Base64::convertFromBase64(der,juce::File(juce::SystemStats::getEnvironmentVariable("PHOQER_TEST_KEYS",{})).getChildFile("TEST-ticket-secret.txt").loadFileAsString().trim());
@@ -210,6 +211,11 @@ struct FakeServer{
         auto* r=new juce::DynamicObject;const juce::var reply(r);const auto* key=find(body["key"].toString());const auto machine=body["machine"].toString();
         if(key==nullptr){r->setProperty("ok",false);r->setProperty("code","invalid");return reply;}const auto id=key->id;
         if(path=="/deactivate"){slots[id].erase(machine);r->setProperty("ok",true);return reply;}
+        if(path=="/voice"){
+            const auto found=history.find(body["sha256"].toString());
+            if(banned.count(id)||!slots[id].count(machine)||found==history.end()){r->setProperty("ok",false);r->setProperty("code","locked");return reply;}
+            auto* v=new juce::DynamicObject;v->setProperty("data",found->second);v->setProperty("sha256",found->first);r->setProperty("voice",juce::var(v));
+            r->setProperty("ok",true);return reply;}
         if(banned.count(id)){r->setProperty("ok",false);r->setProperty("code","banned");return reply;}
         auto& used=slots[id];if(!used.count(machine)&&used.size()>=3){r->setProperty("ok",false);r->setProperty("code","full");return reply;}
         used.insert(machine);r->setProperty("ok",true);r->setProperty("used",static_cast<int>(used.size()));r->setProperty("max",3);
@@ -408,11 +414,27 @@ int main(int argc,char** argv){try{
     require(recalled->getVoices().getVisualVoice()==3&&recalled->getVoices().loadedVoiceHash()==p->getVoices().loadedVoiceHash(),"Voice recall failed");
     require(static_cast<int>(recalled->getParameters().state.getProperty("voiceQuickMask"))==11,"Quick bar recall failed");
     recalled->getVoices().selectFreeVoice(2);require(p->getVoices().getVisualVoice()==3&&recalled->getVoices().getVisualVoice()==2,"Instance isolation failed");
-    // The song keeps its own copy of the voice: a changed shipped KYRAX does not change it.
-    auto saved=juce::JSON::parse(p->getVoices().captureVoiceSelection());auto changed=juce::JSON::parse(saved["voice"].toString());changed["parameters"].getDynamicObject()->setProperty("outputTrim",.5);
-    const auto changedText=juce::JSON::toString(changed);saved.getDynamicObject()->setProperty("voice",changedText);
-    recalled->getVoices().restoreVoiceSelection(juce::JSON::toString(saved));phoqer::VoiceData changedData;require(phoqer::VoiceData::parse(changedText,changedData,error),"Changed voice invalid");
-    require(recalled->getVoices().getVisualVoice()==3&&recalled->getVoices().loadedVoiceHash()==changedData.hash&&changedData.hash!=data.hash,"Song snapshot not used");
+    // A song saves only which KYRAX version it uses, never the voice itself (shared projects carry none of it);
+    // it keeps that version's sound when KYRAX changes: this computer keeps every version it played.
+    auto saved=juce::JSON::parse(p->getVoices().captureVoiceSelection());require(!saved.hasProperty("voice")&&saved["hash"].toString()==data.hash,"A song carried the voice itself");
+    auto changed=juce::JSON::parse(data.json);changed["parameters"].getDynamicObject()->setProperty("outputTrim",.5);
+    const auto changedText=juce::JSON::toString(changed);phoqer::VoiceData changedData;require(phoqer::VoiceData::parse(changedText,changedData,error),"Changed voice invalid");
+    phoqer::licence::keepVoice(changedText);saved.getDynamicObject()->setProperty("hash",changedData.hash);
+    recalled->getVoices().restoreVoiceSelection(juce::JSON::toString(saved));
+    require(recalled->getVoices().getVisualVoice()==3&&recalled->getVoices().loadedVoiceHash()==changedData.hash&&changedData.hash!=data.hash,"The song's own KYRAX version not used");
+    {   // A version only the key server has (a song from another computer): a free seal plays until it arrives.
+        auto other=juce::JSON::parse(changedText);other["parameters"].getDynamicObject()->setProperty("outputTrim",.6);
+        const auto otherText=juce::JSON::toString(other);phoqer::VoiceData otherData;require(phoqer::VoiceData::parse(otherText,otherData,error),"Other voice invalid");
+        server().history[otherData.hash]=otherText;auto fromElsewhere=saved;fromElsewhere.getDynamicObject()->setProperty("hash",otherData.hash);
+        VoiceSelection::fetchSongVoices=false;recalled->getVoices().selectFreeVoice(2);
+        recalled->getVoices().restoreVoiceSelection(juce::JSON::toString(fromElsewhere));
+        require(recalled->getVoices().getVisualVoice()!=3&&recalled->getVoices().takeVoiceNotice().contains("GETTING IT"),"A missing KYRAX version didn't wait for the server");
+        require(phoqer::licence::fetchVoice(otherData.hash)==otherText,"The song's KYRAX version was not fetched");
+        recalled->getVoices().restoreVoiceSelection(juce::JSON::toString(fromElsewhere));
+        require(recalled->getVoices().getVisualVoice()==3&&recalled->getVoices().loadedVoiceHash()==otherData.hash,"The fetched KYRAX version was not used");
+        require(phoqer::licence::fetchVoice(juce::String::repeatedString("f",64)).isEmpty(),"An unknown KYRAX version was accepted");
+        VoiceSelection::fetchSongVoices=true;
+    }
     recalled->getVoices().selectFreeVoice(2);
     auto damaged=juce::JSON::parse(p->getVoices().captureVoiceSelection());damaged.getDynamicObject()->setProperty("voice","{\"format\":\"nope\"}");
     recalled->getVoices().restoreVoiceSelection(juce::JSON::toString(damaged));require(recalled->getVoices().getVisualVoice()==2&&recalled->getVoices().takeVoiceNotice().contains("DAMAGED"),"Damaged voice fallback failed");

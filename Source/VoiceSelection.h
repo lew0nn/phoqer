@@ -37,6 +37,8 @@ public:
     juce::String loadedVoiceHash() const;
     juce::String takeVoiceNotice();              // once: why a song's voice could not play
     juce::String captureVoiceSelection() const;
+    // Tests turn this off and fetch a song's KYRAX version themselves.
+    static inline bool fetchSongVoices = true;
     void restoreVoiceSelection(const juce::String&);
     juce::String captureVoiceToken() const;      // the same, as a short token for the undo history
     void restoreVoiceToken(const juce::String&);
@@ -45,6 +47,8 @@ public:
     static phoqer::VoiceData bundledVoice();
 
 private:
+    bool localVoice(const juce::String& hash, phoqer::VoiceData& data);     // a KYRAX version this computer already has
+    void fetchForSong(const juce::String& hash, const juce::String& selection);
     void setVoiceData(phoqer::VoiceData);
 
     juce::AudioProcessor& host;
@@ -68,6 +72,8 @@ private:
     LicenceWatch licenceWatch { *this };
     mutable std::map<juce::String, juce::String> voiceTokens;     // undo tokens and the selections they stand for
     juce::String keptSelection;     // a song's locked voice, saved again unchanged until another voice is chosen
+    // Last, so it goes first: a server answer for a song that arrives while this is being destroyed is dropped.
+    std::shared_ptr<int> alive { std::make_shared<int>(0) };
 
     JUCE_DECLARE_NON_COPYABLE(VoiceSelection)
 };

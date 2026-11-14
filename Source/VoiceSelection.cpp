@@ -64,6 +64,7 @@ bool VoiceSelection::installVoiceFile(const juce::File& file,juce::String& error
     if(data.name!="KYRAX"){error="THAT IS NOT THE KYRAX VOICE.";return false;}
     const auto target=installedVoiceFile();
     if(file!=target&&!(target.getParentDirectory().createDirectory()&&file.copyFileTo(target))){error="COULD NOT COPY THE VOICE INTO PHOQER.";return false;}
+    phoqer::licence::keepVoice(data.json);
     setVoiceData(std::move(data));
     return true;
 }
@@ -81,6 +82,7 @@ bool VoiceSelection::loadVoiceFile(const juce::File& file,juce::String& error)
 {
     phoqer::VoiceData data;
     if(!phoqer::VoiceData::read(file,data,error)) return false;
+    phoqer::licence::keepVoice(data.json);
     setVoiceData(std::move(data));
     {const juce::SpinLock::ScopedLockType guard(voiceLock);keptSelection.clear();loadNotice.clear();}
     loadedSelected.store(voiceUnlocked.load());
@@ -168,10 +170,11 @@ juce::String VoiceSelection::captureVoiceSelection() const
     object->setProperty("selected",loadedSelected.load());
     if(loadedSelected.load())
     {
+        // Only which KYRAX version: the voice itself stays on this computer (scrambled) and on the key server,
+        // so a shared project file carries none of it.
         object->setProperty("id",loadedData.id);
         object->setProperty("name",loadedData.name);
         object->setProperty("hash",loadedData.hash);
-        object->setProperty("voice",loadedData.json);
     }
     return juce::JSON::toString(juce::var(object),true);
 }
@@ -208,18 +211,24 @@ void VoiceSelection::restoreVoiceSelection(const juce::String& selection)
     const juce::String standIn=freeNames[juce::jlimit(0,2,static_cast<int>(std::lround(character.load())))];
     phoqer::VoiceData data;
     juce::String error;
-    const auto text=value["voice"].toString();
-    if(text.isEmpty()) data=bundledVoice();       // older test sessions saved only a file path
-    else if(!phoqer::VoiceData::parse(text,data,error))
+    const auto text=value["voice"].toString(),hash=value["hash"].toString();
+    bool have=true;
+    if(text.isNotEmpty())                         // songs from test builds before r43 carry the voice itself
     {
-        const juce::SpinLock::ScopedLockType guard(voiceLock);
-        loadNotice="THIS SONG'S VOICE DATA IS DAMAGED.|~PLAYING "+standIn+" INSTEAD.";
-        return;
+        if(!phoqer::VoiceData::parse(text,data,error))
+        {
+            const juce::SpinLock::ScopedLockType guard(voiceLock);
+            loadNotice="THIS SONG'S VOICE DATA IS DAMAGED.|~PLAYING "+standIn+" INSTEAD.";
+            return;
+        }
+        phoqer::licence::keepVoice(text);
     }
+    else if(hash.isEmpty()) data=bundledVoice();  // older test sessions saved only a file path
+    else have=localVoice(hash,data);
     // The name the song saved, for the messages (an older test session may have none).
     auto savedName=value["name"].toString();
     if(savedName.isEmpty()) savedName=data.name.isNotEmpty()?data.name:juce::String("KYRAX");
-    if(!voiceUnlocked.load()||data.name!="KYRAX")
+    if(!voiceUnlocked.load()||(have&&data.name!="KYRAX"))
     {
         const juce::SpinLock::ScopedLockType guard(voiceLock);
         keptSelection=selection;
@@ -227,6 +236,50 @@ void VoiceSelection::restoreVoiceSelection(const juce::String& selection)
                   +"|~PLAYING "+standIn+" INSTEAD.";
         return;
     }
+    if(!have)
+    {
+        // A KYRAX version this computer doesn't have (a song from another computer): a free seal plays while
+        // PHOQER asks the key server for exactly that version.
+        {
+            const juce::SpinLock::ScopedLockType guard(voiceLock);
+            keptSelection=selection;
+            loadNotice="THIS SONG USES ANOTHER KYRAX VERSION.|~GETTING IT FROM LEWONN.COM; "+standIn+" PLAYS MEANWHILE.";
+        }
+        if(fetchSongVoices) fetchForSong(hash,selection);
+        return;
+    }
     setVoiceData(std::move(data));
     loadedSelected.store(true);
+}
+
+bool VoiceSelection::localVoice(const juce::String& hash,phoqer::VoiceData& data)
+{
+    juce::String error;
+    {
+        const juce::SpinLock::ScopedLockType guard(voiceLock);
+        if(loadedData.hash==hash&&loadedData.json.isNotEmpty()){data=loadedData;return true;}
+    }
+    auto current=bundledVoice();
+    if(current.hash==hash){data=std::move(current);return true;}
+    const auto kept=phoqer::licence::keptVoice(hash);
+    return kept.isNotEmpty()&&phoqer::VoiceData::parse(kept,data,error);
+}
+
+void VoiceSelection::fetchForSong(const juce::String& hash,const juce::String& selection)
+{
+    std::weak_ptr<int> stillHere=alive;
+    licenceOnline.run([this,stillHere,hash,selection]
+    {
+        const bool got=phoqer::licence::fetchVoice(hash).isNotEmpty();
+        juce::MessageManager::callAsync([this,stillHere,got,selection]
+        {
+            if(stillHere.expired()) return;
+            juce::String kept;
+            {const juce::SpinLock::ScopedLockType guard(voiceLock);kept=keptSelection;}
+            if(kept!=selection) return;                   // another voice was chosen meanwhile
+            if(got){restoreVoiceSelection(selection);notifyVoiceChange();return;}
+            const juce::SpinLock::ScopedLockType guard(voiceLock);
+            loadNotice="THIS SONG'S KYRAX VERSION COULDN'T BE FETCHED.|~CONNECT ONCE AND OPEN THE SONG AGAIN.";
+        });
+    });
 }

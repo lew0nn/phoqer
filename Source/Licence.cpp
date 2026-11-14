@@ -52,12 +52,10 @@ juce::File voiceFile() { return folder().getChildFile("Voices/KYRAX.voice"); }
 // by this computer's ID: a copy taken elsewhere decodes to garbage and PHOQER asks the server again.
 juce::MemoryBlock voiceKey() { return juce::SHA256(("PHQVOICE1|" + machine()).toUTF8()).getRawData(); }
 juce::String hashOf(const juce::String& text) { return juce::SHA256(text.toRawUTF8(), text.getNumBytesAsUTF8()).toHexString(); }
-bool storeVoice(const juce::var& voice)
+juce::File keptVoiceFile(const juce::String& sha256) { return folder().getChildFile("Voices/kept/" + sha256.substring(0, 32) + ".voice"); }
+bool writeScrambled(const juce::File& file, const juce::String& text)
 {
-    const auto text = voice["data"].toString();
     const auto size = text.getNumBytesAsUTF8();
-    if (size < 64 || size > 65536 || hashOf(text) != voice["sha256"].toString() || juce::JSON::parse(text)["format"].toString() != "PHQVOICE")
-        return false;                                                   // damaged on the way: the next check asks again
     uint8_t nonce[24];
     juce::Random random(juce::Random::getSystemRandom().nextInt64() ^ juce::Time::getHighResolutionTicks());
     for (auto& b : nonce) b = static_cast<uint8_t>(random.nextInt(256));
@@ -68,7 +66,30 @@ bool storeVoice(const juce::var& voice)
     out.append(nonce, 24);
     out.append(juce::SHA256(text.toRawUTF8(), size).getRawData().getData(), 32);
     out.append(scrambled.data(), size);
-    return voiceFile().getParentDirectory().createDirectory() && voiceFile().replaceWithData(out.getData(), out.getSize());
+    return file.getParentDirectory().createDirectory() && file.replaceWithData(out.getData(), out.getSize());
+}
+bool storeVoice(const juce::var& voice)
+{
+    const auto text = voice["data"].toString();
+    const auto size = text.getNumBytesAsUTF8();
+    if (size < 64 || size > 65536 || hashOf(text) != voice["sha256"].toString() || juce::JSON::parse(text)["format"].toString() != "PHQVOICE")
+        return false;                                                   // damaged on the way: the next check asks again
+    return writeScrambled(voiceFile(), text);
+}
+juce::String readScrambled(const juce::File& file)
+{
+    juce::MemoryBlock data;
+    constexpr size_t head = 5 + 24 + 32;
+    if (! file.loadFileAsData(data) || data.getSize() < head + 64 || data.getSize() > head + 65536 || std::memcmp(data.getData(), "PHQV1", 5) != 0)
+        return {};
+    const auto* bytes = static_cast<const uint8_t*>(data.getData());
+    const size_t size = data.getSize() - head;
+    std::vector<char> plain(size);
+    const auto key = voiceKey();
+    crypto_chacha20_x(reinterpret_cast<uint8_t*>(plain.data()), bytes + head, size, static_cast<const uint8_t*>(key.getData()), bytes + 5, 0);
+    // Another computer's copy, or a damaged one: the text doesn't match the fingerprint stored with it.
+    if (std::memcmp(juce::SHA256(plain.data(), size).getRawData().getData(), bytes + 29, 32) != 0) return {};
+    return juce::String::fromUTF8(plain.data(), static_cast<int>(size));
 }
 
 // The ticket travels with the ID the server stamped it for ("ticketMachine"), so a quiet ID update keeps it. The
@@ -317,6 +338,7 @@ void deactivate()
 {
     const auto record = juce::JSON::parse(unlockFile().loadFileAsString());
     remove();                                                           // off this computer at once
+    folder().getChildFile("Voices/kept").deleteRecursively();           // with every KYRAX version it kept for songs
     if (keys::keyBody(record["key"].toString().toStdString()))
     {
         auto* body = new juce::DynamicObject;
@@ -361,20 +383,39 @@ void checkForChanges()
 
 int generation() { return changes.load(); }
 
-juce::String serverVoiceText()
+juce::String serverVoiceText() { return readScrambled(voiceFile()); }
+
+void keepVoice(const juce::String& text)
 {
-    juce::MemoryBlock data;
-    constexpr size_t head = 5 + 24 + 32;
-    if (! voiceFile().loadFileAsData(data) || data.getSize() < head + 64 || data.getSize() > head + 65536 || std::memcmp(data.getData(), "PHQV1", 5) != 0)
-        return {};
-    const auto* bytes = static_cast<const uint8_t*>(data.getData());
-    const size_t size = data.getSize() - head;
-    std::vector<char> plain(size);
-    const auto key = voiceKey();
-    crypto_chacha20_x(reinterpret_cast<uint8_t*>(plain.data()), bytes + head, size, static_cast<const uint8_t*>(key.getData()), bytes + 5, 0);
-    // Another computer's copy, or a damaged one: the text doesn't match the fingerprint stored with it.
-    if (std::memcmp(juce::SHA256(plain.data(), size).getRawData().getData(), bytes + 29, 32) != 0) return {};
-    return juce::String::fromUTF8(plain.data(), static_cast<int>(size));
+    const auto size = text.getNumBytesAsUTF8();
+    if (size < 64 || size > 65536) return;
+    const auto file = keptVoiceFile(hashOf(text));
+    if (! file.existsAsFile()) writeScrambled(file, text);
+}
+
+juce::String keptVoice(const juce::String& sha256)
+{
+    if (sha256.length() != 64) return {};
+    const auto current = serverVoiceText();
+    if (current.isNotEmpty() && hashOf(current) == sha256) return current;
+    const auto kept = readScrambled(keptVoiceFile(sha256));
+    return kept.isNotEmpty() && hashOf(kept) == sha256 ? kept : juce::String();
+}
+
+juce::String fetchVoice(const juce::String& sha256)
+{
+    const auto record = juce::JSON::parse(unlockFile().loadFileAsString());
+    if (sha256.length() != 64 || ! keys::keyBody(record["key"].toString().toStdString())) return {};
+    auto* body = new juce::DynamicObject;
+    body->setProperty("key", record["key"]);
+    const auto stamped = record["ticketMachine"].toString();
+    body->setProperty("machine", stamped.isNotEmpty() ? stamped : machine());
+    body->setProperty("sha256", sha256);
+    const auto reply = call("/voice", juce::var(body));
+    const auto text = reply["voice"]["data"].toString();
+    if (! static_cast<bool>(reply["ok"]) || hashOf(text) != sha256 || juce::JSON::parse(text)["format"].toString() != "PHQVOICE") return {};
+    keepVoice(text);
+    return text;
 }
 
 juce::String describe(const Status& s)
