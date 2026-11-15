@@ -1,4 +1,4 @@
-; PHOQER installer: a classic Win98-style setup (grey wizard, picture panel, blue gradient backdrop).
+; PHOQER installer: dark wizard with the pixel seal over a city at sunset (picked 11 Nov 2026).
 ; Built by build-release.ps1, which passes the version: ISCC /DMyAppVersion=1.0.1 installer\PHOQER.iss
 #ifndef MyAppVersion
   #define MyAppVersion "1.0.1"
@@ -31,18 +31,21 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes
-; The Win98 look: the classic wizard, the picture panel on the welcome and finish pages, MS Sans Serif.
-WizardStyle=classic
+; The look: dark wizard, the pixel seal over a city at sunset (art at whole pixels, so size 100%).
+WizardSizePercent=100
+WizardStyle=modern dark
+WizardBackColor=#080208
 DisableWelcomePage=no
-WizardImageFile=assets\wizard.bmp,assets\wizard-200.bmp
-WizardSmallImageFile=assets\wizard-small.bmp,assets\wizard-small-200.bmp
+WizardImageFile=assets\wizard.png,assets\wizard-200.png
+WizardSmallImageFile=assets\wizard-small.png,assets\wizard-small-200.png
 WizardImageStretch=no
-WizardImageBackColor=$0A0412
+WizardImageBackColor=#080208
+WizardSmallImageBackColor=#080208
 
 [LangOptions]
-DialogFontName=Microsoft Sans Serif
-DialogFontSize=8
-WelcomeFontName=Microsoft Sans Serif
+DialogFontName=Segoe UI
+DialogFontSize=9
+WelcomeFontName=Segoe UI
 WelcomeFontSize=12
 
 [Messages]
@@ -74,3 +77,11 @@ Name: "{autodesktop}\PHOQER"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{a
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Wake up the seals (launch PHOQER)"; Components: standalone; Flags: nowait postinstall skipifsilent
+
+[Code]
+// Focus goes to Next on every page, so no list or box shows the bright selection colour.
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if WizardForm.NextButton.Visible and WizardForm.NextButton.Enabled then
+    WizardForm.ActiveControl := WizardForm.NextButton;     // not on Installing, where Next is hidden
+end;
