@@ -49,7 +49,9 @@ if (Test-Path -LiteralPath $src) { Remove-Item -LiteralPath $src -Recurse -Force
 New-Item -ItemType Directory -Force -Path $src | Out-Null
 git -C $projectRoot archive --format=tar --prefix="$name/" -o (Join-Path $src 'main.tar') HEAD
 if ($LASTEXITCODE -ne 0) { throw 'git archive failed.' }
-git -C (Join-Path $projectRoot 'vendor\JUCE') archive --format=tar --prefix="$name/vendor/JUCE/" -o (Join-Path $src 'juce.tar') HEAD
+# (safe.directory: the JUCE checkout may belong to another Windows user, e.g. a sandbox that filled it)
+$juceDir = Join-Path $projectRoot 'vendor\JUCE'
+git -c "safe.directory=$($juceDir -replace '\\','/')" -C $juceDir archive --format=tar --prefix="$name/vendor/JUCE/" -o (Join-Path $src 'juce.tar') HEAD
 if ($LASTEXITCODE -ne 0) { throw 'git archive of JUCE failed.' }
 foreach ($t in 'main.tar', 'juce.tar') { tar -xf (Join-Path $src $t) -C $src; if ($LASTEXITCODE -ne 0) { throw "Unpacking $t failed." } }
 tar -a -cf (Join-Path $release "$name-Source.zip") -C $src $name
