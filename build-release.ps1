@@ -5,7 +5,7 @@ $cmake = 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\Co
 $iscc = Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'
 if (-not (Test-Path -LiteralPath $cmake)) { throw "Missing: $cmake" }
 
-$version = [regex]::Match((Get-Content -Raw (Join-Path $projectRoot 'CMakeLists.txt')), 'project\(PHOQER VERSION ([0-9.]+)').Groups[1].Value
+$version = [regex]::Match((Get-Content -Raw (Join-Path $projectRoot 'CMakeLists.txt')), 'set\(PHOQER_VERSION "([0-9.]+)"').Groups[1].Value
 if (-not $version) { throw 'Could not read the version from CMakeLists.txt.' }
 
 # JUCE's binary-data step breaks on build paths with parentheses, so build outside the project when needed.
