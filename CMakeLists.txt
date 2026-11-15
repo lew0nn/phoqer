@@ -276,6 +276,10 @@ juce_add_console_app(PHOQERTestChecks PRODUCT_NAME "PHOQER Test Checks")
 target_sources(PHOQERTestChecks PRIVATE Tests/TestBuildChecks.cpp)
 target_include_directories(PHOQERTestChecks PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
 target_link_libraries(PHOQERTestChecks PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp juce::juce_cryptography)
+juce_add_console_app(PHOQERShowcase PRODUCT_NAME "PHOQER Showcase")
+target_sources(PHOQERShowcase PRIVATE Tests/Showcase.cpp)
+target_include_directories(PHOQERShowcase PRIVATE Source "${CMAKE_CURRENT_BINARY_DIR}/PHOQER_artefacts/JuceLibraryCode")
+target_link_libraries(PHOQERShowcase PRIVATE PHOQER PHOQER_UIAssets juce::juce_audio_utils juce::juce_dsp juce::juce_cryptography)
 
 if(PHOQER_BUNDLE_KYRAX)
 add_custom_command(TARGET PHOQER_Standalone POST_BUILD
