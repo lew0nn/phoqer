@@ -240,7 +240,7 @@ juce::String keyText(const char* name);
 // A stand-in for lewonn.com's activation server: up to 3 computers a key, tickets stamped with the TEST ticket key.
 struct FakeServer{
     std::map<juce::String,std::set<juce::String>> slots;std::set<juce::String> banned;bool online=true;uint8_t secret[64]{};
-    juce::String voiceText;int voicesSent=0;     // KYRAX's voice, sent with an unlock when the computer's copy is missing or different
+    juce::String voiceText;int voicesSent=0,songVoiceCalls=0;     // KYRAX's voice, sent with an unlock when the computer's copy is missing or different
     std::map<juce::String,juce::String> history;  // every KYRAX version, by fingerprint, for songs (POST /voice)
     struct Made{juce::String id,kind;int serial;juce::String name;};std::map<std::string,Made> made;   // the keys this server has made, by their random part
     FakeServer(){
@@ -262,6 +262,7 @@ struct FakeServer{
         if(key==nullptr){r->setProperty("ok",false);r->setProperty("code","invalid");return reply;}const auto id=key->id;
         if(path=="/deactivate"){slots[id].erase(machine);r->setProperty("ok",true);return reply;}
         if(path=="/voice"){
+            ++songVoiceCalls;
             const auto found=history.find(body["sha256"].toString());
             if(banned.count(id)||!slots[id].count(machine)||found==history.end()){r->setProperty("ok",false);r->setProperty("code","locked");return reply;}
             auto* v=new juce::DynamicObject;v->setProperty("data",found->second);v->setProperty("sha256",found->first);r->setProperty("voice",juce::var(v));
@@ -504,6 +505,11 @@ int main(int argc,char** argv){try{
         recalled->getVoices().restoreVoiceSelection(juce::JSON::toString(fromElsewhere));
         require(recalled->getVoices().getVisualVoice()!=3&&recalled->getVoices().takeVoiceNotice().contains("GETTING IT"),"A missing KYRAX version didn't wait for the server");
         require(phoqer::licence::fetchVoice(otherData.hash)==otherText,"The song's KYRAX version was not fetched");
+        {   // the next KYRAX track asking for the same version finds it here: the server is asked once per version
+            const int before=server().songVoiceCalls;
+            for(int i=0;i<30;++i) require(phoqer::licence::fetchVoice(otherData.hash)==otherText,"A kept KYRAX version was not reused");
+            require(server().songVoiceCalls==before,"Every track asked the server again for a version this computer already has");
+        }
         recalled->getVoices().restoreVoiceSelection(juce::JSON::toString(fromElsewhere));
         require(recalled->getVoices().getVisualVoice()==3&&recalled->getVoices().loadedVoiceHash()==otherData.hash,"The fetched KYRAX version was not used");
         require(phoqer::licence::fetchVoice(juce::String::repeatedString("f",64)).isEmpty(),"An unknown KYRAX version was accepted");

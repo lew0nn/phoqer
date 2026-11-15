@@ -406,6 +406,9 @@ juce::String keptVoice(const juce::String& sha256)
 
 juce::String fetchVoice(const juce::String& sha256)
 {
+    // Already here (another KYRAX track in the same song fetched it a moment ago): no server call, so a song with many
+    // KYRAX tracks asks the server once, well inside its rate limit.
+    if (const auto here = keptVoice(sha256); here.isNotEmpty()) return here;
     const auto record = juce::JSON::parse(unlockFile().loadFileAsString());
     if (sha256.length() != 64 || ! keys::keyBody(record["key"].toString().toStdString())) return {};
     auto* body = new juce::DynamicObject;
