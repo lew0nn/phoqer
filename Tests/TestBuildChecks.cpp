@@ -117,7 +117,8 @@ void renderViews(const juce::File& voice,const juce::File& folder){
             require(ui->getParameters().getRawParameterValue("arpHold")->load()>0.5f&&hold->getToggleState(),"ARP HOLD ON did not take");
             auto* gateMode=dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpLaneGate"));auto* velMode=dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpLaneVel"));
             require(gateMode!=nullptr&&velMode!=nullptr&&velMode->getToggleState(),"ARP VEL | GATE switch missing");gateMode->onPick();require(gateMode->getToggleState()&&!velMode->getToggleState(),"ARP GATE view did not take");velMode->onPick();
-            editor->tick(1011);snapshot(v,folder.getChildFile("ui-arp.png"));
+            {const float accents[]{1,.5f,.7f,.5f,.95f,.5f,.7f,.4f,1,.5f,.7f,.5f,.9f,.45f,.8f,.6f};for(int i=0;i<16;++i)ui->setArpLane(i,{accents[i],1,i==11});}     // the screenshot shows drawn accents and a rest
+            editor->tick(1011);snapshot(v,folder.getChildFile("ui-arp.png"));ui->loadArpLanes({});
             a->setVisible(false);arpB->setToggleState(false,juce::sendNotificationSync);dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpHoldOff"))->onPick();
             dynamic_cast<phoqer::ui::SegmentButton98*>(a->findChildWithID("arpRate2"))->onPick();
         }
