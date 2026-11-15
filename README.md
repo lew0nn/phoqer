@@ -196,7 +196,7 @@ settings are not automatable.
 <summary><strong>CPU cost</strong></summary>
 
 PHOQER's cost follows how many notes are sounding: each held note is its own voice, built from
-grains in real time. Eight held notes, the most it plays at once, take 7 to 8% of one core.
+grains in real time. Eight held notes, the most it plays at once, take 4 to 5% of one core.
 
 Measured on one core of an Intel Core i5-14400F, 44.1 kHz, stereo, 128-sample blocks, one instance
 with its default settings, as a share of realtime (the sound engine; the window's drawing is not
@@ -205,8 +205,19 @@ included):
 | Notes held | BURP | SQUEAL | GROAN |
 | --- | --- | --- | --- |
 | 1 | ~1% | ~1% | ~1% |
-| 4 | ~3.5% | ~3.5% | ~4% |
-| 8 | ~7% | ~7% | ~8% |
+| 4 | ~2.5% | ~2.5% | ~2.5% |
+| 8 | ~4.5% | ~4% | ~4.5% |
+
+KYRAX, measured through the whole plug-in on the same machine:
+
+| Notes held | KYRAX | with NITRO | with ARP | with YAP |
+| --- | --- | --- | --- | --- |
+| 1 | ~1% | ~2.5% | ~1.5% | ~1% |
+| 4 | ~3% | ~8% | ~1.5% | ~3% |
+| 8 | ~6% | ~11% | ~1.5% | ~6% |
+
+NITRO plays up to four notes for every key, so it costs the most. ARP plays one note at a time, however
+many keys you hold.
 
 To measure your own machine, build from source and run `PHOQERPerformanceSanity --cpu`.
 
