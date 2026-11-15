@@ -2,7 +2,7 @@
 // beat) and writes a WAV; optionally one snapshot of the real window per video frame.
 // Usage: PHOQERShowcase <KYRAX.phqvoice> <score.txt> <out.wav> [frames folder]
 // Score lines: "tempo 110", "length 64" (beats), "p <beat> <parameter id> <value>", "n <beat> <beats> <key> <velocity 0-1>",
-// "lane <step 0-15> <velocity> <gate> <rest 0|1>". Anything else is ignored.
+// "lane <step 0-15> <velocity> <gate> <rest 0|1>", "voice <0 BURP, 1 SQUEAL, 2 GROAN, 3 KYRAX>". Anything else is ignored.
 #include "PluginProcessor.h"
 #include "UI/Editor.h"
 #include <iostream>
@@ -43,6 +43,7 @@ int main(int argc, char** argv)
         PhoqerAudioProcessor p; juce::String error;
         if (!p.getVoices().loadVoiceFile(voice, error)) throw std::runtime_error(("voice: " + error).toStdString());
         p.getVoices().useLoadedVoice();
+        int seal = 3;
         Head head; double length = 64; std::vector<Note> notes; std::vector<Change> changes;
         juce::StringArray lines; scoreFile.readLines(lines);
         for (auto& line : lines)
@@ -53,8 +54,10 @@ int main(int argc, char** argv)
             else if (t[0] == "length") length = t[1].getDoubleValue();
             else if (t[0] == "p") changes.push_back({ t[1].getDoubleValue(), t[2], t[3].getFloatValue() });
             else if (t[0] == "n") notes.push_back({ t[1].getDoubleValue(), t[2].getDoubleValue(), t[3].getIntValue(), t[4].getFloatValue() });
+            else if (t[0] == "voice") seal = t[1].getIntValue();
             else if (t[0] == "lane") p.setArpLane(t[1].getIntValue(), { t[2].getFloatValue(), t[3].getFloatValue(), t[4].getIntValue() != 0 });
         }
+        if (seal < 3) p.getVoices().selectFreeVoice(seal);
         std::stable_sort(changes.begin(), changes.end(), [](const Change& a, const Change& b) { return a.at < b.at; });
         p.setPlayHead(&head); p.prepareToPlay(rate, block);
         std::unique_ptr<juce::AudioProcessorEditor> base; phoqer::ui::PhoqerEditor* editor = nullptr;
