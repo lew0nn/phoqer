@@ -2,9 +2,11 @@
 // beat) and writes a WAV; optionally one snapshot of the real window per video frame.
 // Usage: PHOQERShowcase <KYRAX.phqvoice> <score.txt> <out.wav> [frames folder]
 // Score lines: "tempo 110", "length 64" (beats), "p <beat> <parameter id> <value>", "n <beat> <beats> <key> <velocity 0-1>",
-// "lane <step 0-15> <velocity> <gate> <rest 0|1>", "voice <0 BURP, 1 SQUEAL, 2 GROAN, 3 KYRAX>". Anything else is ignored.
+// "lane <step 0-15> <velocity> <gate> <rest 0|1>", "voice <0 BURP, 1 SQUEAL, 2 GROAN, 3 KYRAX>",
+// "ui <beat> open|close <nitro|arp>" (opens or closes NITRO.EXE / ARP.EXE in the frames). Anything else is ignored.
 #include "PluginProcessor.h"
 #include "UI/Editor.h"
+#include "UI/Nitro98.h"
 #include <iostream>
 #include <vector>
 
@@ -55,6 +57,7 @@ int main(int argc, char** argv)
             else if (t[0] == "p") changes.push_back({ t[1].getDoubleValue(), t[2], t[3].getFloatValue() });
             else if (t[0] == "n") notes.push_back({ t[1].getDoubleValue(), t[2].getDoubleValue(), t[3].getIntValue(), t[4].getFloatValue() });
             else if (t[0] == "voice") seal = t[1].getIntValue();
+            else if (t[0] == "ui") changes.push_back({ t[1].getDoubleValue(), "ui:" + t[2] + ":" + t[3], 0 });
             else if (t[0] == "lane") p.setArpLane(t[1].getIntValue(), { t[2].getFloatValue(), t[3].getFloatValue(), t[4].getIntValue() != 0 });
         }
         if (seal < 3) p.getVoices().selectFreeVoice(seal);
@@ -74,7 +77,22 @@ int main(int argc, char** argv)
         for (int start = 0; start + block <= total; start += block)
         {
             head.beats = start / rate * bpm / 60;
-            while (nextChange < changes.size() && toSample(changes[nextChange].at) < start + block) { set(p, changes[nextChange].id, changes[nextChange].value); ++nextChange; }
+            while (nextChange < changes.size() && toSample(changes[nextChange].at) < start + block)
+            {
+                const auto& c = changes[nextChange++];
+                if (! c.id.startsWith("ui:")) { set(p, c.id, c.value); continue; }
+                if (editor == nullptr) continue;                                     // no frames: the window doesn't matter
+                const auto action = c.id.fromFirstOccurrenceOf(":", false, false).upToFirstOccurrenceOf(":", false, false);
+                const auto name = c.id.fromLastOccurrenceOf(":", false, false);
+                auto& view = editor->getView();
+                if (action == "open")
+                {
+                    auto* b = dynamic_cast<phoqer::ui::IconToggle98*>(view.findChildWithID(name));
+                    if (b == nullptr || ! b->onRightClick) throw std::runtime_error(("no window button " + name).toStdString());
+                    b->onRightClick();
+                }
+                else if (auto* w = view.findChildWithID(name + "Window")) w->setVisible(false);
+            }
             juce::MidiBuffer midi;
             for (const auto& n : notes)
             {
