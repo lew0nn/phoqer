@@ -14,6 +14,17 @@ jobs:
         with:
           submodules: recursive
 
+      # A release tag (v1.2.3, no -rNN suffix) must carry the real ticket key; the TEST key's secret half is on the owner's PC.
+      - name: Refuse the TEST ticket key on a release tag
+        run: |
+          if [[ "$GITHUB_REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            line=$(grep -E 'ticketKey\[32\]' Source/Licence.cpp | head -1)
+            [ -n "$line" ] || { echo "Could not find ticketKey in Source/Licence.cpp"; exit 1; }
+            if echo "$line" | grep -Eq '0x32,[[:space:]]*0xd5,[[:space:]]*0xea'; then
+              echo "This release tag still has the TEST ticket key in Source/Licence.cpp"; exit 1
+            fi
+          fi
+
       - name: Configure
         run: >
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

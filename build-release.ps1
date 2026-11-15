@@ -1,6 +1,16 @@
+param([switch]$AllowTestKey)    # rehearsal builds only; a real release is never built with the TEST ticket key
 $ErrorActionPreference = 'Stop'
 # Builds the release in dist\release: the Setup.exe and .msi installers, the VST3 zip, the standalone exe and the source zip.
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# The TEST ticket key's secret half sits on the owner's PC, so a build that trusts it must never ship (KYRAX would be
+# forgeable). Source\Licence.cpp holds the real public key on release day (RELEASE-CHECKLIST step 2).
+$ticketLine = Select-String -Path (Join-Path $projectRoot 'Source\Licence.cpp') -Pattern 'ticketKey\[32\]' | Select-Object -First 1
+if (-not $ticketLine) { throw 'Could not find ticketKey in Source\Licence.cpp, so I cannot tell whether it is the TEST key.' }
+if ($ticketLine.Line -match '0x32,\s*0xd5,\s*0xea') {
+    if (-not $AllowTestKey) { throw 'Source\Licence.cpp still has the TEST ticket key. Put the real public key in (step 2), or pass -AllowTestKey for a rehearsal build.' }
+    Write-Warning 'Building with the TEST ticket key (-AllowTestKey): rehearsal only, never publish this.'
+}
 $cmake = 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
 $iscc = Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'
 if (-not (Test-Path -LiteralPath $cmake)) { throw "Missing: $cmake" }
