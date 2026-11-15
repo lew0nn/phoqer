@@ -4,6 +4,7 @@
 #include "UI/Presets.h"
 #include "Licence.h"
 #include "ThirdParty/monocypher/monocypher-ed25519.h"
+#include "ThirdParty/monocypher/monocypher.h"
 #include "RenderQuality.h"
 #include "IdentityStudies.h"
 #include "MiniVoiceStudies.h"
@@ -317,6 +318,14 @@ void activationChecks(){
     {juce::MemoryBlock d;voiceCopy.loadFileAsData(d);static_cast<uint8_t*>(d.getData())[d.getSize()-10]^=0x20;voiceCopy.replaceWithData(d.getData(),d.getSize());}
     require(licence::serverVoiceText().isEmpty(),"A damaged voice copy was used");
     require(licence::enter(buy).isEmpty()&&S.voicesSent==2&&licence::serverVoiceText()==S.voiceText,"A damaged voice was not fetched again");
+    {   // A voice file copied from another computer: well-formed and intact, but scrambled with that computer's key.
+        const auto otherKey=juce::SHA256(juce::String("PHQVOICE1|another-computer").toUTF8()).getRawData();
+        const auto size=S.voiceText.getNumBytesAsUTF8();uint8_t nonce[24];for(auto& b:nonce)b=0x5a;std::vector<uint8_t> sc(size);
+        crypto_chacha20_x(sc.data(),reinterpret_cast<const uint8_t*>(S.voiceText.toRawUTF8()),size,static_cast<const uint8_t*>(otherKey.getData()),nonce,0);
+        juce::MemoryBlock d("PHQV1",5);d.append(nonce,24);d.append(juce::SHA256(S.voiceText.toRawUTF8(),size).getRawData().getData(),32);d.append(sc.data(),size);
+        voiceCopy.replaceWithData(d.getData(),d.getSize());
+        require(licence::serverVoiceText().isEmpty(),"A voice file copied from another computer was used");
+    }
     voiceCopy.deleteFile();{licence::Online online;licence::renewInBackground(online);}
     require(licence::serverVoiceText()==S.voiceText&&S.voicesSent==3,"An unlocked computer without the voice didn't fetch it at start");
     {   // A new KYRAX version replaces the old one, and the old one stays for songs made with it (offline too).
