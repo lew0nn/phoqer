@@ -49,9 +49,12 @@ else()
 endif()
 
 # App icon. Windows takes a hand-built multi-size .ico (added below) so every size is drawn for its
-# size; elsewhere JUCE builds the icon from the 32 px and 256 px PNGs.
+# size; macOS takes a 1024 px drawing on Apple's icon grid (margin + shadow), so it matches other apps
+# and stays sharp; elsewhere JUCE builds the icon from the 32 px and 256 px PNGs.
 set(PHOQER_ICONS)
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if(APPLE)
+    set(PHOQER_ICONS ICON_BIG resources/branding/app/phoqer-app-icon-mac-1024.png)
+elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(PHOQER_ICONS
         ICON_BIG resources/branding/app/phoqer-app-icon-256.png
         ICON_SMALL resources/branding/app/phoqer-app-icon-32.png)
