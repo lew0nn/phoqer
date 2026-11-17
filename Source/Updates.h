@@ -40,5 +40,9 @@ juce::File downloadFolder();
 juce::String installArguments(const juce::File& appFolder, const juce::File& vst3Folder);
 // Runs the installer once this process has closed (the DAW, or the standalone app, which then opens again).
 // Returns false where it can't (not Windows).
-bool installWhenClosed(const juce::File& installer, bool reopenThisApp, const juce::File& appFolder, const juce::File& vst3Folder);
+// sha256: the installer's expected fingerprint, checked again right before it runs (a swapped file is deleted, never run).
+bool installWhenClosed(const juce::File& installer, const juce::String& sha256, bool reopenThisApp, const juce::File& appFolder, const juce::File& vst3Folder);
+// The PowerShell command installWhenClosed runs (its own function so the checks can run it for real).
+juce::String installScript(const juce::File& installer, const juce::String& sha256, juce::int64 waitForProcess, const juce::File& reopen,
+                           const juce::File& appFolder, const juce::File& vst3Folder);
 }

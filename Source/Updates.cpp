@@ -96,20 +96,32 @@ juce::String installArguments(const juce::File& appFolder, const juce::File& vst
     return args;
 }
 
-bool installWhenClosed(const juce::File& installer, bool reopenThisApp, const juce::File& appFolder, const juce::File& vst3Folder)
+juce::String installScript(const juce::File& installer, const juce::String& sha256, juce::int64 waitForProcess, const juce::File& reopen,
+                           const juce::File& appFolder, const juce::File& vst3Folder)
+{
+    const auto quote = [](const juce::String& s) { return "'" + s.replace("'", "''") + "'"; };
+    // Wait for this process to close; then check the installer's fingerprint again right before running it: the download
+    // was checked when it arrived, but it may sit in %TEMP% for hours, and a file swapped meanwhile must never run as admin.
+    juce::String script = "Wait-Process -Id " + juce::String(waitForProcess) + " -ErrorAction SilentlyContinue; "
+                          "$f = " + quote(installer.getFullPathName()) + "; "
+                          "$h = (Get-FileHash -Algorithm SHA256 -LiteralPath $f -ErrorAction SilentlyContinue).Hash; "
+                          "if ($h -ne '" + sha256.toUpperCase() + "') { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } "
+                          "else { Start-Process -Wait -FilePath $f -ArgumentList " + installArguments(appFolder, vst3Folder) + " }";
+    if (reopen != juce::File())
+        script << "; Start-Process -FilePath " << quote(reopen.getFullPathName());     // PHOQER opens again either way
+    return script;
+}
+
+bool installWhenClosed(const juce::File& installer, const juce::String& sha256, bool reopenThisApp, const juce::File& appFolder, const juce::File& vst3Folder)
 {
    #if JUCE_WINDOWS
-    const auto quote = [](const juce::String& s) { return "'" + s.replace("'", "''") + "'"; };
-    // A hidden PowerShell waits for this process to close, then runs the installer (and opens PHOQER again).
+    if (sha256.length() != 64 || ! sha256.containsOnly("0123456789abcdefABCDEF")) return false;
     const auto app = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
-    juce::String script = "Wait-Process -Id " + juce::String(static_cast<juce::int64>(GetCurrentProcessId())) + " -ErrorAction SilentlyContinue; "
-                          "Start-Process -Wait -FilePath " + quote(installer.getFullPathName()) + " -ArgumentList " + installArguments(appFolder, vst3Folder);
-    if (reopenThisApp)
-        script << "; Start-Process -FilePath " << quote(app.getFullPathName());
+    const auto script = installScript(installer, sha256, static_cast<juce::int64>(GetCurrentProcessId()), reopenThisApp ? app : juce::File(), appFolder, vst3Folder);
     const auto powershell = juce::File::getSpecialLocation(juce::File::windowsSystemDirectory).getChildFile("WindowsPowerShell\\v1.0\\powershell.exe");
     return powershell.startAsProcess("-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command \"" + script.replace("\"", "\\\"") + "\"");
    #else
-    juce::ignoreUnused(installer, reopenThisApp, appFolder, vst3Folder);
+    juce::ignoreUnused(installer, sha256, reopenThisApp, appFolder, vst3Folder);
     return false;
    #endif
 }

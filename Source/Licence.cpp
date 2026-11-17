@@ -110,6 +110,8 @@ bool writeRecord(const juce::String& key, const juce::String& ticket, const juce
     record->setProperty("kind", info["kind"]);
     record->setProperty("serial", info["serial"]);
     record->setProperty("giftName", stored ? info["giftName"] : info["name"]);   // "name" is the scrambled computer name
+    // the latest time PHOQER saw: a clock set back before it pauses KYRAX (a server answer resets it, see read())
+    record->setProperty("seen", juce::jmax(static_cast<juce::int64>(info["seen"]), juce::Time::currentTimeMillis() / 1000));
     folder().createDirectory();
     return unlockFile().replaceWithText(juce::JSON::toString(juce::var(record)));
 }
@@ -179,7 +181,15 @@ Status read()
         writeRecord(record["key"].toString(), record["ticket"].toString(), record["ticketMachine"].toString(), record);     // quietly bring the IDs up to date
     if (! same) { s.lockedElsewhere = true; return s; }
     // This computer's key: it plays while the server's ticket lasts. No ticket (or a run-out one) waits for PHOQER to be online once.
-    const auto expiry = ticketExpiry(record["ticket"].toString(), record["keyId"].toString(), record["ticketMachine"].toString());
+    // The pass counts only if it was stamped for this computer as it is now: the IDs in the file can be edited, so a
+    // copied file whose IDs were changed to match another computer is refused. (After a real ID change, the next
+    // time PHOQER is online it gets a fresh pass, as it does for a pass that ran out.)
+    const auto stamped = record["ticketMachine"].toString();
+    auto expiry = stamped == machine() ? ticketExpiry(record["ticket"].toString(), record["keyId"].toString(), stamped) : 0;
+    // a clock set back more than an hour before the latest time seen here doesn't stretch the 14 days
+    const auto seen = static_cast<juce::int64>(record["seen"]);
+    if (expiry > 0 && now() + 3600 < seen) expiry = 0;
+    else if (expiry > 0 && now() > seen + 3600) writeRecord(record["key"].toString(), record["ticket"].toString(), stamped, record);
     const auto left = expiry - now();
     s.unlocked = left > 0;
     s.paused = ! s.unlocked;

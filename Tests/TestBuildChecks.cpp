@@ -155,6 +155,26 @@ void renderViews(const juce::File& voice,const juce::File& folder){
         const auto args=phoqer::updates::installArguments(app,plugs);
         require(args=="'/SP-','/SILENT','/DIR=\""+app.getFullPathName().replace("'","''")+"\"','/VST3DIR=\""+plugs.getFullPathName()+"\"'",(juce::String("Wrong installer arguments: ")+args).toRawUTF8());
         require(phoqer::updates::installArguments(folder.getChildFile("gone"),app)=="'/SP-','/SILENT'","A missing folder was passed to the installer");
+       #if JUCE_WINDOWS
+        {   // 1.1.1: the update script checks the installer's fingerprint again right before running it. A harmless stand-in
+            // "installer" (a batch file that only writes a marker) runs when untouched, and is deleted, never run, once swapped.
+            const auto dir=folder.getChildFile("update-run");dir.createDirectory();
+            const auto bat=dir.getChildFile("PHOQER-9.9.9-Setup.bat"),marker=dir.getChildFile("ran.txt");
+            const auto run=[&](const juce::String& sha){
+                const auto ps=juce::File::getSpecialLocation(juce::File::windowsSystemDirectory).getChildFile("WindowsPowerShell\\v1.0\\powershell.exe");
+                juce::ChildProcess c;juce::StringArray cmd{ps.getFullPathName(),"-NoProfile","-ExecutionPolicy","Bypass","-Command",
+                    phoqer::updates::installScript(bat,sha,999999999,{},{},{})};
+                require(c.start(cmd),"PowerShell did not start");c.waitForProcessToFinish(30000);};
+            bat.replaceWithText("@echo installed> \""+marker.getFullPathName()+"\"\r\n");
+            const auto good=juce::SHA256(bat).toHexString();
+            run(good);require(marker.existsAsFile(),"The update script did not run an untouched installer");
+            marker.deleteFile();
+            bat.replaceWithText("@echo SWAPPED> \""+marker.getFullPathName()+"\"\r\n");     // swapped after the download was checked
+            run(good);require(!marker.existsAsFile(),"A swapped installer was run");
+            require(!bat.existsAsFile(),"A swapped installer was left on disk");
+            require(!phoqer::updates::installWhenClosed(bat,"not-a-fingerprint",false,{},{}),"An update without a valid fingerprint was scheduled");
+        }
+       #endif
     }
     editor->getView().showVoiceBrowser();snapshot(editor->getView(),folder.getChildFile("ui-browser.png"));
     auto* browser=editor->getView().findChildWithID("voiceBrowser");require(browser&&browser->isVisible(),"Voice browser not visible");
@@ -376,6 +396,21 @@ void keyChecks(){
     record.replaceWithText(juce::JSON::toString(json));licence::reload();require(licence::status().unlocked,"Older unlock file refused");
     json=juce::JSON::parse(original);for(const auto* id:{"machine","device","name"})json.getDynamicObject()->setProperty(id,juce::String("another-")+id);
     record.replaceWithText(juce::JSON::toString(json));licence::reload();s=licence::status();require(!s.unlocked&&s.lockedElsewhere,"Copied unlock worked on another computer");
+    {   // 1.1.1: a pass stamped for another computer, in a file whose IDs were edited to match this one, is refused
+        json=juce::JSON::parse(original);
+        json.getDynamicObject()->setProperty("ticket",server().ticket("1-G-1","another-computers-id",juce::Time::currentTimeMillis()/1000+10*86400));
+        json.getDynamicObject()->setProperty("ticketMachine","another-computers-id");
+        record.replaceWithText(juce::JSON::toString(json));licence::reload();
+        require(!licence::status().unlocked,"An unlock file copied from another computer, its IDs edited, unlocked KYRAX here");
+        // a clock set back days before the latest time seen here pauses KYRAX; unlocking online again fixes it
+        json=juce::JSON::parse(original);json.getDynamicObject()->setProperty("seen",juce::Time::currentTimeMillis()/1000+3*86400);
+        record.replaceWithText(juce::JSON::toString(json));licence::reload();s=licence::status();
+        require(!s.unlocked&&s.paused,"A clock set back still played KYRAX");
+        json.getDynamicObject()->setProperty("seen",juce::Time::currentTimeMillis()/1000-600);
+        record.replaceWithText(juce::JSON::toString(json));licence::reload();require(licence::status().unlocked,"A normal clock was refused");
+        require(licence::enter(keyText("k-gift.txt")).isEmpty(),"Unlocking again was refused");
+        require(juce::JSON::parse(record.loadFileAsString())["seen"].toString().getLargeIntValue()<=juce::Time::currentTimeMillis()/1000+5,"A server answer did not reset the time seen");
+    }
     require(licence::enter(keyText("k-buy.txt")).isEmpty(),"Bought key refused");s=licence::status();
     require(s.unlocked&&s.key.kind==phoqer::keys::Kind::bought&&s.key.serial==137&&licence::describe(s)=="LICENSED - KEY #0137","Bought key misread");
     licence::remove();
@@ -446,7 +481,7 @@ int main(int argc,char** argv){try{
             const auto file=folder.getChildFile("PHOQER-"+f.phoqer.version+"-Setup.exe");
             if(auto in=juce::URL(f.phoqer.url).createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress))){juce::FileOutputStream o(file);o.writeFromInputStream(*in,-1);}
             const bool ok=phoqer::updates::verify(file,f.phoqer);out<<" verified="<<(int)ok;
-            if(ok)out<<" scheduled="<<(int)phoqer::updates::installWhenClosed(file,true,juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory(),{});
+            if(ok)out<<" scheduled="<<(int)phoqer::updates::installWhenClosed(file,f.phoqer.sha256,true,juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory(),{});
         }
         folder.getChildFile("live-update.txt").replaceWithText(out);return 0;}
     // PHOQER_LIVE_ACTIVATION: the real internet code against PHOQER_ACTIVATION_URL (the local test server), answers to live.txt.

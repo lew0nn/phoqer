@@ -199,7 +199,7 @@ void PhoqerView::updatePressed(bool right)
             if (! right) { showUpdate(UpdateStage::none); return; }
             // each copy is updated where it was last run from (both remembered in setupUpdates)
             const auto saved = [](const juce::String& path) { return juce::File::isAbsolutePath(path) ? juce::File(path) : juce::File(); };
-            if (updates::installWhenClosed(updateFile, isStandalone(), saved(UiSettings::get().appFolder()), saved(UiSettings::get().vst3Folder())))
+            if (updates::installWhenClosed(updateFile, updateInfo.phoqer.sha256, isStandalone(), saved(UiSettings::get().appFolder()), saved(UiSettings::get().vst3Folder())))
             {
                 installScheduled = ! isStandalone();
                 showUpdate(UpdateStage::none);
