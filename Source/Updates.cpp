@@ -1,7 +1,10 @@
 #include "Updates.h"
 
 #if JUCE_WINDOWS
-extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
+ #define NOMINMAX
+ #define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ #include <string>
 #endif
 
 namespace phoqer::updates
@@ -90,7 +93,8 @@ juce::String installArguments(const juce::File& appFolder, const juce::File& vst
 {
     // PowerShell single-quoted items: a ' inside a path is doubled
     const auto item = [](const juce::String& name, const juce::File& f) { return ",'/" + name + "=\"" + f.getFullPathName().replace("'", "''") + "\"'"; };
-    juce::String args = "'/SP-','/SILENT'";
+    // An update never adds the desktop shortcut (a first install still offers it).
+    juce::String args = "'/SP-','/SILENT','/MERGETASKS=\"!desktopicon\"'";
     if (appFolder != juce::File() && appFolder.isDirectory()) args << item("DIR", appFolder);
     if (vst3Folder != juce::File() && vst3Folder.getChildFile("PHOQER.vst3").isDirectory()) args << item("VST3DIR", vst3Folder);
     return args;
@@ -119,7 +123,17 @@ bool installWhenClosed(const juce::File& installer, const juce::String& sha256, 
     const auto app = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
     const auto script = installScript(installer, sha256, static_cast<juce::int64>(GetCurrentProcessId()), reopenThisApp ? app : juce::File(), appFolder, vst3Folder);
     const auto powershell = juce::File::getSpecialLocation(juce::File::windowsSystemDirectory).getChildFile("WindowsPowerShell\\v1.0\\powershell.exe");
-    return powershell.startAsProcess("-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command \"" + script.replace("\"", "\\\"") + "\"");
+    // Started with no console at all (CREATE_NO_WINDOW): -WindowStyle Hidden alone still flashed one for a moment.
+    std::wstring command { ("\"" + powershell.getFullPathName() + "\" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command \""
+                            + script.replace("\"", "\\\"") + "\"").toWideCharPointer() };
+    STARTUPINFOW startup {};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process {};
+    if (! CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process))
+        return false;
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return true;
    #else
     juce::ignoreUnused(installer, sha256, reopenThisApp, appFolder, vst3Folder);
     return false;

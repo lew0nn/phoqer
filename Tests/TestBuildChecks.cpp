@@ -153,8 +153,8 @@ void renderViews(const juce::File& voice,const juce::File& folder){
         const auto app=folder.getChildFile("My App's folder"),plugs=folder.getChildFile("Plug Ins");
         app.createDirectory();plugs.getChildFile("PHOQER.vst3").createDirectory();
         const auto args=phoqer::updates::installArguments(app,plugs);
-        require(args=="'/SP-','/SILENT','/DIR=\""+app.getFullPathName().replace("'","''")+"\"','/VST3DIR=\""+plugs.getFullPathName()+"\"'",(juce::String("Wrong installer arguments: ")+args).toRawUTF8());
-        require(phoqer::updates::installArguments(folder.getChildFile("gone"),app)=="'/SP-','/SILENT'","A missing folder was passed to the installer");
+        require(args=="'/SP-','/SILENT','/MERGETASKS=\"!desktopicon\"','/DIR=\""+app.getFullPathName().replace("'","''")+"\"','/VST3DIR=\""+plugs.getFullPathName()+"\"'",(juce::String("Wrong installer arguments: ")+args).toRawUTF8());
+        require(phoqer::updates::installArguments(folder.getChildFile("gone"),app)=="'/SP-','/SILENT','/MERGETASKS=\"!desktopicon\"'","A missing folder was passed to the installer");
        #if JUCE_WINDOWS
         {   // 1.1.1: the update script checks the installer's fingerprint again right before running it. A harmless stand-in
             // "installer" (a batch file that only writes a marker) runs when untouched, and is deleted, never run, once swapped.
