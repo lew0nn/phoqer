@@ -442,7 +442,8 @@ void Win98LookAndFeel::getIdealPopupMenuItemSizeWithOptions(const juce::String& 
 
 juce::Rectangle<int> Win98LookAndFeel::getTooltipBounds(const juce::String& text, juce::Point<int> screenPos, juce::Rectangle<int> parentArea)
 {
-    const int w = juce::roundToInt(juce::GlyphArrangement::getStringWidth(pixelFont(12.0f), text)) + 14, h = 20;
+    // +16 slack: drawn text can come out wider than measured, and JUCE drops the letters that don't fit.
+    const int w = juce::roundToInt(juce::GlyphArrangement::getStringWidth(pixelFont(12.0f), text)) + 30, h = 20;
     return juce::Rectangle<int>(screenPos.x > parentArea.getCentreX() ? screenPos.x - (w + 12) : screenPos.x + 24,
                                 screenPos.y > parentArea.getCentreY() ? screenPos.y - (h + 6) : screenPos.y + 6, w, h)
         .constrainedWithin(parentArea);

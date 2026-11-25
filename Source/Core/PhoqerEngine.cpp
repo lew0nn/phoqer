@@ -30,6 +30,7 @@ void PhoqerEngine::prepare(double newSampleRate, int maximumBlockSize, int)
 void PhoqerEngine::reset()
 {
     fishSong.reset();
+    silentSamples = 0;
     for (auto& voice : voices)
         voice.hardReset();
     pitchWheels.fill(8192);
@@ -583,6 +584,14 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
             arpGrid = static_cast<double>(arpNextAt);
     }
     arpWasSynced = macros.songPlaying;
+    // Asleep: no MIDI, nothing sounding or due, and a second of output below -100 dB (the SPACE tail included):
+    // the voices and effects are skipped, so an idle PHOQER costs next to nothing. Any MIDI wakes it.
+    if (eventCount == 0 && silentSamples >= static_cast<int64_t>(sampleRate) && ! busy())
+    {
+        clock += output.getNumSamples();     // output was cleared above
+        telemetry.publishMeter(0.0f, 0.0f);
+        return;
+    }
     for (int index = 0; index < eventCount; ++index)
     {
         const auto eventSample = clamp(cursor, output.getNumSamples(), events[index].sampleOffset);
@@ -601,6 +610,14 @@ void PhoqerEngine::process(AudioBuffer& output, const MidiEvent* events, int eve
     outputStage.setOutputDb(outputDecibels);
     outputStage.process(output);
     publishTelemetry(output);
+    silentSamples = output.getMagnitude(0, output.getNumSamples()) < 1.0e-5f ? silentSamples + output.getNumSamples() : 0;
+}
+
+bool PhoqerEngine::busy() const noexcept
+{
+    if (getActiveVoiceCount() > 0 || fishSong.isPlaying() || arpSounding >= 0 || (arpActive() && arpNextAt >= 0)) return true;
+    for (const auto& p : pending) if (p.used) return true;
+    return false;
 }
 
 void PhoqerEngine::publishTelemetry(const AudioBuffer& output) noexcept

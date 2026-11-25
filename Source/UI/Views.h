@@ -18,7 +18,9 @@ public:
     void paint(juce::Graphics&) override;
 
 private:
+    static bool sameExpression(const Expression&, const Expression&) noexcept;
     juce::Image bitmap;
+    Expression shown;
     float intensity = 0.0f;
     int character = 0;
 };
@@ -46,6 +48,7 @@ private:
     double silentSeconds = 0.0, holdSeconds = 0.0;
     float displayGain = 1.0f, traceOpacity = 0.0f, capturePeak = 0.0f, capturedMs = 0.0f;
     CaptureState captureState = CaptureState::idle;
+    bool shownIdle = false;                     // the empty screen is already drawn
     int character = 0;
     int spectrogramFrames = 0;
     juce::Image spectrogram;
@@ -63,9 +66,11 @@ public:
     void paint(juce::Graphics&) override;
 
 private:
+    int litSegments() const noexcept;
+    static constexpr int segments = 22;
     const TelemetryPublisher& telemetry;
     float peak = 0.0f;
-    int character = 0;
+    int character = 0, shownLit = -1;
 };
 
 // A Win98 push button bound to a choice parameter value (voice tab or mode button).

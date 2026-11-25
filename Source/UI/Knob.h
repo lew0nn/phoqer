@@ -32,10 +32,15 @@ public:
 
     void setCharacter(int character);
     void paint(juce::Graphics&) override;
+    // Shift held while dragging: the knob follows the mouse at fineDragScale speed, for exact values.
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    static constexpr float fineDragScale = 0.15f;
 
 private:
     Spec spec;
     int character = 0;
+    juce::Point<float> lastMouse, dragMouse;     // the real pointer, and the scaled one the slider sees
 };
 
 // The dial bitmap: a square centred on the dial, value arc included. 'proportion' is 0..1.

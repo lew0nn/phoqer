@@ -805,8 +805,10 @@ void PhoqerView::resized()
     {
         const bool big = i < 4;
         // Four big knobs, the divider, then VOWEL, DETUNE, TIDE and GLIDE.
+        // The small ones end above the KYRAX box, so hovering its switches never shows a knob's tooltip.
+        const float smallH = juce::jmin(mix.getHeight(), nitroBoxArea().getY() - 2.0f - mix.getY());
         const auto cell = big ? juce::Rectangle<float>(mix.getX() + 4.0f + i * 124.0f, mix.getY(), 124.0f, mix.getHeight())
-                              : juce::Rectangle<float>(mix.getX() + 504.0f + (i - 4) * 58.0f, mix.getY(), 58.0f, mix.getHeight());
+                              : juce::Rectangle<float>(mix.getX() + 504.0f + (i - 4) * 58.0f, mix.getY(), 58.0f, smallH);
         knobs[static_cast<size_t>(i)]->setBounds(cell.toNearestInt());
     }
     {
@@ -953,6 +955,7 @@ void PhoqerView::paint(juce::Graphics& g)
 
 void PhoqerView::timerCallback()
 {
+    if (! isShowing()) return;     // minimised or hidden: nothing to draw; it all catches up when shown again
     tick(juce::Time::getMillisecondCounterHiRes() * 0.001);
 }
 

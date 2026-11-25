@@ -15,10 +15,25 @@ namespace phoqer::ui
 // ---------------------------------------------------------------------------------------- SEAL
 void SealView::update(const PortraitRenderer& renderer, int c, const Expression& ex)
 {
+    const int w = juce::jmax(8, getWidth() / 2), h = juce::jmax(8, getHeight() / 2);
+    // A resting face renders the same bitmap again and again: skip it (the render is the window's dearest step).
+    if (bitmap.isValid() && c == character && w == bitmap.getWidth() && h == bitmap.getHeight() && sameExpression(ex, shown)) return;
     character = c;
     intensity = ex.face.intensity;
-    bitmap = renderer.render(c, ex, juce::jmax(8, getWidth() / 2), juce::jmax(8, getHeight() / 2));
+    shown = ex;
+    bitmap = renderer.render(c, ex, w, h);
     repaint();
+}
+
+bool SealView::sameExpression(const Expression& a, const Expression& b) noexcept
+{
+    const float x[] { a.face.mouthOpen, a.face.mouthRound, a.face.jawWidth, a.face.throatTension, a.face.eyeSquint, a.face.eyeOpen,
+                      a.face.headLift, a.face.intensity, a.grin, a.smile, a.happyEyes, a.gulp };
+    const float y[] { b.face.mouthOpen, b.face.mouthRound, b.face.jawWidth, b.face.throatTension, b.face.eyeSquint, b.face.eyeOpen,
+                      b.face.headLift, b.face.intensity, b.grin, b.smile, b.happyEyes, b.gulp };
+    for (size_t i = 0; i < std::size(x); ++i)
+        if (std::abs(x[i] - y[i]) > 1.0e-4f) return false;
+    return true;
 }
 
 void SealView::paint(juce::Graphics& g)
@@ -130,7 +145,9 @@ void ScopeView::refresh()
         traceOpacity *= static_cast<float>(std::exp(-delta * 4.0));
         if (traceOpacity < 0.015f) { captureState = CaptureState::idle; usedBuckets = 0; }
     }
-    repaint();
+    const bool idle = captureState == CaptureState::idle;     // an empty screen: draw it once, then leave it
+    if (! (idle && shownIdle)) repaint();
+    shownIdle = idle;
 }
 
 void ScopeView::showSpectrogram(double seconds)
@@ -237,7 +254,13 @@ void ScopeView::paint(juce::Graphics& g)
 void MeterView::refresh()
 {
     peak = juce::jmax(telemetry.getPeak(), peak * 0.88f);
-    repaint();
+    if (const int lit = litSegments(); lit != shownLit) { shownLit = lit; repaint(); }     // silent: no redraws
+}
+
+int MeterView::litSegments() const noexcept
+{
+    const float db = juce::Decibels::gainToDecibels(peak, -60.0f);
+    return juce::jlimit(0, segments, juce::roundToInt((db + 60.0f) / 60.0f * segments));
 }
 
 void MeterView::paint(juce::Graphics& g)
@@ -245,9 +268,7 @@ void MeterView::paint(juce::Graphics& g)
     const auto& pal = paletteFor(character);
     const juce::Rectangle<float> bar { 0.0f, 0.0f, static_cast<float>(getWidth()), 24.0f };
     sunken(g, bar, juce::Colours::black);
-    constexpr int segments = 22;
-    const float db = juce::Decibels::gainToDecibels(peak, -60.0f);
-    const int lit = juce::jlimit(0, segments, juce::roundToInt((db + 60.0f) / 60.0f * segments));
+    const int lit = litSegments();
     const float cw = (bar.getWidth() - 8.0f) / segments;
     for (int k = 0; k < segments; ++k)
     {

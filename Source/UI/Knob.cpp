@@ -93,6 +93,21 @@ PixelKnob::PixelKnob(Spec s) : spec(std::move(s))
     setTooltip(spec.name + (spec.description.isNotEmpty() ? " - " + spec.description : juce::String()));
 }
 
+void PixelKnob::mouseDown(const juce::MouseEvent& e)
+{
+    lastMouse = dragMouse = e.position;
+    juce::Slider::mouseDown(e);
+}
+
+void PixelKnob::mouseDrag(const juce::MouseEvent& e)
+{
+    // Only each step's movement is scaled, so pressing or letting go of Shift mid-drag never makes the knob jump.
+    const auto step = e.position - lastMouse;
+    lastMouse = e.position;
+    dragMouse += e.mods.isShiftDown() ? step * fineDragScale : step;
+    juce::Slider::mouseDrag(e.withNewPosition(dragMouse));
+}
+
 void PixelKnob::setCharacter(int c)
 {
     if (c == character) return;

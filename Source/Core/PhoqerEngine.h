@@ -95,6 +95,8 @@ private:
     struct PendingNote { int64_t at = 0; int channel = 0, root = 0, note = 0; float velocity = 0, gain = 1, pan = 0, cents = 0; bool used = false, released = false, sustained = false; };
     std::array<PendingNote, 64> pending {};     // NITRO's strummed notes waiting for their sample
     int64_t clock = 0, blockStart = 0;          // samples since prepare
+    int64_t silentSamples = 0;                  // output below -100 dB this long in a row; a second of it puts the engine to sleep
+    bool busy() const noexcept;                 // a voice, a strummed note, the ARP or the fish song still has something to play
     double sampleRate = 44100.0;
     MacroState macros;                          // this block's knobs (YAP moves VOWEL in it)
     float yapVowel = 0.35f;
