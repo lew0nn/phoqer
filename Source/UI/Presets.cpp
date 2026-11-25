@@ -84,7 +84,7 @@ void PresetLibrary::refresh()
         p.arpLanes = PhoqerAudioProcessor::canonicalArpLanes({});
         p.values = { { "character", static_cast<float>(b.voice) }, { "behavior", static_cast<float>(b.mode) }, { "boom", b.boom },
                      { "air", b.air }, { "bark", b.bark }, { "space", b.space }, { "vowel", b.vowel }, { "detune", b.detune }, { "tide", b.tide },
-                     { "glide", b.glide } };
+                     { "glide", b.glide }, { "mono", 0.0f } };
         presets.push_back(p);
     }
     if (processor.getVoices().hasLoadedVoice())
@@ -99,7 +99,8 @@ void PresetLibrary::refresh()
                          { "glide", b.glide }, { "yap", b.yap ? 1.0f : 0.0f }, { "nitro", b.nitro ? 1.0f : 0.0f },
                          { "nitroNote1", static_cast<float>(b.note1) }, { "nitroNote2", static_cast<float>(b.note2) },
                          { "nitroNote3", static_cast<float>(b.note3) }, { "nitroLevel1", b.level }, { "nitroLevel2", b.level },
-                         { "nitroLevel3", b.level }, { "nitroWidth", b.width }, { "nitroStrum", b.strum }, { "nitroDetune", b.cents } };
+                         { "nitroLevel3", b.level }, { "nitroWidth", b.width }, { "nitroStrum", b.strum }, { "nitroDetune", b.cents },
+                         { "mono", 0.0f } };
             if (b.arp)
                 p.values.insert({ { "arp", 1.0f }, { "arpRate", static_cast<float>(b.arpRate) }, { "arpPattern", static_cast<float>(b.arpPattern) },
                                   { "arpGate", b.arpGate }, { "arpSwing", b.arpSwing }, { "arpOctaves", static_cast<float>(b.arpOctaves) } });

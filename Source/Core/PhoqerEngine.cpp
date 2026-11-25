@@ -210,6 +210,7 @@ void PhoqerEngine::handleEvent(const MidiEvent& event, int sampleInBlock) noexce
                 if (voice->isActive())
                     voice->stopNote(false);
                 voice->startBelch(clamp(12, 127, event.note), clamp(0.0f, 1.0f, event.value));
+                if (voice == newestVoice) newestVoice = nullptr;     // a belch is no note: never glide or MONO-slide from it
             }
             break;
         case MidiEventType::pitchWheel:
