@@ -19,13 +19,18 @@
     <Property Id="ARPHELPLINK" Value="https://github.com/lew0nn/phoqer" />
     <Property Id="ARPPRODUCTICON" Value="PhoqerProductIcon" />
     <Icon Id="PhoqerProductIcon" SourceFile="$(var.SourceDir)\resources\branding\app\phoqer-app-icon.ico" />
+    <Icon Id="PhoqerShortcutIcon.ico" SourceFile="$(var.SourceDir)\resources\branding\app\phoqer-app-icon.ico" />
 
     <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramMenuFolder" />
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="CompanyFolder" Name="LWNX DSP">
           <Directory Id="INSTALLFOLDER" Name="PHOQER">
             <Component Id="StandaloneComponent" Guid="D7E4CCE2-D8A7-477B-A57E-2A1044C78572" Win64="yes">
-              <File Id="StandaloneExe" Source="$(var.DistDir)\Standalone\PHOQER.exe" KeyPath="yes" />
+              <File Id="StandaloneExe" Source="$(var.DistDir)\Standalone\PHOQER.exe" KeyPath="yes">
+                <!-- Start menu entry, so the app can be found after installing (the Setup.exe makes its own) -->
+                <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="PHOQER" WorkingDirectory="INSTALLFOLDER" Icon="PhoqerShortcutIcon.ico" Advertise="yes" />
+              </File>
             </Component>
             <Component Id="LicenseComponent" Guid="81FEBFA7-D48D-4758-A036-77112DA7DFC5" Win64="yes">
               <File Id="LicenseFile" Source="$(var.SourceDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
