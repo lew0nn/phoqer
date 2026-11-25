@@ -1,5 +1,6 @@
 // The dialogs: about, shortcuts, the controls guide, licences, save and open preset, REC and saving a take.
 #include "EditorShared.h"
+#include "VoiceLibrary.h"
 
 namespace phoqer::ui
 {
@@ -38,7 +39,7 @@ void PhoqerView::showAbout()
 {
     Dialog98::Spec spec;
     spec.title = "ABOUT PHOQER";
-    spec.icon = loadAssetImage("phoqer-app-icon-32.png");
+    spec.icon = voiceLibraryBadges()[static_cast<size_t>(character)];     // the badge of the voice in use, as in VOICES.EXE
     spec.lines = { "PHOQER", "VERSION " JucePlugin_VersionString, "", "~A SYNTHETIC SEAL VOICE", "~LWNX DSP" };
     showDialog(std::move(spec));
 }
