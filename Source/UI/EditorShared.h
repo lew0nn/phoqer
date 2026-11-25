@@ -64,7 +64,7 @@ juce::String milliseconds(double v) { return v < 1000.0 ? juce::String(juce::rou
 juce::String noteName(int note) { return juce::MidiMessage::getMidiNoteName(note, true, true, 4); }
 const char* const modeNames[] { "CALL", "HONK", "BARK", "WAIL", "MURMUR" };
 
-constexpr char controlKeys[] { 'z', 'x', 'c', 'v' };    // octave down/up, velocity down/up
+constexpr char controlKeys[] { 'z', 'x', 'c', 'v', 'm' };    // octave down/up, velocity down/up, MONO on/off
 constexpr int lowestBase = 24, highestBase = 96, velocityStep = 10;
 
 // Header row: the preset box sits between the logo and the voice tabs; REC at the menu row's end.

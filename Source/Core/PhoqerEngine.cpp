@@ -44,6 +44,7 @@ void PhoqerEngine::reset()
     sustained.fill(false);
     modWheel = 0.0f;
     newestVoice = nullptr;
+    heldKeyCount = 0;
     chorusStage.reset();
     spaceStage.reset();
     outputStage.reset();
@@ -147,6 +148,20 @@ void PhoqerEngine::handleEvent(const MidiEvent& event, int sampleInBlock) noexce
 
             telemetry.beginCall();
             const bool nitro = nitroActive();
+            keyDown(channel, clamp(0, 127, event.note));
+            if (macros.mono)
+            {
+                // shortcut: NITRO's extra notes don't follow a legato move, so with NITRO on each key starts afresh.
+                if (auto* held = monoNote(); held != nullptr && ! nitro)
+                {
+                    held->legatoTo(channel, clamp(0, 127, event.note));
+                    sustained[static_cast<size_t>(held - voices.data())] = false;     // the new key holds it now, not the pedal
+                    break;
+                }
+                for (auto& p : pending) p.used = false;
+                for (size_t i = 0; i < voices.size(); ++i)     // one note at a time: the rest fade out (3 ms)
+                    if (voices[i].isActive() && ! voices[i].isFading()) { voices[i].fadeOut(); sustained[i] = false; }
+            }
             int extras = 0;
             float groupPower = 1.0f;
             if (nitro)
@@ -209,6 +224,7 @@ void PhoqerEngine::handleEvent(const MidiEvent& event, int sampleInBlock) noexce
         }
         case MidiEventType::allNotesOff:
             sustainDown[static_cast<size_t>(channel)] = false;
+            heldKeyCount = 0;
             for (auto& p : pending) if (p.channel == channel) p.used = false;
             for (size_t i = 0; i < voices.size(); ++i)
                 if (voices[i].matchesChannel(channel))
@@ -242,6 +258,14 @@ void PhoqerEngine::handleEvent(const MidiEvent& event, int sampleInBlock) noexce
 void PhoqerEngine::releaseNote(int channel, int note) noexcept
 {
     const bool pedal = sustainDown[static_cast<size_t>(channel)];
+    // MONO: letting go of the sounding key while others are still down moves the note back to the newest of them.
+    if (keyUp(channel, note) && macros.mono && ! pedal && heldKeyCount > 0)
+        if (auto* held = monoNote(); held != nullptr && held->matchesNote(channel, note))
+        {
+            const auto back = heldKeys[static_cast<size_t>(heldKeyCount - 1)];
+            held->legatoTo(back.channel, back.note);
+            return;
+        }
     for (auto& p : pending)     // NITRO notes still waiting for their strum start: they end as soon as they start
         if (p.used && p.channel == channel && p.root == note && ! p.released && ! p.sustained)
             (pedal ? p.sustained : p.released) = true;
@@ -251,6 +275,36 @@ void PhoqerEngine::releaseNote(int channel, int note) noexcept
             if (sustainDown[static_cast<size_t>(channel)]) sustained[i] = true;
             else voices[i].stopNote(true);
         }
+}
+
+void PhoqerEngine::keyDown(int channel, int note) noexcept
+{
+    keyUp(channel, note);
+    if (heldKeyCount == static_cast<int>(heldKeys.size()))     // full: the oldest key drops out of the list
+    {
+        std::move(heldKeys.begin() + 1, heldKeys.end(), heldKeys.begin());
+        --heldKeyCount;
+    }
+    heldKeys[static_cast<size_t>(heldKeyCount++)] = { channel, note };
+}
+
+bool PhoqerEngine::keyUp(int channel, int note) noexcept
+{
+    for (int i = 0; i < heldKeyCount; ++i)
+        if (heldKeys[static_cast<size_t>(i)].channel == channel && heldKeys[static_cast<size_t>(i)].note == note)
+        {
+            std::move(heldKeys.begin() + i + 1, heldKeys.begin() + heldKeyCount, heldKeys.begin() + i);
+            --heldKeyCount;
+            return true;
+        }
+    return false;
+}
+
+SealVoice* PhoqerEngine::monoNote() noexcept
+{
+    if (newestVoice == nullptr) return nullptr;
+    auto& voice = voices[static_cast<size_t>(newestVoice - voices.data())];
+    return voice.isActive() && ! voice.isReleasing() && ! voice.isFading() && ! voice.isExtra() ? &voice : nullptr;
 }
 
 void PhoqerEngine::renderVoices(AudioBuffer& output, int startSample, int numSamples)

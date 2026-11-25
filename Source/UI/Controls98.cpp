@@ -466,6 +466,29 @@ void DiceButton98::paintButton(juce::Graphics& g, bool, bool down)
     g.drawImage(icon, juce::Rectangle<float>(16.0f * scale, 16.0f * scale).withCentre(glassArea.getCentre()));     // nothing on a button moves when it is pressed
 }
 
+void Readout98::mouseDown(const juce::MouseEvent& e)
+{
+    dragSent = 0;
+    dragged = false;
+    juce::Button::mouseDown(e);
+}
+
+void Readout98::mouseDrag(const juce::MouseEvent& e)
+{
+    if (! onDrag) { juce::Button::mouseDrag(e); return; }
+    const int steps = juce::roundToInt(-e.getDistanceFromDragStartY() / 3.0f);
+    if (steps == dragSent) return;
+    dragged = true;
+    onDrag(steps - dragSent);
+    dragSent = steps;
+}
+
+void Readout98::mouseUp(const juce::MouseEvent& e)
+{
+    if (! dragged) { juce::Button::mouseUp(e); return; }
+    setState(juce::Button::buttonNormal);     // a drag, not a click: METRO.EXE stays as it was
+}
+
 void Readout98::paintButton(juce::Graphics& g, bool over, bool)
 {
     const auto& pal = paletteFor(character);

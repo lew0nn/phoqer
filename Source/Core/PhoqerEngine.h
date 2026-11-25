@@ -106,6 +106,13 @@ private:
     std::array<bool, voiceSlots> sustained {};           // a voice whose key is up but the pedal holds it
     float modWheel = 0.0f;                               // 0..1, adds to TIDE
     const SealVoice* newestVoice = nullptr;           // the last note started: where a glide starts from
+    // MONO: the keys held down, oldest first. Letting go of the sounding one goes back to the newest still held.
+    struct HeldKey { int channel = 0, note = 0; };
+    std::array<HeldKey, 16> heldKeys {};
+    int heldKeyCount = 0;
+    void keyDown(int channel, int note) noexcept;
+    bool keyUp(int channel, int note) noexcept;     // true when the key was in the list
+    SealVoice* monoNote() noexcept;                 // MONO: the note a key (or the pedal) still holds, if any
     Chorus chorusStage;      // DETUNE
     FdnSpace spaceStage;     // REVERB (SPACE)
     OutputStage outputStage;

@@ -36,6 +36,8 @@ juce::PopupMenu PhoqerView::buildMenu(int index)
             addItem(m, "COPY SETTINGS", id++, true, false, {}, [this] { copySettings(); });
             addItem(m, "PASTE SETTINGS", id++, true, false, {}, [this] { pasteSettings(); });
             m.addSeparator();
+            addItem(m, monoOn() ? "PLAY: MONO" : "PLAY: POLY", id++, true, false, isStandalone() ? "M" : "", [this] { toggleMono(); });
+            m.addSeparator();
             addItem(m, "PANIC (ALL NOTES OFF)", id++, true, false, {}, [this] { panic(); });
             m.addSeparator();
             addItem(m, "AUDIO/MIDI SETUP...", id++, windowControls.audioSettings != nullptr, false, {},
@@ -173,6 +175,19 @@ void PhoqerView::toggleKeys()
     chrome = {};
     repaint();
     if (onLayoutChanged) onLayoutChanged();
+}
+
+bool PhoqerView::monoOn() const
+{
+    return processor.getParameters().getRawParameterValue("mono")->load() >= 0.5f;
+}
+
+void PhoqerView::toggleMono()
+{
+    auto& p = parameterFor(processor.getParameters(), "mono");
+    p.beginChangeGesture();
+    p.setValueNotifyingHost(monoOn() ? 0.0f : 1.0f);
+    p.endChangeGesture();
 }
 
 void PhoqerView::panic()

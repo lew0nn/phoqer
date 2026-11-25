@@ -339,10 +339,17 @@ public:
     void setCharacter(int c) { character = c; repaint(); }
     void setText(const juce::String& t) { if (t != shown) { shown = t; repaint(); } }
     void paintButton(juce::Graphics&, bool over, bool down) override;
+    // Dragged up or down: onDrag gets the change in whole steps (3 px each); a drag never counts as a click.
+    std::function<void(int steps)> onDrag;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
 
 private:
     juce::String shown;
     int character = 0;
+    int dragSent = 0;
+    bool dragged = false;
 };
 
 // A Win98 push button with a text label; the default button gets the black outer border.

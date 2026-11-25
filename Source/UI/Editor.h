@@ -31,7 +31,7 @@ struct WindowControls
 
 // The editor itself, laid out at a fixed base size (760 wide; shorter when KEYS.EXE is hidden).
 // PhoqerEditor scales it to the chosen zoom.
-class PhoqerView final : public juce::Component, public juce::FileDragAndDropTarget, private juce::Timer
+class PhoqerView final : public juce::Component, public juce::FileDragAndDropTarget, public juce::TooltipClient, private juce::Timer
 {
 public:
     static constexpr int width = 760, fullHeight = 745, compactHeight = 633;     // MIXER.EXE is 15 taller for the KYRAX box
@@ -81,6 +81,9 @@ private:
     void paintUpdate(juce::Graphics&);
     void openUpdateFromNotice();
     juce::Rectangle<float> noticeArea() const;
+    juce::Rectangle<float> keysBar() const;     // KEYS.EXE's status bar
+    juce::Rectangle<float> monoArea() const;    // its PLAY box: click to switch MONO / POLY
+    juce::String getTooltip() override;
     void applyCharacter(int);
     void refreshVoiceControls();
     void showEnterKey();
@@ -119,6 +122,8 @@ private:
     void showGuide();
     void showLicences();
     void panic();
+    bool monoOn() const;
+    void toggleMono();
     void copySettings();
     void pasteSettings();
     void showSavePreset();
@@ -258,7 +263,8 @@ private:
     // Computer-keyboard playing: base note of the A key, velocity, and the note each key is holding.
     int qwertyBase = 60, qwertyVelocity = 120;
     std::array<int, qwertyKeyCount> heldNotes;
-    std::array<bool, 4> controlKeysDown {};    // Z X C V
+    std::array<bool, 5> controlKeysDown {};    // Z X C V M
+    bool shownMono = false;                      // what the KEYS.EXE status bar last showed
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PhoqerView)
 };

@@ -10,38 +10,43 @@ const juce::Identifier presetProperty { "testUiPreset" };     // kept: saved son
 
 // The factory bank, kept small until the PHOQER voice is redone: INIT plus one sound per voice.
 // Voice (0 burp, 1 squeal, 2 groan), mode (0 call, 1 honk, 2 bark, 3 wail, 4 murmur), then the seven
-// sound knobs. Names start with the voice: BRP, SQL, GRN.
-struct BuiltIn { const char* name; int voice, mode; float boom, air, bark, space, vowel, detune, tide; };
+// sound knobs, then GLIDE (ms) where a preset slides. Names start with the voice: BRP, SQL, GRN.
+struct BuiltIn { const char* name; int voice, mode; float boom, air, bark, space, vowel, detune, tide, glide = 0.0f; };
 constexpr BuiltIn builtIns[] {
     { "INIT",             0, 0, 0.50f, 0.25f, 0.35f, 0.00f, 0.35f, 0.00f, 0.25f },
     { "BRP FISH DEMAND",  0, 2, 0.75f, 0.15f, 0.80f, 0.20f, 0.30f, 0.10f, 0.20f },
     { "BRP HARBOUR BASS", 0, 0, 0.80f, 0.05f, 0.45f, 0.15f, 0.20f, 0.00f, 0.15f },
-    { "BRP FOGHORN",      0, 3, 0.90f, 0.10f, 0.20f, 0.50f, 0.15f, 0.25f, 0.30f },
+    { "BRP FOGHORN",      0, 3, 0.90f, 0.10f, 0.20f, 0.50f, 0.15f, 0.25f, 0.30f, 250.0f },
     { "BRP GRUMBLE",      0, 4, 0.65f, 0.10f, 0.30f, 0.10f, 0.25f, 0.10f, 0.35f },
     { "BRP PIER RIOT",    0, 1, 0.55f, 0.20f, 0.90f, 0.25f, 0.50f, 0.35f, 0.40f },
-    { "SQL BEACH SOLO",   1, 3, 0.25f, 0.50f, 0.20f, 0.40f, 0.70f, 0.12f, 0.45f },
+    { "SQL BEACH SOLO",   1, 3, 0.25f, 0.50f, 0.20f, 0.40f, 0.70f, 0.12f, 0.45f, 120.0f },
     { "SQL PUP",          1, 0, 0.15f, 0.30f, 0.30f, 0.15f, 0.80f, 0.00f, 0.50f },
     { "SQL KLAXON",       1, 1, 0.35f, 0.10f, 0.70f, 0.10f, 0.60f, 0.15f, 0.20f },
     { "SQL PUP CHOIR",    1, 0, 0.30f, 0.35f, 0.20f, 0.55f, 0.55f, 0.80f, 0.55f },
     { "SQL GOSSIP",       1, 4, 0.30f, 0.20f, 0.40f, 0.20f, 0.65f, 0.10f, 0.60f },
     { "GRN TAX AUDIT",    2, 4, 0.60f, 0.25f, 0.15f, 0.35f, 0.25f, 0.20f, 0.60f },
     { "GRN NIGHT TIDE",   2, 0, 0.55f, 0.20f, 0.10f, 0.60f, 0.30f, 0.20f, 0.50f },
-    { "GRN SIREN SONG",   2, 3, 0.45f, 0.15f, 0.15f, 0.70f, 0.40f, 0.30f, 0.70f },
+    { "GRN SIREN SONG",   2, 3, 0.45f, 0.15f, 0.15f, 0.70f, 0.40f, 0.30f, 0.70f, 200.0f },
     { "GRN ICE CAVE",     2, 0, 0.70f, 0.30f, 0.05f, 0.90f, 0.20f, 0.45f, 0.35f },
     { "GRN HONK SHOW",    2, 1, 0.50f, 0.10f, 0.60f, 0.25f, 0.45f, 0.10f, 0.30f },
 };
 
 // KYRAX's bank, listed only once KYRAX is installed and unlocked on this computer. Each one plays the
 // installed KYRAX (GROAN is the stand-in a saved copy names) and sets YAP, NITRO and GLIDE as well.
-// Mode, the seven sound knobs, GLIDE (ms), YAP, NITRO, its three notes, level, WIDTH, STRUM (ms), DETUNE (ct).
+// Mode, the seven sound knobs, GLIDE (ms), YAP, NITRO, its three notes, level, WIDTH, STRUM (ms), DETUNE (ct),
+// then ARP where a preset plays one: RATE (0 1/4 .. 4 1/8T), PATTERN (0 UP .. 4 AS PLAYED), GATE, SWING, OCTAVES.
 struct KyraxBuiltIn { const char* name; int mode; float boom, air, bark, space, vowel, detune, tide, glide; bool yap, nitro;
-                      int note1, note2, note3; float level, width, strum, cents; };
+                      int note1, note2, note3; float level, width, strum, cents;
+                      bool arp = false; int arpRate = 2, arpPattern = 0; float arpGate = 0.6f, arpSwing = 0.0f; int arpOctaves = 1; };
 constexpr KyraxBuiltIn kyraxBuiltIns[] {
     { "KYX TALK SHOW",   0, 0.55f, 0.20f, 0.40f, 0.20f, 0.50f, 0.00f, 0.30f,  0.0f, true,  false,  7, 12,   0, 0.7f, 0.6f, 12.0f,  0.0f },
     { "KYX POWER STACK", 2, 0.70f, 0.10f, 0.70f, 0.15f, 0.35f, 0.00f, 0.20f,  0.0f, false, true,   7, 12,   0, 0.7f, 0.6f,  0.0f,  0.0f },
     { "KYX MEGA CHOIR",  0, 0.50f, 0.30f, 0.15f, 0.60f, 0.40f, 0.20f, 0.50f,  0.0f, false, true,  12, 19, -12, 0.6f, 0.9f,  0.0f, 12.0f },
     { "KYX HARP RISE",   0, 0.45f, 0.25f, 0.25f, 0.45f, 0.50f, 0.00f, 0.35f,  0.0f, false, true,  12, 19,  24, 0.6f, 0.9f, 80.0f,  0.0f },
     { "KYX DOUBLE TALK", 0, 0.60f, 0.20f, 0.35f, 0.30f, 0.60f, 0.00f, 0.40f, 80.0f, true,  true,  12,  0,   0, 0.6f, 0.5f,  0.0f,  0.0f },
+    { "KYX ARCADE",      0, 0.50f, 0.25f, 0.30f, 0.25f, 0.45f, 0.00f, 0.30f,  0.0f, false, false,  7, 12,   0, 0.7f, 0.6f, 12.0f,  0.0f, true, 2, 0, 0.50f, 0.00f, 2 },
+    { "KYX CHATTER",     0, 0.55f, 0.20f, 0.35f, 0.20f, 0.55f, 0.00f, 0.40f,  0.0f, true,  false,  7, 12,   0, 0.7f, 0.6f, 12.0f,  0.0f, true, 1, 2, 0.70f, 0.35f, 1 },
+    { "KYX STAIRCASE",   2, 0.65f, 0.10f, 0.60f, 0.20f, 0.35f, 0.00f, 0.25f,  0.0f, false, true,   7, 12,   0, 0.7f, 0.6f, 12.0f,  0.0f, true, 2, 4, 0.35f, 0.00f, 2 },
 };
 
 bool same(float a, float b) { return std::abs(a - b) < 0.0015f; }
@@ -63,7 +68,7 @@ juce::File PresetLibrary::folder()
 
 juce::StringArray PresetLibrary::parameterIds()
 {
-    return { "character", "behavior", "boom", "air", "bark", "space", "vowel", "detune", "tide", "glide", "wailBend", "wailHold",
+    return { "character", "behavior", "boom", "air", "bark", "space", "vowel", "detune", "tide", "glide", "wailBend", "wailHold", "mono",
              "yap", "nitro", "nitroNote1", "nitroNote2", "nitroNote3", "nitroLevel1", "nitroLevel2", "nitroLevel3",
              "nitroWidth", "nitroStrum", "nitroDetune", "arp", "arpRate", "arpPattern", "arpHold", "arpGate", "arpSwing", "arpOctaves" };
 }
@@ -78,7 +83,8 @@ void PresetLibrary::refresh()
         p.name = b.name;
         p.arpLanes = PhoqerAudioProcessor::canonicalArpLanes({});
         p.values = { { "character", static_cast<float>(b.voice) }, { "behavior", static_cast<float>(b.mode) }, { "boom", b.boom },
-                     { "air", b.air }, { "bark", b.bark }, { "space", b.space }, { "vowel", b.vowel }, { "detune", b.detune }, { "tide", b.tide } };
+                     { "air", b.air }, { "bark", b.bark }, { "space", b.space }, { "vowel", b.vowel }, { "detune", b.detune }, { "tide", b.tide },
+                     { "glide", b.glide } };
         presets.push_back(p);
     }
     if (processor.getVoices().hasLoadedVoice())
@@ -94,6 +100,9 @@ void PresetLibrary::refresh()
                          { "nitroNote1", static_cast<float>(b.note1) }, { "nitroNote2", static_cast<float>(b.note2) },
                          { "nitroNote3", static_cast<float>(b.note3) }, { "nitroLevel1", b.level }, { "nitroLevel2", b.level },
                          { "nitroLevel3", b.level }, { "nitroWidth", b.width }, { "nitroStrum", b.strum }, { "nitroDetune", b.cents } };
+            if (b.arp)
+                p.values.insert({ { "arp", 1.0f }, { "arpRate", static_cast<float>(b.arpRate) }, { "arpPattern", static_cast<float>(b.arpPattern) },
+                                  { "arpGate", b.arpGate }, { "arpSwing", b.arpSwing }, { "arpOctaves", static_cast<float>(b.arpOctaves) } });
             presets.push_back(p);
         }
     auto files = folder().findChildFiles(juce::File::findFiles, false, juce::String("*") + fileExtension);
@@ -129,7 +138,7 @@ Preset PresetLibrary::capture(const juce::String& name) const
 
 void PresetLibrary::apply(const Preset& p)
 {
-    for (const auto* id : { "glide", "wailBend", "wailHold", "yap", "nitro", "nitroNote1", "nitroNote2", "nitroNote3", "nitroLevel1",
+    for (const auto* id : { "glide", "wailBend", "wailHold", "mono", "yap", "nitro", "nitroNote1", "nitroNote2", "nitroNote3", "nitroLevel1",
                             "nitroLevel2", "nitroLevel3", "nitroWidth", "nitroStrum", "nitroDetune",
                             "arp", "arpRate", "arpPattern", "arpHold", "arpGate", "arpSwing", "arpOctaves" })     // older presets predate these: the default, not the last one
         if (p.values.find(id) == p.values.end())

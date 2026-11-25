@@ -176,6 +176,18 @@ void SealVoice::startNote(int midiChannel, int midiNoteNumber, float velocity,
     releasing = false;
 }
 
+// MONO legato: the note carries on and moves to the new key over GLIDE (5 ms at least, so a jump doesn't click).
+void SealVoice::legatoTo(int midiChannel, int midiNoteNumber) noexcept
+{
+    const float from = smoothNote.getCurrentValue();
+    currentMidiChannel = midiChannel;
+    currentMidiNote = midiNoteNumber;
+    smoothNote.reset(sampleRate, std::max(macros.glideMs, 5.0f) * 0.001);
+    smoothNote.setCurrentAndTargetValue(from);
+    smoothNote.setTargetValue(static_cast<float>(midiNoteNumber));
+    telemetry.registerPosition = clamp(0.0f, 1.0f, (currentMidiNote - 36.0f) / 60.0f);
+}
+
 void SealVoice::glideFrom(float fromNote) noexcept
 {
     if (macros.glideMs <= 0.0f) return;

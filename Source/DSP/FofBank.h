@@ -46,6 +46,8 @@ private:
     double noteFrequency = 0.0;
     static constexpr double highTuningFromHz = 262.0, highTuningFullHz = 600.0;     // C4, about D5
     static constexpr float highTuningTrim = 0.45f;
+    static constexpr float yapTiltOctaves = 4.0f;     // YAP's brightness swing up high: about +-12 dB at the pattern's ends
+    static constexpr float yapUnlock = 0.8f;          // how far YAP lets the vowel bands off their harmonic up high
 
     double sampleRate = 44100.0, inverseSampleRate = 1.0 / 44100.0;
     float fundamentalCos = 1.0f, fundamentalSin = 0.0f;      // the fundamental, as a rotating unit vector

@@ -108,6 +108,15 @@ FormantSpec FofBank::shapeFormant(const FormantSpec& base, size_t index,
         spec.bandwidth *= 1.0f + 0.50f * macros.air;
     }
 
+    // YAP up high: there the bands sit locked on a harmonic, so moving the vowel barely changes them. The
+    // talk also carries as brightness: brighter on "ee", darker on "oo"; none at C4, full from about D5.
+    if (macros.yap && index >= 1 && noteFrequency > highTuningFromHz)
+    {
+        const auto high = clamp(0.0f, 1.0f, static_cast<float>((noteFrequency - highTuningFromHz) / (highTuningFullHz - highTuningFromHz)));
+        const auto tilt = (clamp(0.0f, 1.0f, vocal.vowelMorph) - 0.5f) * yapTiltOctaves * high;
+        spec.gain *= std::exp2(index == 1 ? -0.5f * tilt : tilt);
+    }
+
     const auto settled = spec.frequency;   // before the attack's momentary push
 
     // The mouth opening and the bark transient push formants up and widen them,
@@ -136,6 +145,8 @@ FormantSpec FofBank::shapeFormant(const FormantSpec& base, size_t index,
         }
         if (designedBandwidth < 100.0f && harmonic * fundamentalHz < 0.75 * settled)
             lock = 1.0f;    // pulled well below its home: sit right on the harmonic
+        if (macros.yap && noteFrequency > highTuningFromHz)     // YAP up high: the vowel is let off the harmonic, so it moves again
+            lock *= 1.0f - yapUnlock * clamp(0.0f, 1.0f, static_cast<float>((noteFrequency - highTuningFromHz) / (highTuningFullHz - highTuningFromHz)));
         const auto locked = static_cast<float>(harmonic * fundamentalHz);
         spec.frequency = lerp(lock, spec.frequency, locked);
     }

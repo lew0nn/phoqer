@@ -50,7 +50,8 @@ void PhoqerView::showShortcuts()
     juce::StringArray play;
     if (isStandalone())     // the computer-key piano is the standalone's
         play = { "#PLAY", "KEYS.EXE|YOUR KEYBOARD IS A PIANO: PRESS THE LETTER ON A KEY",
-                 "[Z] [X]|ONE OCTAVE DOWN, ONE UP", "[C] [V]|SOFTER, HARDER" };
+                 "[Z] [X]|ONE OCTAVE DOWN, ONE UP", "[C] [V]|SOFTER, HARDER",
+                 "[M]|PLAY: MONO (ONE NOTE AT A TIME) OR POLY (CHORDS)" };
     spec.width = 560.0f;
     spec.labelWidth = 190.0f;
     spec.lines = { "#EDIT",

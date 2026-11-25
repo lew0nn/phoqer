@@ -24,6 +24,7 @@ public:
     void setMacros(const MacroState& newMacros) noexcept;
     void startNote(int midiChannel, int midiNoteNumber, float velocity, int currentPitchWheelPosition);
     void glideFrom(float fromNote) noexcept;     // slide in from another note's pitch over the GLIDE time
+    void legatoTo(int midiChannel, int midiNoteNumber) noexcept;     // MONO: the sounding note moves to another key, no new attack
     void startTreat(int midiNoteNumber, float velocity);     // the fed seal's gulp; ends itself
     void startBelch(int midiNoteNumber, float velocity);     // overfed: the gulp, then a long belch
     void stopNote(bool allowTailOff);

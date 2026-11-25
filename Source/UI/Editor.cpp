@@ -349,7 +349,15 @@ PhoqerView::PhoqerView(PhoqerAudioProcessor& owner, Win98LookAndFeel& laf)
     barMetronome.setComponentID("barMetronome");
     barTempo.setComponentID("metroOpen");
     barMetronome.setTooltip("METRONOME ON / OFF (NOT IN WAV TAKES)");
-    barTempo.setTooltip("BPM: CLICK FOR METRO.EXE (TEMPO, VOLUME, BEATS, SOUND, COUNT-IN)");
+    barTempo.setTooltip("BPM: DRAG UP / DOWN TO CHANGE. CLICK FOR METRO.EXE (VOLUME, BEATS, SOUND, COUNT-IN)");
+    barTempo.setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+    barTempo.onDrag = [this](int steps)
+    {
+        auto& p = parameterFor(processor.getParameters(), "standaloneTempo");
+        p.beginChangeGesture();
+        p.setValueNotifyingHost(p.convertTo0to1(p.convertFrom0to1(p.getValue()) + static_cast<float>(steps)));
+        p.endChangeGesture();
+    };
     barMetronome.beats = [this] { return processor.getMetronomeBeats(); };
     barMetronomeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(state, "metronomeEnabled", barMetronome);
     barTempo.onClick = [this] { setMetroOpen(! metroWindow.isVisible()); };
@@ -475,7 +483,8 @@ bool PhoqerView::keyStateChanged(bool)
         const bool down = juce::KeyPress::isKeyCurrentlyDown(controlKeys[k]);
         if (down && ! controlKeysDown[k] && ! shortcut)
         {
-            if (k < 2) qwertyBase = juce::jlimit(lowestBase, highestBase, qwertyBase + (k == 0 ? -12 : 12));
+            if (k == 4) toggleMono();
+            else if (k < 2) qwertyBase = juce::jlimit(lowestBase, highestBase, qwertyBase + (k == 0 ? -12 : 12));
             else qwertyVelocity = juce::jlimit(velocityStep, 127, qwertyVelocity + (k == 2 ? -velocityStep : velocityStep));
             piano.setQwertyBase(qwertyBase);
             repaint(windowClient(keysWindow).toNearestInt());
@@ -506,10 +515,30 @@ bool PhoqerView::onTitleBar(juce::Point<float> p) const
     return windowTitleBar(headWindow, headTitleHeight).contains(p);
 }
 
+juce::Rectangle<float> PhoqerView::keysBar() const
+{
+    const auto keysClient = windowClient(keysWindow);
+    return keysClient.withTrimmedTop(keysClient.getHeight() - 15.0f);
+}
+
+juce::Rectangle<float> PhoqerView::monoArea() const     // the last of the bar's fields, as paint() splits it
+{
+    const auto bar = keysBar();
+    const float each = bar.getWidth() * 0.25f;
+    return { bar.getRight() - each, bar.getY(), each - 3.0f, bar.getHeight() };
+}
+
+juce::String PhoqerView::getTooltip()
+{
+    return showKeys && isStandalone() && monoArea().contains(getMouseXYRelative().toFloat())
+        ? "MONO: ONE NOTE AT A TIME. POLY: CHORDS. CLICK OR PRESS M" : juce::String();
+}
+
 // The PHOQER.EXE title bar moves the standalone window, and double-clicking it toggles fullscreen.
 void PhoqerView::mouseDown(const juce::MouseEvent& e)
 {
     if (updateNotice().isNotEmpty() && noticeArea().contains(e.position)) { openUpdateFromNotice(); return; }     // UPDATE ... READY
+    if (showKeys && isStandalone() && monoArea().contains(e.position)) { toggleMono(); return; }
     draggingWindow = windowControls.startDrag != nullptr && onTitleBar(e.position);
     if (draggingWindow) windowControls.startDrag(e);
 }
@@ -594,7 +623,7 @@ bool PhoqerView::keyPressed(const juce::KeyPress& key)
             }
     // Swallow the playing keys so the OS does not also act on them (standalone only; a DAW keeps its keys).
     return isStandalone() && ! key.getModifiers().isCommandDown() && ! key.getModifiers().isAltDown() && c != 0
-        && (juce::String(qwertyKeys).containsChar(c) || juce::String("zxcv").containsChar(c));
+        && (juce::String(qwertyKeys).containsChar(c) || juce::String("zxcvm").containsChar(c));
 }
 
 void PhoqerView::setChoice(const char* id, int index)
@@ -946,10 +975,10 @@ void PhoqerView::paint(juce::Graphics& g)
               notice.isNotEmpty() ? valueInkFor(character) : juce::Colours::black);
     if (showKeys && isStandalone())
     {
-        const auto keysClient = windowClient(keysWindow);
-        const auto bar = keysClient.withTrimmedTop(keysClient.getHeight() - 15.0f);
+        const auto bar = keysBar();
         const auto octave = "Z/X OCTAVE  A=" + noteName(qwertyBase), velocity = "C/V VELOCITY " + juce::String(qwertyVelocity);
-        statusBar(g, bar, { octave, velocity });
+        statusBar(g, bar.withWidth(bar.getWidth() * 0.5f), { octave });     // the left half as before; the right half splits for MONO
+        statusBar(g, bar.withTrimmedLeft(bar.getWidth() * 0.5f), { velocity, juce::String("M  ") + (shownMono ? "MONO" : "POLY") });
     }
 }
 
@@ -962,6 +991,11 @@ void PhoqerView::timerCallback()
 void PhoqerView::tick(double now)
 {
     updateTick();
+    if (monoOn() != shownMono)     // a preset, undo or the host changed MONO: the KEYS.EXE bar follows
+    {
+        shownMono = monoOn();
+        if (showKeys && isStandalone()) repaint(windowClient(keysWindow).toNearestInt());
+    }
     if (arpWindow.isVisible())     // the step sounding now, lit pink, follows the ARP
     {
         const int lane = processor.getPlayingArpLane();

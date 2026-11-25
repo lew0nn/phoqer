@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-set(PHOQER_VERSION "1.1.3" CACHE STRING "PHOQER version (a test build of a fake update sets 1.1.1)")
+set(PHOQER_VERSION "1.1.1" CACHE STRING "PHOQER version")
 project(PHOQER VERSION ${PHOQER_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)

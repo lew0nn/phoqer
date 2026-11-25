@@ -118,6 +118,7 @@ private:
     std::atomic<float>* glide = nullptr;
     std::atomic<float>* wailBend = nullptr;
     std::atomic<float>* wailHold = nullptr;
+    std::atomic<float>* mono = nullptr;
     std::atomic<float>* metronomeEnabled = nullptr;
     std::atomic<float>* metronomeVolume = nullptr;
     std::atomic<float>* metronomeBeatsPerBar = nullptr;

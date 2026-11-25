@@ -103,6 +103,34 @@ int main(int argc, char** argv)
             check(engine.getNewestPitchNote() == 72, "a note after release glided");
         }
 
+        {   // MONO: one note; a key over a held one moves it (legato), letting go goes back to the held key.
+            PhoqerEngine engine;
+            AudioBuffer buffer(2, 128);
+            MacroState macros;
+            macros.space = 0;
+            macros.mono = true;
+            engine.prepare(48000, 128, 2);
+            event(engine, buffer, macros, MidiEventType::noteOn, 48, 1);
+            settle(engine, buffer, macros, 12);
+            event(engine, buffer, macros, MidiEventType::noteOn, 60, 1);
+            settle(engine, buffer, macros, 12);
+            check(engine.getActiveVoiceCount() == 1, "MONO played two notes");
+            check(std::abs(engine.getNewestPitchNote() - 60) < 0.001f, "MONO legato did not reach the new key");
+            event(engine, buffer, macros, MidiEventType::noteOff, 60, 0);
+            settle(engine, buffer, macros, 12);
+            check(engine.getActiveVoiceCount() == 1 && std::abs(engine.getNewestPitchNote() - 48) < 0.001f,
+                  "MONO did not go back to the held key");
+            event(engine, buffer, macros, MidiEventType::noteOff, 48, 0);
+            settle(engine, buffer, macros);
+            check(engine.getActiveVoiceCount() == 0, "MONO note did not end with its last key");
+            // A key after letting go starts a fresh note, and the old tail is cut: still one voice.
+            event(engine, buffer, macros, MidiEventType::noteOn, 50, 1);
+            event(engine, buffer, macros, MidiEventType::noteOff, 50, 0);
+            event(engine, buffer, macros, MidiEventType::noteOn, 55, 1);
+            settle(engine, buffer, macros, 12);
+            check(engine.getActiveVoiceCount() == 1, "MONO kept a released tail under the new note");
+        }
+
         for (const float bend : { 2.4f, 12.0f, 24.0f })     // WAIL BEND reaches the voice: the sweep peaks at the set amount
         {
             uint64_t wailAge = 0;
@@ -257,7 +285,7 @@ int main(int argc, char** argv)
             settle(engine, buffer, m);
             check(engine.getActiveVoiceCount() == 0, "NITRO notes hung after the keys came up");
         }
-        std::cout << "PERFORMANCE_SANITY_OK: poly glide, chords, bend, wail bend, wail hold, wail lock glide, ARP steps and HOLD, NITRO cap, smoothing, limiter\n";
+        std::cout << "PERFORMANCE_SANITY_OK: poly glide, MONO legato, chords, bend, wail bend, wail hold, wail lock glide, ARP steps and HOLD, NITRO cap, smoothing, limiter\n";
         return 0;
     }
     catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

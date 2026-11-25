@@ -80,6 +80,7 @@ struct MacroState
     float glideMs = 0.0f;        // a note played over a held one slides in from its pitch
     float wailBend = 2.4f;       // how far WAIL sweeps up and down, in semitones
     bool wailHold = false;       // WAIL rises to the bend and stays there instead of swinging
+    bool mono = false;           // one note at a time; a key over a held one moves the note (legato)
     const CharacterPreset* loadedVoice = nullptr;
     bool yap = false;            // KYRAX only: VOWEL steps through a talking pattern in 8ths at the tempo
     NitroSettings nitro;         // KYRAX only

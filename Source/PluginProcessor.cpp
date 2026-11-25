@@ -31,6 +31,7 @@ PhoqerAudioProcessor::PhoqerAudioProcessor()
     glide = requireParameter(parameters, "glide");
     wailBend = requireParameter(parameters, "wailBend");
     wailHold = requireParameter(parameters, "wailHold");
+    mono = requireParameter(parameters, "mono");
     metronomeEnabled = requireParameter(parameters, "metronomeEnabled");
     metronomeVolume = requireParameter(parameters, "metronomeVolume");
     metronomeBeatsPerBar = requireParameter(parameters, "metronomeBeats");
@@ -109,6 +110,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout PhoqerAudioProcessor::create
         juce::AudioParameterFloatAttributes().withLabel("st")));
     // The padlock beside it: WAIL rises to the bend and stays there.
     layout.add(std::make_unique<juce::AudioParameterBool>(ParameterId { "wailHold", 1 }, "WAIL HOLD", false));
+    // MONO: one note at a time; a key played over a held one carries the note there (legato).
+    layout.add(std::make_unique<juce::AudioParameterBool>(ParameterId { "mono", 1 }, "MONO", false));
     // The standalone app's metronome (METRO.EXE). A DAW has its own click, so none of these are
     // automatable, and presets leave them alone.
     layout.add(std::make_unique<juce::AudioParameterBool>(
@@ -303,6 +306,7 @@ void PhoqerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     macros.glideMs = glide->load(std::memory_order_relaxed);
     macros.wailBend = wailBend->load(std::memory_order_relaxed);
     macros.wailHold = wailHold->load(std::memory_order_relaxed) >= 0.5f;
+    macros.mono = mono->load(std::memory_order_relaxed) >= 0.5f;
     macros.yap = yap->load(std::memory_order_relaxed) >= 0.5f;
     macros.nitro.on = nitro->load(std::memory_order_relaxed) >= 0.5f;
     for (size_t k = 0; k < nitroNote.size(); ++k)
@@ -454,7 +458,7 @@ void PhoqerAudioProcessor::setStateInformation(const void* data, int sizeInBytes
             auto restored = juce::ValueTree::fromXml(*xml);
             // Older sessions predate these parameters. Restore their compatible defaults,
             // including when an old state replaces a currently edited new instance.
-            for (const auto* id : { "standaloneTempo", "glide", "wailBend", "wailHold", "metronomeEnabled", "metronomeVolume", "metronomeBeats", "metronomeAccent",
+            for (const auto* id : { "standaloneTempo", "glide", "wailBend", "wailHold", "mono", "metronomeEnabled", "metronomeVolume", "metronomeBeats", "metronomeAccent",
                                   "metronomeSound", "countIn", "yap", "nitro", "nitroNote1", "nitroNote2", "nitroNote3", "nitroLevel1",
                                   "nitroLevel2", "nitroLevel3", "nitroWidth", "nitroStrum", "nitroDetune",
                                   "arp", "arpRate", "arpPattern", "arpHold", "arpGate", "arpSwing", "arpOctaves" })
