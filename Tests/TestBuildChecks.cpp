@@ -128,18 +128,18 @@ void renderViews(const juce::File& voice,const juce::File& folder){
     {   // UPDATE.EXE: versions compared right, the version file read right, the notice, and each box (snapshots)
         using phoqer::updates::newer;
         require(newer("1.1.1","1.1.0")&&!newer("1.1.0","1.1.0")&&newer("1.10.0","1.9.9")&&!newer("1.0.9","1.1.0"),"Version compare wrong");
-        const auto manifest=juce::JSON::parse(R"({"phoqer":{"version":"1.1.1","notes":["KYRAX ARP: new swing shapes","Fixed: dice on 4K screens","9.8 MB, about 10 seconds"],
-            "windows":{"url":"https://github.com/lew0nn/phoqer/releases/download/v1.1.1/PHOQER-1.1.1-Setup.exe","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":10276044},
+        const auto manifest=juce::JSON::parse(R"({"phoqer":{"version":"1.2.0","notes":["KYRAX ARP: new swing shapes","Fixed: dice on 4K screens","9.8 MB, about 10 seconds"],
+            "windows":{"url":"https://github.com/lew0nn/phoqer/releases/download/v1.2.0/PHOQER-1.2.0-Setup.exe","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":10276044},
             "mac":{"page":"https://lewonn.com/phoqer"}},"kyrax":{"version":"1.1","page":"https://lewonn.itch.io/kyrax"}})");
         auto found=phoqer::updates::parse(manifest,false);
         require(found.reached&&found.phoqerNewer&&!found.kyraxNewer&&found.phoqer.notes[0]=="KYRAX ARP: NEW SWING SHAPES","Update file misread");
-        require(!phoqer::updates::parse(juce::JSON::parse(R"({"phoqer":{"version":"1.1.1","windows":{"url":"ftp://x","sha256":"aa","size":1}}})"),false).phoqerNewer,"A bad update file was trusted");
-        require(!phoqer::updates::parse(juce::JSON::parse(R"({"phoqer":{"version":"1.1.1","windows":{"url":"https://evil.example/PHOQER-1.1.1-Setup.exe",
+        require(!phoqer::updates::parse(juce::JSON::parse(R"({"phoqer":{"version":"1.2.0","windows":{"url":"ftp://x","sha256":"aa","size":1}}})"),false).phoqerNewer,"A bad update file was trusted");
+        require(!phoqer::updates::parse(juce::JSON::parse(R"({"phoqer":{"version":"1.2.0","windows":{"url":"https://evil.example/PHOQER-1.2.0-Setup.exe",
             "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":10}}})"),false).phoqerNewer,"An update from another site was trusted");
         auto withKyrax=phoqer::updates::parse(manifest,true);require(withKyrax.kyraxNewer,"KYRAX update missed");
         auto& view=editor->getView();using Stage=phoqer::ui::PhoqerView::UpdateStage;
         view.showUpdate(Stage::prompt,withKyrax);require(view.updateNotice()=="2 UPDATES READY","Two-update notice wrong");
-        view.showUpdate(Stage::prompt,found);require(view.updateNotice()=="UPDATE 1.1.1 READY"&&view.findChildWithID("updateWindow")->isVisible(),"Update notice or window missing");
+        view.showUpdate(Stage::prompt,found);require(view.updateNotice()=="UPDATE 1.2.0 READY"&&view.findChildWithID("updateWindow")->isVisible(),"Update notice or window missing");
         snapshot(view,folder.getChildFile("ui-update-prompt.png"));
         view.showUpdate(Stage::downloading,found,0.55f);snapshot(view,folder.getChildFile("ui-update-download.png"));
         view.showUpdate(Stage::ready,found);snapshot(view,folder.getChildFile("ui-update-ready.png"));
